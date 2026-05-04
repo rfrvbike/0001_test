@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>筋トレRPG</title>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 <style>
 :root {
   --bg: #0d0d1a;
@@ -60,6 +62,41 @@ header {
   white-space: nowrap;
 }
 .sync-btn:hover { background: var(--accent); border-color: var(--accent); }
+.sync-status {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: var(--bg3);
+  color: var(--text2);
+  white-space: nowrap;
+}
+/* Firebase setup modal */
+.fb-modal {
+  background: var(--bg2);
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 460px;
+  width: 94%;
+}
+.fb-modal h3 { color: var(--gold); margin-bottom: 14px; font-size: 17px; }
+.fb-modal label { font-size: 12px; color: var(--text2); display: block; margin-bottom: 4px; margin-top: 12px; }
+.fb-modal textarea, .fb-modal input {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid #444466;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 12px;
+  font-family: monospace;
+  resize: vertical;
+}
+.fb-modal textarea { height: 120px; }
+.fb-btn-row { display: flex; gap: 10px; margin-top: 18px; }
+.fb-save-btn { flex: 1; background: var(--accent); border: none; color: white; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+.fb-cancel-btn { background: var(--bg3); border: none; color: var(--text); padding: 10px 18px; border-radius: 8px; cursor: pointer; }
+.fb-disconnect-btn { background: #cc2222; border: none; color: white; padding: 10px 14px; border-radius: 8px; cursor: pointer; }
 .level-badge {
   background: linear-gradient(135deg, #2a005a, #7c4dff);
   border: 2px solid var(--gold);
@@ -397,7 +434,9 @@ main {
 
 <header>
   <div class="app-title">💪 筋トレRPG <small>〜 理想の体へ 〜</small></div>
-  <div style="display:flex;gap:8px;align-items:center;">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <span class="sync-status" id="sync-status">💾 ローカル保存</span>
+    <button class="sync-btn" onclick="showFbSetup()" id="fb-setup-btn">🔥 Firebase設定</button>
     <button class="sync-btn" onclick="exportData()" title="データをファイルに保存">📤 保存</button>
     <label class="sync-btn" title="ファイルからデータを読み込む" style="cursor:pointer;">
       📥 読込
@@ -471,6 +510,29 @@ main {
     <div class="m-lv" id="m-lv"></div>
     <div class="m-effect" id="m-eff"></div>
     <button class="m-ok" onclick="closeModal()">最高！続けよう！</button>
+  </div>
+</div>
+
+<!-- Firebase Setup Modal -->
+<div class="modal-bg" id="fb-modal">
+  <div class="fb-modal">
+    <h3>🔥 Firebase 同期設定</h3>
+    <p style="font-size:12px;color:var(--text2);line-height:1.6;">
+      FirebaseコンソールでWebアプリを作成し、表示された<br>
+      <code style="background:var(--bg3);padding:2px 5px;border-radius:3px;">firebaseConfig = { ... }</code><br>
+      の中身（波カッコの中）を貼り付けてください。
+    </p>
+    <label>Firebase Config（{ } の中身をそのままペースト）</label>
+    <textarea id="fb-config-input" placeholder='apiKey: "xxx",&#10;authDomain: "xxx.firebaseapp.com",&#10;databaseURL: "https://xxx-default-rtdb.firebaseio.com",&#10;projectId: "xxx",&#10;...'></textarea>
+    <label>同期コード（自分だけのコード。英数字で自由に決める）</label>
+    <input type="text" id="fb-code-input" placeholder="例: myname-training-2026" maxlength="40">
+    <p style="font-size:11px;color:var(--text2);margin-top:6px;">※ 同じコードを使う全デバイスでデータが共有されます</p>
+    <div class="fb-btn-row">
+      <button class="fb-save-btn" onclick="saveFbConfig()">接続する</button>
+      <button class="fb-cancel-btn" onclick="closeFbSetup()">キャンセル</button>
+      <button class="fb-disconnect-btn" onclick="disconnectFb()" id="fb-disconnect-btn" style="display:none;">切断</button>
+    </div>
+    <div id="fb-error" style="color:#ff5555;font-size:12px;margin-top:8px;display:none;"></div>
   </div>
 </div>
 
@@ -663,6 +725,7 @@ function loadState() {
 }
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  saveToFirebase();
 }
 
 // ===== HELPERS =====
@@ -961,6 +1024,107 @@ function doReset() {
   renderAll();
 }
 
+// ===== FIREBASE =====
+const FB_CFG_KEY = 'training_rpg_fb_cfg';
+let fbDatabase = null;
+let fbSyncCode = null;
+let fbWriting = false;
+
+function loadFbConfig() {
+  try { return JSON.parse(localStorage.getItem(FB_CFG_KEY)); } catch { return null; }
+}
+
+function setSyncStatus(text) {
+  const el = document.getElementById('sync-status');
+  if (el) el.textContent = text;
+}
+
+async function initFirebase(configText, code) {
+  try {
+    const config = new Function('return ({' + configText + '});')();
+    if (!config.databaseURL) throw new Error('databaseURLが見つかりません。Realtime Databaseが有効か確認してください。');
+    if (firebase.apps.length === 0) firebase.initializeApp(config);
+    fbDatabase = firebase.database();
+    fbSyncCode = code.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    // Test connection
+    await fbDatabase.ref(`/${fbSyncCode}/ping`).set(Date.now());
+    // Save config
+    localStorage.setItem(FB_CFG_KEY, JSON.stringify({ config: configText, code }));
+    // Set up real-time listener
+    fbDatabase.ref(`/${fbSyncCode}/data`).on('value', (snap) => {
+      if (fbWriting) return;
+      const data = snap.val();
+      if (data && data.log) {
+        state = data;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        renderAll();
+        setSyncStatus('🟢 同期済み');
+      }
+    });
+    setSyncStatus('🟢 Firebase接続済み');
+    document.getElementById('fb-setup-btn').textContent = '🔥 Firebase設定済み';
+    return true;
+  } catch (e) {
+    console.error(e);
+    return e.message || 'エラーが発生しました';
+  }
+}
+
+async function saveToFirebase() {
+  if (!fbDatabase || !fbSyncCode) return;
+  fbWriting = true;
+  try {
+    await fbDatabase.ref(`/${fbSyncCode}/data`).set(state);
+    setSyncStatus('🟢 同期済み');
+  } catch {
+    setSyncStatus('🔴 同期エラー');
+  }
+  setTimeout(() => { fbWriting = false; }, 500);
+}
+
+function showFbSetup() {
+  const saved = loadFbConfig();
+  if (saved) {
+    document.getElementById('fb-config-input').value = saved.config || '';
+    document.getElementById('fb-code-input').value = saved.code || '';
+    document.getElementById('fb-disconnect-btn').style.display = 'inline-block';
+  } else {
+    document.getElementById('fb-disconnect-btn').style.display = 'none';
+  }
+  document.getElementById('fb-error').style.display = 'none';
+  document.getElementById('fb-modal').classList.add('show');
+}
+function closeFbSetup() { document.getElementById('fb-modal').classList.remove('show'); }
+
+async function saveFbConfig() {
+  const configText = document.getElementById('fb-config-input').value.trim();
+  const code = document.getElementById('fb-code-input').value.trim();
+  const errEl = document.getElementById('fb-error');
+  errEl.style.display = 'none';
+  if (!configText) { errEl.textContent = 'Configを入力してください'; errEl.style.display = 'block'; return; }
+  if (!code) { errEl.textContent = '同期コードを入力してください'; errEl.style.display = 'block'; return; }
+  const btn = document.querySelector('.fb-save-btn');
+  btn.textContent = '接続中...'; btn.disabled = true;
+  const result = await initFirebase(configText, code);
+  btn.textContent = '接続する'; btn.disabled = false;
+  if (result === true) {
+    closeFbSetup();
+    alert('✅ Firebase同期が有効になりました！\nすべてのデバイスでデータが共有されます。');
+  } else {
+    errEl.textContent = '接続失敗: ' + result;
+    errEl.style.display = 'block';
+  }
+}
+
+function disconnectFb() {
+  if (!confirm('Firebase同期を解除しますか？\nローカルのデータはそのまま残ります。')) return;
+  localStorage.removeItem(FB_CFG_KEY);
+  fbDatabase = null; fbSyncCode = null;
+  setSyncStatus('💾 ローカル保存');
+  document.getElementById('fb-setup-btn').textContent = '🔥 Firebase設定';
+  closeFbSetup();
+}
+
 // ===== EXPORT / IMPORT =====
 function exportData() {
   const json = JSON.stringify(state, null, 2);
@@ -1027,6 +1191,13 @@ function selectDay(ds) {
 // ===== INIT =====
 selDate = todayStr();
 renderAll();
+// Auto-connect Firebase if config was saved before
+const savedFbCfg = loadFbConfig();
+if (savedFbCfg) {
+  initFirebase(savedFbCfg.config, savedFbCfg.code).then(result => {
+    if (result !== true) setSyncStatus('🔴 Firebase再接続失敗');
+  });
+}
 </script>
 </body>
 </html>
