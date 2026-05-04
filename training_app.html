@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>筋トレRPG</title>
+<style>
+:root {
+  --bg: #0d0d1a;
+  --bg2: #14142a;
+  --bg3: #1e1e38;
+  --accent: #7c4dff;
+  --hiit-col: #ff5555;
+  --strength-col: #5599ff;
+  --push-col: #bb55ff;
+  --lower-col: #ffaa33;
+  --recovery-col: #55cc88;
+  --text: #e0e0ff;
+  --text2: #8888aa;
+  --gold: #ffd700;
+  --green: #55ff88;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Segoe UI', 'Yu Gothic UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* HEADER */
+header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--bg3);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.app-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--gold);
+}
+.app-title small { font-size: 12px; color: var(--text2); font-weight: normal; margin-left: 8px; }
+.level-badge {
+  background: linear-gradient(135deg, #2a005a, #7c4dff);
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+  padding: 6px 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.2s;
+  min-width: 110px;
+}
+.level-badge:hover { transform: scale(1.05); }
+.lv-label { font-size: 10px; color: var(--gold); letter-spacing: 2px; }
+.lv-number { font-size: 28px; font-weight: 900; color: #fff; line-height: 1.1; }
+.lv-effect { font-size: 10px; color: #ccaaff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+
+/* TAB BAR (mobile only) */
+.tab-bar {
+  display: none;
+  flex-shrink: 0;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--bg3);
+}
+.tab-btn {
+  flex: 1;
+  padding: 12px 0;
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.15s;
+}
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* MAIN */
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 370px;
+  overflow: hidden;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  body { overflow: hidden; }
+  .tab-bar { display: flex; }
+  main {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+  }
+  .cal-panel {
+    border-right: none;
+    display: none;
+    overflow-y: auto;
+  }
+  .cal-panel.tab-active { display: flex; }
+  .workout-panel {
+    display: none;
+    overflow-y: auto;
+  }
+  .workout-panel.tab-active { display: flex; }
+  .cal-day { min-height: 42px; }
+  .done-btn { padding: 14px; font-size: 15px; }
+  .ex-item { padding: 10px 12px; }
+  .ex-yt-btn { padding: 6px 9px; font-size: 12px; }
+  .stat-num { font-size: 18px; }
+  .week-dot { height: 9px; }
+}
+@media (min-width: 769px) {
+  .cal-panel { display: flex !important; }
+  .workout-panel { display: flex !important; }
+}
+
+/* LEFT: CALENDAR */
+.cal-panel {
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--bg3);
+}
+.cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.cal-nav h2 { font-size: 16px; }
+.nav-btn {
+  background: var(--bg3);
+  border: none;
+  color: var(--text);
+  width: 30px; height: 30px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.nav-btn:hover { background: var(--accent); }
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  flex: 1;
+  align-content: start;
+}
+.cal-hdr {
+  text-align: center;
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--text2);
+  padding: 3px 0;
+}
+.cal-day {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
+  position: relative;
+  transition: all 0.12s;
+  background: var(--bg2);
+  border: 2px solid transparent;
+  min-height: 44px;
+}
+.cal-day:hover:not(.empty) { transform: scale(1.07); border-color: var(--accent); }
+.cal-day.empty { background: transparent; cursor: default; }
+.cal-day.today { border-color: var(--gold) !important; box-shadow: 0 0 8px rgba(255,215,0,0.25); }
+.cal-day.selected { border-color: var(--accent) !important; background: #1a1a35; }
+.cal-day.done { background: #0d2018; }
+.cal-day.done::after {
+  content: '✓'; position: absolute; top: 1px; right: 4px;
+  font-size: 10px; color: var(--green); font-weight: bold;
+}
+.cal-day.missed { background: #220e0e; }
+.day-num { font-size: 13px; }
+.day-icon { font-size: 10px; line-height: 1; }
+.dt-strength .day-num { color: var(--strength-col); }
+.dt-hiit .day-num { color: var(--hiit-col); }
+.dt-push .day-num { color: var(--push-col); }
+.dt-lower .day-num { color: var(--lower-col); }
+.dt-recovery .day-num { color: var(--recovery-col); }
+
+/* LEGEND */
+.legend {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.legend-item { font-size: 10px; color: var(--text2); display: flex; align-items: center; gap: 3px; }
+
+/* WEEK PROGRESS */
+.week-section { margin-top: 8px; flex-shrink: 0; }
+.week-label { font-size: 11px; color: var(--text2); display: flex; justify-content: space-between; margin-bottom: 5px; }
+.week-dots { display: flex; gap: 5px; }
+.week-dot { flex: 1; height: 7px; border-radius: 4px; background: var(--bg3); }
+.week-dot.filled { background: var(--green); }
+.week-dot.today-dot { background: var(--gold); }
+
+/* STATS */
+.stats-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+.stat-box {
+  flex: 1;
+  background: var(--bg2);
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.stat-num { font-size: 20px; font-weight: bold; color: var(--gold); }
+.stat-lbl { font-size: 10px; color: var(--text2); }
+
+/* RIGHT: WORKOUT */
+.workout-panel {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 10px;
+}
+.workout-header {
+  border-radius: 10px;
+  padding: 11px 14px;
+  flex-shrink: 0;
+}
+.workout-header.dt-strength { background: #091828; border: 1px solid var(--strength-col); }
+.workout-header.dt-hiit { background: #1e0a0a; border: 1px solid var(--hiit-col); }
+.workout-header.dt-push { background: #140a28; border: 1px solid var(--push-col); }
+.workout-header.dt-lower { background: #1e0e00; border: 1px solid var(--lower-col); }
+.workout-header.dt-recovery { background: #091e12; border: 1px solid var(--recovery-col); }
+.workout-name { font-size: 18px; font-weight: bold; }
+.workout-date { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.workout-lv { font-size: 11px; color: var(--text2); }
+
+.ex-scroll { flex: 1; overflow-y: auto; }
+.ex-section { margin-bottom: 12px; }
+.ex-section-title {
+  font-size: 10px; font-weight: bold; color: var(--text2);
+  text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 6px; padding-bottom: 3px;
+  border-bottom: 1px solid var(--bg3);
+}
+.ex-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 10px; border-radius: 8px;
+  background: var(--bg2); margin-bottom: 4px;
+  cursor: pointer; transition: background 0.12s;
+  user-select: none;
+}
+.ex-item:hover { background: var(--bg3); }
+.ex-item.checked { background: #0a1e0a; }
+.ex-item.checked .ex-name { text-decoration: line-through; color: var(--text2); }
+.ex-chk {
+  width: 18px; height: 18px; flex-shrink: 0;
+  border: 2px solid var(--text2); border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; margin-top: 2px;
+}
+.ex-item.checked .ex-chk { background: var(--green); border-color: var(--green); color: #000; font-weight: bold; }
+.ex-body { flex: 1; min-width: 0; }
+.ex-name { font-size: 13px; font-weight: 500; }
+.ex-detail { font-size: 11px; color: var(--text2); margin-top: 1px; line-height: 1.4; }
+.ex-yt-btn {
+  flex-shrink: 0;
+  background: #cc0000;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 4px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  align-self: center;
+  transition: background 0.15s;
+}
+.ex-yt-btn:hover { background: #ff2222; }
+
+/* LEVEL PROGRESS */
+.lv-box {
+  background: var(--bg2);
+  border-radius: 10px;
+  padding: 11px;
+  flex-shrink: 0;
+}
+.lv-box-top { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+.lv-bar-outer { background: var(--bg3); border-radius: 6px; height: 10px; overflow: hidden; }
+.lv-bar-inner {
+  height: 100%; border-radius: 6px;
+  background: linear-gradient(90deg, var(--accent), var(--gold));
+  transition: width 0.5s;
+}
+.lv-box-bottom { font-size: 11px; color: var(--text2); margin-top: 5px; text-align: center; }
+
+/* BUTTONS */
+.done-btn {
+  background: linear-gradient(135deg, #1a9955, #0d6633);
+  border: none; color: white;
+  font-size: 14px; font-weight: bold;
+  padding: 11px; border-radius: 10px;
+  cursor: pointer; width: 100%;
+  transition: all 0.2s; flex-shrink: 0;
+}
+.done-btn:hover { transform: scale(1.02); }
+.done-btn.already { background: linear-gradient(135deg, #1a3322, #111); cursor: default; }
+.done-btn.already:hover { transform: none; }
+.done-btn.future { background: linear-gradient(135deg, #1a1a2a, #111); cursor: default; }
+.done-btn.future:hover { transform: none; }
+
+.placeholder {
+  color: var(--text2); text-align: center;
+  margin-top: 60px; font-size: 14px; line-height: 2;
+}
+
+/* MODAL */
+.modal-bg {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 999;
+  align-items: center; justify-content: center;
+}
+.modal-bg.show { display: flex; }
+.modal {
+  background: var(--bg2);
+  border: 3px solid var(--gold);
+  border-radius: 20px;
+  padding: 36px 30px;
+  text-align: center;
+  max-width: 360px; width: 90%;
+  animation: pop 0.3s ease;
+}
+@keyframes pop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.m-emoji { font-size: 56px; margin-bottom: 10px; }
+.m-title { font-size: 26px; font-weight: 900; color: var(--gold); }
+.m-lv { font-size: 17px; color: white; margin: 8px 0 4px; }
+.m-effect { font-size: 13px; color: var(--text2); margin-bottom: 22px; line-height: 1.6; }
+.m-ok {
+  background: var(--gold); color: #000;
+  border: none; padding: 11px 32px;
+  border-radius: 10px; font-size: 15px; font-weight: bold;
+  cursor: pointer;
+}
+.m-ok:hover { opacity: 0.9; }
+
+/* RESET MODAL */
+.reset-modal {
+  background: var(--bg2);
+  border: 2px solid #ff5555;
+  border-radius: 16px;
+  padding: 28px;
+  text-align: center;
+  max-width: 320px; width: 90%;
+}
+.reset-btn-row { display: flex; gap: 10px; margin-top: 16px; justify-content: center; }
+.reset-yes { background: #cc2222; border: none; color: white; padding: 9px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+.reset-no { background: var(--bg3); border: none; color: var(--text); padding: 9px 24px; border-radius: 8px; cursor: pointer; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="app-title">💪 筋トレRPG <small>〜 理想の体へ 〜</small></div>
+  <div class="level-badge" id="level-badge" onclick="showResetConfirm()">
+    <div class="lv-label">LEVEL</div>
+    <div class="lv-number" id="lv-num">1</div>
+    <div class="lv-effect" id="lv-eff">スタート地点</div>
+  </div>
+</header>
+
+<div class="tab-bar" id="tab-bar">
+  <button class="tab-btn active" id="tab-cal" onclick="switchTab('cal')">📅 カレンダー</button>
+  <button class="tab-btn" id="tab-menu" onclick="switchTab('menu')">💪 今日のメニュー</button>
+</div>
+
+<main>
+  <!-- LEFT: Calendar -->
+  <div class="cal-panel tab-active" id="panel-cal">
+    <div class="cal-nav">
+      <button class="nav-btn" onclick="changeMonth(-1)">◀</button>
+      <h2 id="cal-title"></h2>
+      <button class="nav-btn" onclick="changeMonth(1)">▶</button>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div class="legend">
+      <span class="legend-item"><span style="color:var(--strength-col)">💪</span> 背中・姿勢</span>
+      <span class="legend-item"><span style="color:var(--hiit-col)">🔥</span> HIIT</span>
+      <span class="legend-item"><span style="color:var(--push-col)">🏋️</span> 肩・胸</span>
+      <span class="legend-item"><span style="color:var(--lower-col)">⚡</span> 下半身</span>
+      <span class="legend-item"><span style="color:var(--recovery-col)">🧘</span> 回復</span>
+    </div>
+    <div class="week-section">
+      <div class="week-label">
+        <span>今週の進捗</span>
+        <span id="week-count-lbl">0 / 7日</span>
+      </div>
+      <div class="week-dots" id="week-dots"></div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-num" id="st-total">0</div>
+        <div class="stat-lbl">累計日数</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="st-streak">0</div>
+        <div class="stat-lbl">🔥連続日数</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="st-weeks">0</div>
+        <div class="stat-lbl">達成週数</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Workout -->
+  <div class="workout-panel" id="workout-panel">
+    <div class="placeholder">
+      カレンダーの日付をクリックして<br>その日のメニューを表示
+    </div>
+  </div>
+</main>
+
+<!-- Level Up Modal -->
+<div class="modal-bg" id="levelup-modal">
+  <div class="modal">
+    <div class="m-emoji">⭐</div>
+    <div class="m-title">LEVEL UP！</div>
+    <div class="m-lv" id="m-lv"></div>
+    <div class="m-effect" id="m-eff"></div>
+    <button class="m-ok" onclick="closeModal()">最高！続けよう！</button>
+  </div>
+</div>
+
+<!-- Reset Confirm Modal -->
+<div class="modal-bg" id="reset-modal">
+  <div class="reset-modal">
+    <div style="font-size:20px;font-weight:bold;margin-bottom:8px;">⚠️ データリセット</div>
+    <div style="font-size:13px;color:var(--text2);">全てのトレーニング記録とレベルが初期化されます。本当にリセットしますか？</div>
+    <div class="reset-btn-row">
+      <button class="reset-yes" onclick="doReset()">リセットする</button>
+      <button class="reset-no" onclick="closeResetModal()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== CONFIG =====
+const STORAGE_KEY = 'training_rpg_v2';
+
+const LEVEL_THRESHOLDS = [0, 0, 2, 4, 6, 8, 12, 16, 20, 28, 36];
+const LEVEL_EFFECTS = [
+  '',
+  'スタート地点',
+  '神経系の適応。動作がスムーズになる',
+  '筋肥大が始まる。基礎代謝が上がる',
+  '腹筋が引き締まり始める。姿勢が自然に改善',
+  '周囲から「体変わった？」と言われ始める',
+  '筋力20〜50%向上。明確な筋肥大',
+  '服のサイズが変わる。肩〜背中のラインが明確に',
+  '持久力が顕著に向上。性力に実感が出る',
+  '前頭位がほぼ解消。逆三角形のシルエット',
+  '🎉 目標達成！姿勢・肩幅・持久力・性力 全て理想の状態',
+];
+
+// 0=Sun,1=Mon,...,6=Sat
+const DAY_CFG = [
+  { type: 'recovery', name: '回復・ストレッチ', emoji: '🧘', cls: 'dt-recovery' },
+  { type: 'strength', name: '背中・姿勢',       emoji: '💪', cls: 'dt-strength' },
+  { type: 'hiit',     name: 'HIIT',             emoji: '🔥', cls: 'dt-hiit' },
+  { type: 'push',     name: '肩・胸・腹筋ローラー', emoji: '🏋️', cls: 'dt-push' },
+  { type: 'hiit',     name: 'HIIT',             emoji: '🔥', cls: 'dt-hiit' },
+  { type: 'lower',    name: '下半身・性力',      emoji: '⚡', cls: 'dt-lower' },
+  { type: 'hiit',     name: 'HIIT',             emoji: '🔥', cls: 'dt-hiit' },
+];
+
+const LVL_GROUP = lv => lv <= 2 ? 'A' : lv <= 4 ? 'B' : lv <= 6 ? 'C' : lv <= 8 ? 'D' : 'E';
+
+const EX = {
+  strength: {
+    A: [
+      { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ' },
+      { name: 'インバーテッドロウ', sets: '3セット × 8回', detail: '懸垂器を低く設定して斜め懸垂（背中を引く）' },
+      { name: 'スーパーマン', sets: '2セット × 10回', detail: 'うつ伏せで腕脚を同時に3秒持ち上げてキープ' },
+      { name: 'パイクプッシュアップ【締め・肩】', sets: '1セット × 8回', detail: 'お尻を高く上げてV字プッシュアップ（三角筋）' },
+    ],
+    B: [
+      { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ' },
+      { name: 'インバーテッドロウ', sets: '3セット × 12回', detail: '懸垂器を低く設定して斜め懸垂' },
+      { name: 'スーパーマン', sets: '3セット × 12回', detail: 'うつ伏せで腕脚を3秒持ち上げてキープ' },
+      { name: 'パイクプッシュアップ【締め・肩】', sets: '1セット × 12回', detail: 'お尻を高く上げてV字プッシュアップ' },
+    ],
+    C: [
+      { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ' },
+      { name: '懸垂（ワイドグリップ）', sets: '3セット × 5回', detail: '手幅を広めにして体を引き上げる（広背筋）' },
+      { name: 'YTWエクサ', sets: '2セット × 10回', detail: 'うつ伏せでY字→T字→W字の順に腕を上げる（肩後部）' },
+      { name: 'デクラインパイクPU【締め・肩】', sets: '1セット × 10回', detail: '足を椅子に乗せてパイクプッシュアップ' },
+    ],
+    D: [
+      { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ' },
+      { name: '懸垂（ワイドグリップ）', sets: '3セット × 8回', detail: '手幅を広めにして体を引き上げる' },
+      { name: 'YTWエクサ', sets: '3セット × 10回', detail: 'うつ伏せでY字→T字→W字の順に腕を上げる' },
+      { name: 'デクラインパイクPU【締め・肩】', sets: '1セット × 12回', detail: '足を椅子に乗せてパイクプッシュアップ' },
+    ],
+    E: [
+      { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ' },
+      { name: '懸垂（テンポ3秒下げ）', sets: '3セット × 8回', detail: '3秒かけてゆっくり下ろす高負荷懸垂' },
+      { name: 'アーチャーロウ', sets: '左右各 6回', detail: '片腕ずつ引く上級バリエーション' },
+      { name: '壁倒立PU【締め・肩】', sets: '1セット × 5回', detail: '壁に足をかけて倒立→頭を床に近づけて押し上げる' },
+    ],
+  },
+  hiit: {
+    A: [
+      { name: 'ウォームアップ', sets: '1分', detail: 'その場で大きく足踏み。体を温める' },
+      { name: 'マウンテンクライマー HIIT', sets: '20秒ON / 15秒OFF × 8セット', detail: '腕立て姿勢で交互に膝を胸に素早く引く' },
+      { name: 'クールダウン', sets: '2分', detail: '深呼吸をしながら心拍数を落ち着かせる' },
+    ],
+    B: [
+      { name: 'ウォームアップ', sets: '1分', detail: 'その場で大きく足踏み' },
+      { name: 'マウンテンクライマー or バーピー HIIT', sets: '20秒ON / 10秒OFF × 10セット', detail: '交互に種目を変えてもOK' },
+      { name: 'クールダウン', sets: '2分', detail: '深呼吸で心拍を落ち着かせる' },
+    ],
+    C: [
+      { name: 'ウォームアップ', sets: '1分', detail: '軽くジャンプや足踏み' },
+      { name: 'バーピー HIIT', sets: '20秒ON / 10秒OFF × 10セット', detail: '立つ→しゃがむ→腕立て姿勢→戻る→ジャンプ' },
+      { name: 'クールダウン', sets: '2分', detail: '深呼吸で心拍を落ち着かせる' },
+    ],
+    D: [
+      { name: 'ウォームアップ', sets: '1分', detail: '軽くジャンプや足踏み' },
+      { name: 'バーピー HIIT（強度UP）', sets: '30秒ON / 10秒OFF × 10セット', detail: '立つ→しゃがむ→腕立て姿勢→戻る→ジャンプ' },
+      { name: 'クールダウン', sets: '2分', detail: '深呼吸で心拍を落ち着かせる' },
+    ],
+    E: [
+      { name: 'ウォームアップ', sets: '1分', detail: '軽くジャンプや足踏み' },
+      { name: 'バーピー＋ジャンプスクワット交互 HIIT', sets: '30秒ON / 10秒OFF × 12セット', detail: '1セットごとに種目を交互に切り替える' },
+      { name: 'クールダウン', sets: '2分', detail: '深呼吸で心拍を落ち着かせる' },
+    ],
+  },
+  push: {
+    A: [
+      { name: 'パイクプッシュアップ', sets: '2セット × 8回', detail: 'お尻を高く上げてV字→頭を床に近づける（三角筋）' },
+      { name: 'プッシュアップバー 標準プッシュアップ', sets: '2セット × 10回', detail: '肘を体側に沿わせて深く下ろす（胸・肩）膝つきOK' },
+      { name: '腹筋ローラー 膝コロ（短め）', sets: '2セット × 8回', detail: '膝をついてローラーを少し転がして戻す。腰を反らさない' },
+    ],
+    B: [
+      { name: 'パイクプッシュアップ', sets: '2セット × 12回', detail: 'お尻を高く上げてV字→頭を床に近づける' },
+      { name: 'プッシュアップバー 標準プッシュアップ', sets: '2セット × 15回', detail: '肘を体側に沿わせて深く下ろす' },
+      { name: '腹筋ローラー 膝コロ（フル）', sets: '2セット × 10回', detail: '膝をついてしっかり伸ばして戻す' },
+    ],
+    C: [
+      { name: 'デクラインパイクプッシュアップ', sets: '2セット × 10回', detail: '足を椅子に乗せてパイクPU。より三角筋に負荷がかかる' },
+      { name: 'テンポプッシュアップ', sets: '2セット × 10回', detail: '3秒で下ろし→1秒止め→1秒で上げる（胸・肩）' },
+      { name: '腹筋ローラー 斜めコロ', sets: '左右各 2セット × 8回', detail: '斜め45度方向に転がして腹斜筋（わき腹）を鍛える' },
+    ],
+    D: [
+      { name: '壁倒立プッシュアップ', sets: '2セット × 5回', detail: '壁に足をかけて倒立→頭を床に下ろして押し上げる' },
+      { name: 'アーチャープッシュアップ', sets: '左右各 2セット × 8回', detail: '腕を広げて片方に重心を移しながら片腕で押す' },
+      { name: '腹筋ローラー 斜めコロ', sets: '左右各 2セット × 10回', detail: '斜め方向に転がして腹斜筋を強化' },
+    ],
+    E: [
+      { name: '壁倒立プッシュアップ', sets: '2セット × 8回', detail: '壁に足をかけて倒立→頭を床に下ろして押し上げる' },
+      { name: 'アーチャープッシュアップ', sets: '左右各 2セット × 10回', detail: '腕を広げて片方に重心を移しながら片腕で押す' },
+      { name: '腹筋ローラー 立ちコロ（壁あり）', sets: '2セット × 5回', detail: '立った状態から転がして壁でストップ→戻す' },
+    ],
+  },
+  lower: {
+    A: [
+      { name: 'ヒップサークル', sets: '前後各 10回', detail: '骨盤を大きく円を描くように回す（ウォームアップ）' },
+      { name: 'スクワット', sets: '2セット × 15回', detail: '膝をつま先方向に向けて深くしゃがむ' },
+      { name: 'グルートブリッジ', sets: '2セット × 15回', detail: '仰向けで膝を立ててお尻を上げ2秒キープ（殿筋）' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 10セット', detail: '肛門〜尿道を締めて5秒→ゆっくり緩める（性力向上）' },
+    ],
+    B: [
+      { name: 'ヒップサークル', sets: '前後各 10回', detail: '骨盤を大きく円を描くように回す' },
+      { name: 'スクワット', sets: '3セット × 15回', detail: '膝をつま先方向に向けて深くしゃがむ' },
+      { name: 'グルートブリッジ', sets: '3セット × 15回', detail: '仰向けで膝を立ててお尻を上げ2秒キープ' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 15セット', detail: '骨盤底筋を締める（性力・射精コントロール）' },
+    ],
+    C: [
+      { name: 'ジャンプスクワット', sets: '2セット × 10回', detail: 'スクワットの最後にジャンプを加える（心肺+筋力）' },
+      { name: 'シングルレッグブリッジ', sets: '左右各 2セット × 10回', detail: '片足を伸ばしてグルートブリッジ（より高負荷）' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 15セット', detail: '骨盤底筋を締める（性力向上）' },
+    ],
+    D: [
+      { name: 'ブルガリアンスクワット', sets: '左右各 3セット × 10回', detail: '椅子に後ろ足をかけて前足一本でスクワット' },
+      { name: 'シングルレッグブリッジ', sets: '左右各 3セット × 12回', detail: '片足を伸ばしてグルートブリッジ' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 20セット', detail: '骨盤底筋を締める（性力・射精コントロール強化）' },
+    ],
+    E: [
+      { name: 'ピストルスクワット（補助あり）', sets: '左右各 3セット × 5回', detail: '壁を軽く触りながら片足で深くスクワット' },
+      { name: 'シングルレッグブリッジ（テンポ）', sets: '左右各 3セット × 15回', detail: '2秒で上げ→2秒で下げる片足ブリッジ' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 20セット', detail: '骨盤底筋を鍛える（最高レベルの性力・コントロール）' },
+    ],
+  },
+  recovery: {
+    A: [
+      { name: '胸・肩前部ストレッチ', sets: '左右 30秒 × 2回', detail: '壁に手をあてて体をひねり胸を開く' },
+      { name: '首・肩後部ストレッチ', sets: '左右 30秒 × 2回', detail: '首をゆっくり横に傾けて側面を伸ばす' },
+      { name: '股関節ストレッチ', sets: '左右 30秒 × 2回', detail: '片膝ランジポーズで股関節前面を伸ばす' },
+      { name: 'ぶら下がりストレッチ', sets: '20〜30秒 × 2回', detail: '懸垂器にぶら下がって背中と肩を重力で伸ばす' },
+      { name: '深呼吸（腹式呼吸）', sets: '3〜5分', detail: '鼻から4秒吸って、口から8秒かけてゆっくり吐く' },
+    ],
+  },
+};
+EX.recovery.B = EX.recovery.A;
+EX.recovery.C = EX.recovery.A;
+EX.recovery.D = EX.recovery.A;
+EX.recovery.E = EX.recovery.A;
+
+// ===== STATE =====
+let state = loadState();
+let viewDate = new Date();
+let selDate = null;
+
+function loadState() {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (s) return JSON.parse(s);
+  } catch(e) {}
+  return { level: 1, achievedWeeks: 0, log: {} };
+}
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+// ===== HELPERS =====
+function dstr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function todayStr() { return dstr(new Date()); }
+function getDayCfg(d) { return DAY_CFG[d.getDay()]; }
+function getExercises(type, lv) {
+  const g = LVL_GROUP(lv);
+  return (EX[type] && EX[type][g]) || [];
+}
+function computeLevel(weeks) {
+  let lv = 1;
+  for (let i = 2; i <= 10; i++) {
+    if (weeks >= LEVEL_THRESHOLDS[i]) lv = i;
+    else break;
+  }
+  return lv;
+}
+
+// ===== STATS =====
+function computeStats() {
+  const completed = Object.entries(state.log)
+    .filter(([, v]) => v.done)
+    .map(([k]) => k)
+    .sort();
+
+  const totalDays = completed.length;
+
+  // Streak
+  let streak = 0;
+  const checkStart = new Date();
+  const td = todayStr();
+  if (!state.log[td]?.done) checkStart.setDate(checkStart.getDate() - 1);
+  let cur = new Date(checkStart);
+  while (true) {
+    if (state.log[dstr(cur)]?.done) { streak++; cur.setDate(cur.getDate()-1); }
+    else break;
+  }
+
+  // Achieved weeks (Mon-Sun with 4+ days)
+  const wMap = {};
+  for (const ds of completed) {
+    const d = new Date(ds + 'T00:00:00');
+    const dow = d.getDay();
+    const diff = dow === 0 ? -6 : 1 - dow;
+    const mon = new Date(d);
+    mon.setDate(d.getDate() + diff);
+    const wk = dstr(mon);
+    wMap[wk] = (wMap[wk] || 0) + 1;
+  }
+  const achievedWeeks = Object.values(wMap).filter(v => v >= 4).length;
+
+  return { totalDays, streak, achievedWeeks };
+}
+
+// ===== RENDER =====
+function renderAll() {
+  renderHeader();
+  renderCalendar();
+  renderStats();
+  if (selDate) renderWorkout(selDate);
+}
+
+function renderHeader() {
+  document.getElementById('lv-num').textContent = state.level;
+  document.getElementById('lv-eff').textContent = LEVEL_EFFECTS[state.level] || '';
+}
+
+function renderStats() {
+  const { totalDays, streak, achievedWeeks } = computeStats();
+  const prevLevel = state.level;
+  state.achievedWeeks = achievedWeeks;
+  const newLevel = computeLevel(achievedWeeks);
+  if (newLevel > state.level) {
+    state.level = newLevel;
+    saveState();
+    showLevelUp(newLevel);
+  }
+
+  document.getElementById('st-total').textContent = totalDays;
+  document.getElementById('st-streak').textContent = streak;
+  document.getElementById('st-weeks').textContent = achievedWeeks;
+
+  // Week dots
+  const td = todayStr();
+  const todayD = new Date();
+  const dow = todayD.getDay();
+  const monday = new Date(todayD);
+  monday.setDate(todayD.getDate() - (dow === 0 ? 6 : dow - 1));
+  let weekDone = 0;
+  const dotsEl = document.getElementById('week-dots');
+  dotsEl.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const ds = dstr(d);
+    const done = !!state.log[ds]?.done;
+    const isToday = ds === td;
+    if (done) weekDone++;
+    const dot = document.createElement('div');
+    dot.className = 'week-dot' + (done ? ' filled' : '') + (isToday && !done ? ' today-dot' : '');
+    dotsEl.appendChild(dot);
+  }
+  document.getElementById('week-count-lbl').textContent =
+    `${weekDone} / 7日${weekDone >= 4 ? ' ✓ 達成週！' : ''}`;
+
+  renderHeader();
+  if (selDate) updateProgressBar();
+}
+
+function updateProgressBar() {
+  const el = document.getElementById('lv-bar-inner');
+  const tel = document.getElementById('lv-bar-text');
+  if (!el) return;
+  const lv = state.level;
+  if (lv >= 10) {
+    el.style.width = '100%';
+    if (tel) tel.textContent = '🎉 最高レベル達成！';
+    return;
+  }
+  const curr = LEVEL_THRESHOLDS[lv];
+  const next = LEVEL_THRESHOLDS[lv + 1];
+  const pct = Math.min(100, Math.round(((state.achievedWeeks - curr) / (next - curr)) * 100));
+  el.style.width = pct + '%';
+  if (tel) tel.textContent = `あと ${next - state.achievedWeeks} 達成週で Lv.${lv + 1}`;
+}
+
+function renderCalendar() {
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  document.getElementById('cal-title').textContent = `${year}年 ${month + 1}月`;
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+
+  ['日','月','火','水','木','金','土'].forEach(h => {
+    const el = document.createElement('div');
+    el.className = 'cal-hdr';
+    el.textContent = h;
+    grid.appendChild(el);
+  });
+
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const td = todayStr();
+
+  for (let i = 0; i < firstDow; i++) {
+    const el = document.createElement('div');
+    el.className = 'cal-day empty';
+    grid.appendChild(el);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month, d);
+    const ds = dstr(date);
+    const cfg = getDayCfg(date);
+    const isToday = ds === td;
+    const isPast = ds < td;
+    const done = !!state.log[ds]?.done;
+    const missed = isPast && !done;
+    const selected = selDate === ds;
+
+    const el = document.createElement('div');
+    el.className = [
+      'cal-day', cfg.cls,
+      isToday ? 'today' : '',
+      done ? 'done' : '',
+      missed ? 'missed' : '',
+      selected ? 'selected' : '',
+    ].join(' ');
+    el.innerHTML = `<div class="day-num">${d}</div><div class="day-icon">${cfg.emoji}</div>`;
+    el.onclick = () => selectDay(ds);
+    grid.appendChild(el);
+  }
+}
+
+
+function renderWorkout(ds) {
+  const date = new Date(ds + 'T00:00:00');
+  const cfg = getDayCfg(date);
+  const logEntry = state.log[ds] || { done: false, checked: [] };
+  const exercises = getExercises(cfg.type, state.level);
+  const td = todayStr();
+  const isToday = ds === td;
+  const isFuture = ds > td;
+  const isPast = ds < td;
+
+  const dayNames = ['日曜日','月曜日','火曜日','水曜日','木曜日','金曜日','土曜日'];
+  const dateLabel = `${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日 (${dayNames[date.getDay()]})`;
+
+  const lv = state.level;
+  const aw = state.achievedWeeks;
+  const curr = LEVEL_THRESHOLDS[lv];
+  const next = lv < 10 ? LEVEL_THRESHOLDS[lv + 1] : 36;
+  const pct = lv >= 10 ? 100 : Math.min(100, Math.round(((aw - curr) / (next - curr)) * 100));
+  const remaining = lv < 10 ? next - aw : 0;
+
+  let btnHTML;
+  if (logEntry.done) {
+    btnHTML = `<button class="done-btn already">✓ この日のトレーニング完了済み</button>`;
+  } else if (isFuture) {
+    btnHTML = `<button class="done-btn future">📅 未来の予定メニュー（まだ完了できません）</button>`;
+  } else {
+    btnHTML = `<button class="done-btn" onclick="markDone('${ds}')">✓ 今日のトレーニングを完了する！</button>`;
+  }
+
+  const exHTML = exercises.map((ex, i) => {
+    const checked = (logEntry.checked || []).includes(i);
+    const ytQuery = encodeURIComponent((ex.yt || ex.name) + ' やり方');
+    const ytUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
+    return `
+      <div class="ex-item${checked ? ' checked' : ''}" onclick="toggleEx('${ds}',${i})">
+        <div class="ex-chk">${checked ? '✓' : ''}</div>
+        <div class="ex-body">
+          <div class="ex-name">${ex.name}</div>
+          <div class="ex-detail">${ex.sets} ｜ ${ex.detail}</div>
+        </div>
+        <a href="${ytUrl}" target="_blank" onclick="event.stopPropagation()">
+          <button class="ex-yt-btn">▶ 動画</button>
+        </a>
+      </div>`;
+  }).join('');
+
+  document.getElementById('workout-panel').innerHTML = `
+    <div class="workout-header ${cfg.cls}">
+      <div class="workout-name">${cfg.emoji} ${cfg.name}</div>
+      <div class="workout-date">${dateLabel}</div>
+      <div class="workout-lv">適用レベル: Lv.${lv}（グループ${LVL_GROUP(lv)}）</div>
+    </div>
+    <div class="ex-scroll">
+      <div class="ex-section">
+        <div class="ex-section-title">今日のメニュー（クリックでチェック）</div>
+        ${exHTML || '<div style="color:var(--text2);font-size:13px;padding:8px;">メニューなし（回復日）</div>'}
+      </div>
+    </div>
+    <div class="lv-box">
+      <div class="lv-box-top">
+        <span>Lv.${lv}　達成週：${aw}週</span>
+        <span>${lv < 10 ? `Lv.${lv+1}まで残り ${remaining}週` : '最高レベル！'}</span>
+      </div>
+      <div class="lv-bar-outer">
+        <div class="lv-bar-inner" id="lv-bar-inner" style="width:${pct}%"></div>
+      </div>
+      <div class="lv-box-bottom" id="lv-bar-text">
+        ${lv < 10 ? `あと ${remaining} 達成週で Lv.${lv+1} にレベルアップ！` : '🎉 目標達成！'}
+      </div>
+    </div>
+    ${btnHTML}
+  `;
+}
+
+function toggleEx(ds, idx) {
+  if (!state.log[ds]) state.log[ds] = { done: false, checked: [] };
+  const arr = state.log[ds].checked || [];
+  const pos = arr.indexOf(idx);
+  if (pos === -1) arr.push(idx); else arr.splice(pos, 1);
+  state.log[ds].checked = arr;
+  saveState();
+  renderWorkout(ds);
+}
+
+function markDone(ds) {
+  if (!state.log[ds]) state.log[ds] = { done: false, checked: [] };
+  state.log[ds].done = true;
+  saveState();
+  renderAll();
+}
+
+function changeMonth(dir) {
+  viewDate.setMonth(viewDate.getMonth() + dir);
+  renderCalendar();
+}
+
+function showLevelUp(lv) {
+  document.getElementById('m-lv').textContent = `Lv.${lv - 1} → Lv.${lv} にレベルアップ！`;
+  document.getElementById('m-eff').textContent = LEVEL_EFFECTS[lv] || '';
+  document.getElementById('levelup-modal').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('levelup-modal').classList.remove('show');
+}
+
+function showResetConfirm() {
+  document.getElementById('reset-modal').classList.add('show');
+}
+function closeResetModal() {
+  document.getElementById('reset-modal').classList.remove('show');
+}
+function doReset() {
+  localStorage.removeItem(STORAGE_KEY);
+  state = { level: 1, achievedWeeks: 0, log: {} };
+  selDate = null;
+  closeResetModal();
+  document.getElementById('workout-panel').innerHTML = '<div class="placeholder">カレンダーの日付をクリックして<br>その日のメニューを表示</div>';
+  renderAll();
+}
+
+// ===== TAB (mobile) =====
+function switchTab(tab) {
+  const calPanel = document.getElementById('panel-cal');
+  const menuPanel = document.getElementById('workout-panel');
+  const tabCal = document.getElementById('tab-cal');
+  const tabMenu = document.getElementById('tab-menu');
+  if (tab === 'cal') {
+    calPanel.classList.add('tab-active');
+    menuPanel.classList.remove('tab-active');
+    tabCal.classList.add('active');
+    tabMenu.classList.remove('active');
+  } else {
+    calPanel.classList.remove('tab-active');
+    menuPanel.classList.add('tab-active');
+    tabCal.classList.remove('active');
+    tabMenu.classList.add('active');
+  }
+}
+
+function selectDay(ds) {
+  selDate = ds;
+  renderCalendar();
+  renderWorkout(ds);
+  // On mobile, auto-switch to menu tab
+  if (window.innerWidth <= 768) switchTab('menu');
+}
+
+// ===== INIT =====
+selDate = todayStr();
+renderAll();
+</script>
+</body>
+</html>
