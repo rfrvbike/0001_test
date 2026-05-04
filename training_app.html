@@ -48,6 +48,18 @@ header {
   color: var(--gold);
 }
 .app-title small { font-size: 12px; color: var(--text2); font-weight: normal; margin-left: 8px; }
+.sync-btn {
+  background: var(--bg3);
+  border: 1px solid #444466;
+  color: var(--text);
+  padding: 5px 11px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.sync-btn:hover { background: var(--accent); border-color: var(--accent); }
 .level-badge {
   background: linear-gradient(135deg, #2a005a, #7c4dff);
   border: 2px solid var(--gold);
@@ -385,6 +397,13 @@ main {
 
 <header>
   <div class="app-title">💪 筋トレRPG <small>〜 理想の体へ 〜</small></div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <button class="sync-btn" onclick="exportData()" title="データをファイルに保存">📤 保存</button>
+    <label class="sync-btn" title="ファイルからデータを読み込む" style="cursor:pointer;">
+      📥 読込
+      <input type="file" accept=".json" onchange="importData(event)" style="display:none;">
+    </label>
+  </div>
   <div class="level-badge" id="level-badge" onclick="showResetConfirm()">
     <div class="lv-label">LEVEL</div>
     <div class="lv-number" id="lv-num">1</div>
@@ -940,6 +959,42 @@ function doReset() {
   closeResetModal();
   document.getElementById('workout-panel').innerHTML = '<div class="placeholder">カレンダーの日付をクリックして<br>その日のメニューを表示</div>';
   renderAll();
+}
+
+// ===== EXPORT / IMPORT =====
+function exportData() {
+  const json = JSON.stringify(state, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `training_rpg_${date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (typeof imported.level === 'undefined' || typeof imported.log === 'undefined') {
+        alert('このファイルは対応していません。');
+        return;
+      }
+      state = imported;
+      saveState();
+      renderAll();
+      alert(`✅ データを読み込みました！\nLv.${state.level} / 達成週数${state.achievedWeeks}週`);
+    } catch {
+      alert('ファイルの読み込みに失敗しました。');
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
 }
 
 // ===== TAB (mobile) =====
