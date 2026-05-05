@@ -111,6 +111,23 @@ header {
 .lv-label { font-size: 10px; color: var(--gold); letter-spacing: 2px; }
 .lv-number { font-size: 28px; font-weight: 900; color: #fff; line-height: 1.1; }
 .lv-effect { font-size: 10px; color: #ccaaff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.lv-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.manual-lvlup-btn {
+  background: linear-gradient(135deg, #ff8c00, #ffd700);
+  border: none; color: #1a0033; font-size: 11px; font-weight: bold;
+  padding: 3px 10px; border-radius: 20px; cursor: pointer;
+  transition: transform 0.15s, opacity 0.15s;
+  white-space: nowrap;
+}
+.manual-lvlup-btn:hover { transform: scale(1.08); }
+.decay-toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #cc2222; color: #fff; padding: 12px 22px;
+  border-radius: 12px; font-size: 13px; font-weight: bold;
+  z-index: 2000; box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  animation: toast-in 0.3s ease;
+}
+@keyframes toast-in { from { opacity:0; bottom:8px; } to { opacity:1; bottom:24px; } }
 
 /* TAB BAR (mobile only) */
 .tab-bar {
@@ -443,10 +460,13 @@ main {
       <input type="file" accept=".json" onchange="importData(event)" style="display:none;">
     </label>
   </div>
-  <div class="level-badge" id="level-badge" onclick="showResetConfirm()">
-    <div class="lv-label">LEVEL</div>
-    <div class="lv-number" id="lv-num">1</div>
-    <div class="lv-effect" id="lv-eff">スタート地点</div>
+  <div class="lv-wrap">
+    <div class="level-badge" id="level-badge" onclick="showResetConfirm()">
+      <div class="lv-label">LEVEL</div>
+      <div class="lv-number" id="lv-num">1</div>
+      <div class="lv-effect" id="lv-eff">スタート地点</div>
+    </div>
+    <button class="manual-lvlup-btn" onclick="manualLevelUp()" title="簡単すぎるときはここでレベルを上げられます">▲ 手動でLvUP</button>
   </div>
 </header>
 
@@ -765,7 +785,7 @@ function loadState() {
     const s = localStorage.getItem(STORAGE_KEY);
     if (s) return JSON.parse(s);
   } catch(e) {}
-  return { level: 1, achievedWeeks: 0, log: {} };
+  return { level: 1, achievedWeeks: 0, log: {}, lastAchievedWeekKey: null, lastDecayWeeksSince: 0 };
 }
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -822,9 +842,11 @@ function computeStats() {
     const wk = dstr(mon);
     wMap[wk] = (wMap[wk] || 0) + 1;
   }
-  const achievedWeeks = Object.values(wMap).filter(v => v >= 4).length;
+  const achievedEntries = Object.entries(wMap).filter(([,v]) => v >= 4).map(([k]) => k).sort();
+  const achievedWeeks = achievedEntries.length;
+  const lastAchievedWeekKey = achievedEntries.length > 0 ? achievedEntries[achievedEntries.length - 1] : null;
 
-  return { totalDays, streak, achievedWeeks };
+  return { totalDays, streak, achievedWeeks, lastAchievedWeekKey };
 }
 
 // ===== RENDER =====
@@ -841,9 +863,13 @@ function renderHeader() {
 }
 
 function renderStats() {
-  const { totalDays, streak, achievedWeeks } = computeStats();
-  const prevLevel = state.level;
+  const { totalDays, streak, achievedWeeks, lastAchievedWeekKey } = computeStats();
   state.achievedWeeks = achievedWeeks;
+  // Reset decay counter when a new achieved week appears
+  if (lastAchievedWeekKey && lastAchievedWeekKey !== state.lastAchievedWeekKey) {
+    state.lastAchievedWeekKey = lastAchievedWeekKey;
+    state.lastDecayWeeksSince = 0;
+  }
   const newLevel = computeLevel(achievedWeeks);
   if (newLevel > state.level) {
     state.level = newLevel;
@@ -887,7 +913,7 @@ function updateProgressBar() {
   const tel = document.getElementById('lv-bar-text');
   if (!el) return;
   const lv = state.level;
-  if (lv >= 10) {
+  if (lv >= 30) {
     el.style.width = '100%';
     if (tel) tel.textContent = '🎉 最高レベル達成！';
     return;
@@ -1232,9 +1258,67 @@ function selectDay(ds) {
   if (window.innerWidth <= 768) switchTab('menu');
 }
 
+// ===== MANUAL LEVEL UP =====
+function manualLevelUp() {
+  if (state.level >= 30) { alert('すでに最高レベル（Lv.30）です！'); return; }
+  if (!confirm(`Lv.${state.level} → Lv.${state.level + 1} に手動でレベルアップしますか？\n（メニューが楽すぎると感じたときに使ってください）`)) return;
+  state.level = Math.min(30, state.level + 1);
+  state.lastDecayWeeksSince = 0; // 手動UP後はdecayカウントをリセット
+  saveState();
+  renderAll();
+  showLevelUp(state.level);
+}
+
+// ===== AUTO DECAY (3週連続さぼり = -1レベル) =====
+function checkDecay() {
+  if (!state.lastAchievedWeekKey) return; // まだ達成週がない
+
+  const today = new Date();
+  const dow = today.getDay();
+  // 今週月曜
+  const thisMon = new Date(today);
+  thisMon.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  // 直近の完了済み週の月曜（今週はまだ進行中なので除く）
+  const lastCompletedMon = new Date(thisMon);
+  lastCompletedMon.setDate(thisMon.getDate() - 7);
+
+  const lastAch = new Date(state.lastAchievedWeekKey + 'T00:00:00');
+  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+  const weeksSince = Math.max(0, Math.floor((lastCompletedMon - lastAch) / msPerWeek));
+
+  const prevWeeksSince = state.lastDecayWeeksSince || 0;
+  const totalDecay  = Math.floor(weeksSince  / 3);
+  const prevDecay   = Math.floor(prevWeeksSince / 3);
+  const newDecay    = totalDecay - prevDecay;
+
+  state.lastDecayWeeksSince = weeksSince;
+
+  if (newDecay > 0 && state.level > 1) {
+    const prevLevel = state.level;
+    state.level = Math.max(1, state.level - newDecay);
+    saveState();
+    renderAll();
+    if (state.level < prevLevel) {
+      setTimeout(() => showDecayToast(prevLevel, state.level, weeksSince), 400);
+    }
+  } else {
+    saveState();
+  }
+}
+
+function showDecayToast(prevLv, newLv, weeks) {
+  const msg = `⚠️ ${weeks}週間さぼったためLv.${prevLv}→Lv.${newLv}に低下しました。\nまた筋トレを再開しよう！`;
+  const t = document.createElement('div');
+  t.className = 'decay-toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
+}
+
 // ===== INIT =====
 selDate = todayStr();
 renderAll();
+checkDecay();
 // Auto-connect Firebase if config was saved before
 const savedFbCfg = loadFbConfig();
 if (savedFbCfg) {
