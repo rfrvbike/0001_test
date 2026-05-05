@@ -262,6 +262,16 @@ main {
 .dt-push .day-num { color: var(--push-col); }
 .dt-lower .day-num { color: var(--lower-col); }
 .dt-recovery .day-num { color: var(--recovery-col); }
+.day-role {
+  font-size: 8px;
+  line-height: 1;
+  margin-top: 3px;
+  color: var(--text2);
+  font-weight: 700;
+}
+.cal-day.role-main { box-shadow: inset 0 -2px 0 rgba(255,215,0,0.35); }
+.cal-day.role-mini { box-shadow: inset 0 -2px 0 rgba(0,212,255,0.35); }
+.cal-day.role-bonus { opacity: 0.82; }
 
 /* LEGEND */
 .legend {
@@ -319,6 +329,17 @@ main {
 .workout-name { font-size: 18px; font-weight: bold; }
 .workout-date { font-size: 11px; color: var(--text2); margin-top: 2px; }
 .workout-lv { font-size: 11px; color: var(--text2); }
+.plan-card {
+  background: rgba(255,255,255,0.035);
+  border: 1px solid var(--bg3);
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.plan-card strong { color: var(--gold); }
+.plan-card div + div { margin-top: 3px; }
 
 .ex-scroll { flex: 1; overflow-y: auto; }
 .ex-section { margin-bottom: 12px; }
@@ -613,17 +634,29 @@ const LEVEL_EFFECTS = [
 
 // 0=Sun,1=Mon,...,6=Sat
 const DAY_CFG = [
-  { type: 'recovery', name: '回復・ストレッチ', emoji: '🧘', cls: 'dt-recovery' },
-  { type: 'strength', name: '背中・姿勢',       emoji: '💪', cls: 'dt-strength' },
-  { type: 'hiit',     name: 'HIIT',             emoji: '🔥', cls: 'dt-hiit' },
-  { type: 'push',     name: '肩・胸・腹筋ローラー', emoji: '🏋️', cls: 'dt-push' },
-  { type: 'hiit',     name: 'HIIT',             emoji: '🔥', cls: 'dt-hiit' },
-  { type: 'lower',    name: '下半身・性力',      emoji: '⚡', cls: 'dt-lower' },
-  { type: 'hiit',     name: 'HIIT',             emoji: '🔥', cls: 'dt-hiit' },
+  { type: 'recovery', name: '回復・ストレッチ', emoji: '🧘', cls: 'dt-recovery', role: 'recovery', roleLabel: '回復' },
+  { type: 'strength', name: '背中・姿勢・肩幅', emoji: '💪', cls: 'dt-strength', role: 'main', roleLabel: '必須' },
+  { type: 'hiit',     name: '任意HIIT',         emoji: '🔥', cls: 'dt-hiit', role: 'bonus', roleLabel: '任意' },
+  { type: 'push',     name: '肩・胸・腹筋ローラー', emoji: '🏋️', cls: 'dt-push', role: 'main', roleLabel: '必須' },
+  { type: 'posture',  name: 'ミニ姿勢・心肺',   emoji: '🧍', cls: 'dt-recovery', role: 'mini', roleLabel: 'ミニ' },
+  { type: 'lower',    name: '下半身・性力',      emoji: '⚡', cls: 'dt-lower', role: 'main', roleLabel: '必須' },
+  { type: 'hiit',     name: '任意HIIT',         emoji: '🔥', cls: 'dt-hiit', role: 'bonus', roleLabel: '任意' },
 ];
 
 // 6 groups: A(1-5)=超入門, B(6-10)=入門, C(11-15)=初級, D(16-20)=中級, E(21-25)=上級, F(26-30)=エキスパート
 const LVL_GROUP = lv => lv <= 5 ? 'A' : lv <= 10 ? 'B' : lv <= 15 ? 'C' : lv <= 20 ? 'D' : lv <= 25 ? 'E' : 'F';
+
+const POSTURE_RESET = [
+  { name: '毎日1分：チンタック', sets: '10回', detail: '顎を真後ろに引いて首を長くする。首が前に出る癖をリセット' },
+  { name: '毎日1分：胸開き', sets: '30秒', detail: '壁やドア枠に手を当てて胸を開く。巻き肩・顎上がり対策' },
+  { name: '毎日1分：肩甲骨寄せ', sets: '10回', detail: '肩をすくめず、肩甲骨を背中の中央へ寄せる' },
+];
+
+const WORKOUT_TIMING = [
+  '22:00 帰宅：水分補給。空腹が強ければバナナ・ヨーグルト等を少量',
+  '22:05 筋トレ15分：食事前が基本。満腹でHIITや腹筋ローラーを避ける',
+  '22:20 夕食：たんぱく質＋炭水化物を軽めに。食後トレなら60〜90分空ける',
+];
 
 const EX = {
   strength: {
@@ -631,37 +664,37 @@ const EX = {
       { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ', yt: 'チンタック 顎引き 姿勢改善' },
       { name: '壁ロウ', sets: '2セット × 8回', detail: '壁から60cm離れて立ち、壁に両手をつけて体を引き寄せる（最も簡単な引き動作）', yt: '壁ロウ 初心者 背中' },
       { name: 'デッドバグ', sets: '2セット × 8回', detail: '仰向けで腕と反対の脚をゆっくり床に下ろして戻す体幹運動', yt: 'デッドバグ やり方 体幹' },
-      { name: '肩甲骨寄せ', sets: '15回', detail: '腕を横に広げ、肩甲骨を背中の中央に引き寄せて2秒キープ', yt: '肩甲骨 寄せる 姿勢改善' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '1セット × 10回', detail: '肘を少し曲げて横に上げる。肩幅に重要な三角筋中部を軽く刺激', yt: 'ダンベル サイドレイズ 2kg やり方' },
     ],
     B: [ // 入門 Lv6-10
       { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ' },
       { name: 'インバーテッドロウ', sets: '3セット × 8回', detail: '懸垂器を低く設定して斜め懸垂（背中を引く）' },
       { name: 'スーパーマン', sets: '2セット × 10回', detail: 'うつ伏せで腕脚を同時に3秒持ち上げてキープ' },
-      { name: 'パイクプッシュアップ【締め・肩】', sets: '1セット × 8回', detail: 'お尻を高く上げてV字プッシュアップ（三角筋）' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '2セット × 10回', detail: '肩をすくめず横に上げる。肩幅の土台作り' },
     ],
     C: [ // 初級 Lv11-15
       { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ' },
       { name: 'インバーテッドロウ', sets: '3セット × 12回', detail: '懸垂器を低く設定して斜め懸垂' },
       { name: 'スーパーマン', sets: '3セット × 12回', detail: 'うつ伏せで腕脚を3秒持ち上げてキープ' },
-      { name: 'パイクプッシュアップ【締め・肩】', sets: '1セット × 12回', detail: 'お尻を高く上げてV字プッシュアップ' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '2セット × 12回', detail: '反動を使わず、肩の横に効かせる' },
     ],
     D: [ // 中級 Lv16-20
       { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ' },
       { name: '懸垂（ワイドグリップ）', sets: '3セット × 5回', detail: '手幅を広めにして体を引き上げる（広背筋）' },
       { name: 'YTWエクサ', sets: '2セット × 10回', detail: 'うつ伏せでY字→T字→W字の順に腕を上げる（肩後部）' },
-      { name: 'デクラインパイクPU【締め・肩】', sets: '1セット × 10回', detail: '足を椅子に乗せてパイクプッシュアップ' },
+      { name: 'ダンベル・リアレイズ（2kg）', sets: '2セット × 12回', detail: '少し前傾し、肩の後ろを使って横後ろに上げる' },
     ],
     E: [ // 上級 Lv21-25
       { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ' },
       { name: '懸垂（ワイドグリップ）', sets: '3セット × 8回', detail: '手幅を広めにして体を引き上げる' },
       { name: 'YTWエクサ', sets: '3セット × 10回', detail: 'うつ伏せでY字→T字→W字の順に腕を上げる' },
-      { name: 'デクラインパイクPU【締め・肩】', sets: '1セット × 12回', detail: '足を椅子に乗せてパイクプッシュアップ' },
+      { name: 'ダンベル・サイド＋リアレイズ', sets: '各2セット × 12回', detail: '肩の横と後ろをセットで刺激。肩幅と姿勢に効く' },
     ],
     F: [ // エキスパート Lv26-30
       { name: 'チンタック', sets: '10回', detail: '壁に背をつけ顎を真後ろに引いて5秒キープ' },
       { name: '懸垂（テンポ3秒下げ）', sets: '3セット × 8回', detail: '3秒かけてゆっくり下ろす高負荷懸垂' },
       { name: 'アーチャーロウ', sets: '左右各 6回', detail: '片腕ずつ引く上級バリエーション' },
-      { name: '壁倒立PU【締め・肩】', sets: '1セット × 5回', detail: '壁に足をかけて倒立→頭を床に近づけて押し上げる' },
+      { name: 'ダンベル・サイドレイズ（テンポ）', sets: '3セット × 12回', detail: '2秒で上げ、2秒止め、2秒で下げる。反動なし' },
     ],
   },
   hiit: {
@@ -696,6 +729,37 @@ const EX = {
       { name: 'クールダウン', sets: '2分', detail: '深呼吸で心拍を落ち着かせる' },
     ],
   },
+  posture: {
+    A: [
+      { name: '姿勢リセットセット', sets: '3分', detail: 'チンタック10回→胸開き30秒→肩甲骨寄せ10回' },
+      { name: '軽い足踏み', sets: '3分', detail: '息が切れないペースで血流を上げる。忙しい日の最低ライン' },
+    ],
+    B: [
+      { name: '姿勢リセットセット', sets: '3分', detail: 'チンタック10回→胸開き30秒→肩甲骨寄せ10回' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '1セット × 12回', detail: '肩幅用の軽い追加刺激。余裕がある時だけでOK' },
+      { name: '軽い足踏み', sets: '3分', detail: '鼻呼吸できる強度で心肺を整える' },
+    ],
+    C: [
+      { name: '姿勢リセットセット', sets: '3分', detail: 'チンタック10回→胸開き30秒→肩甲骨寄せ10回' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '2セット × 12回', detail: '肩をすくめず横に上げる' },
+      { name: 'ステップタッチ', sets: '30秒ON / 20秒OFF × 4セット', detail: '疲れを残さない軽い心肺刺激' },
+    ],
+    D: [
+      { name: '姿勢リセットセット', sets: '3分', detail: 'チンタック10回→胸開き30秒→肩甲骨寄せ10回' },
+      { name: 'ダンベル・サイド＋リアレイズ', sets: '各1セット × 15回', detail: '肩の横と後ろを軽く刺激' },
+      { name: 'ステップタッチ', sets: '30秒ON / 15秒OFF × 5セット', detail: '軽く汗ばむ程度' },
+    ],
+    E: [
+      { name: '姿勢リセットセット', sets: '3分', detail: 'チンタック10回→胸開き30秒→肩甲骨寄せ10回' },
+      { name: 'ダンベル・サイド＋リアレイズ', sets: '各2セット × 12回', detail: '三角筋中部・後部を補強' },
+      { name: '軽いマウンテンクライマー', sets: '20秒ON / 20秒OFF × 5セット', detail: 'フォームを崩さない強度' },
+    ],
+    F: [
+      { name: '姿勢リセットセット', sets: '3分', detail: 'チンタック10回→胸開き30秒→肩甲骨寄せ10回' },
+      { name: 'ダンベル・サイドレイズ（テンポ）', sets: '2セット × 15回', detail: '反動なしで肩の横を焼く' },
+      { name: '軽いバーピー', sets: '20秒ON / 20秒OFF × 5セット', detail: '任意。疲労が強ければ足踏みに変更' },
+    ],
+  },
   push: {
     A: [ // 超入門 Lv1-5
       { name: '壁プッシュアップ', sets: '3セット × 10回', detail: '壁から60cm離れて立ち、壁を手で押して体を戻す。最も簡単な腕立て' },
@@ -705,26 +769,31 @@ const EX = {
     B: [ // 入門 Lv6-10
       { name: 'パイクプッシュアップ', sets: '2セット × 8回', detail: 'お尻を高く上げてV字→頭を床に近づける（三角筋）' },
       { name: 'プッシュアップバー 標準プッシュアップ', sets: '2セット × 10回', detail: '肘を体側に沿わせて深く下ろす（胸・肩）膝つきOK' },
-      { name: '腹筋ローラー 膝コロ（短め）', sets: '2セット × 8回', detail: '膝をついてローラーを少し転がして戻す。腰を反らさない' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '1セット × 12回', detail: '肩幅に必要な三角筋中部を追加で刺激' },
+      { name: '腹筋ローラー 膝コロ（短め）', sets: '1セット × 8回', detail: '膝をついてローラーを少し転がして戻す。腰を反らさない' },
     ],
     C: [ // 初級 Lv11-15
       { name: 'パイクプッシュアップ', sets: '2セット × 12回', detail: 'お尻を高く上げてV字→頭を床に近づける' },
       { name: 'プッシュアップバー 標準プッシュアップ', sets: '2セット × 15回', detail: '肘を体側に沿わせて深く下ろす' },
-      { name: '腹筋ローラー 膝コロ（フル）', sets: '2セット × 10回', detail: '膝をついてしっかり伸ばして戻す' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '2セット × 12回', detail: '反動を使わず肩の横に効かせる' },
+      { name: '腹筋ローラー 膝コロ（フル）', sets: '1セット × 10回', detail: '膝をついてしっかり伸ばして戻す' },
     ],
     D: [ // 中級 Lv16-20
       { name: 'デクラインパイクプッシュアップ', sets: '2セット × 10回', detail: '足を椅子に乗せてパイクPU。より三角筋に負荷がかかる' },
       { name: 'テンポプッシュアップ', sets: '2セット × 10回', detail: '3秒で下ろし→1秒止め→1秒で上げる（胸・肩）' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '2セット × 15回', detail: '肩の横をパンプさせる。肩幅の見た目に直結' },
       { name: '腹筋ローラー 斜めコロ', sets: '左右各 2セット × 8回', detail: '斜め45度方向に転がして腹斜筋（わき腹）を鍛える' },
     ],
     E: [ // 上級 Lv21-25
       { name: '壁倒立プッシュアップ', sets: '2セット × 5回', detail: '壁に足をかけて倒立→頭を床に下ろして押し上げる' },
       { name: 'アーチャープッシュアップ', sets: '左右各 2セット × 8回', detail: '腕を広げて片方に重心を移しながら片腕で押す' },
+      { name: 'ダンベル・サイド＋リアレイズ', sets: '各2セット × 12回', detail: '肩の横と後ろを仕上げる' },
       { name: '腹筋ローラー 斜めコロ', sets: '左右各 2セット × 10回', detail: '斜め方向に転がして腹斜筋を強化' },
     ],
     F: [ // エキスパート Lv26-30
       { name: '壁倒立プッシュアップ', sets: '2セット × 8回', detail: '壁に足をかけて倒立→頭を床に下ろして押し上げる' },
       { name: 'アーチャープッシュアップ', sets: '左右各 2セット × 10回', detail: '腕を広げて片方に重心を移しながら片腕で押す' },
+      { name: 'ダンベル・サイドレイズ（テンポ）', sets: '3セット × 15回', detail: '2秒で上げ、2秒止め、2秒で下げる' },
       { name: '腹筋ローラー 立ちコロ（壁あり）', sets: '2セット × 5回', detail: '立った状態から転がして壁でストップ→戻す' },
     ],
   },
@@ -743,22 +812,22 @@ const EX = {
     ],
     C: [ // 初級 Lv11-15
       { name: 'ヒップサークル', sets: '前後各 10回', detail: '骨盤を大きく円を描くように回す' },
-      { name: 'スクワット', sets: '3セット × 15回', detail: '膝をつま先方向に向けて深くしゃがむ' },
+      { name: 'ダンベル・ゴブレットスクワット（4kg）', sets: '3セット × 12回', detail: '2kgダンベル2個を胸の前で持ち、膝をつま先方向に向けてしゃがむ' },
       { name: 'グルートブリッジ', sets: '3セット × 15回', detail: '仰向けで膝を立ててお尻を上げ2秒キープ' },
       { name: 'ケーゲル体操', sets: '5秒締める × 15セット', detail: '骨盤底筋を締める（性力・射精コントロール）' },
     ],
     D: [ // 中級 Lv16-20
-      { name: 'ジャンプスクワット', sets: '2セット × 10回', detail: 'スクワットの最後にジャンプを加える（心肺+筋力）' },
+      { name: 'ダンベル・ゴブレットスクワット（4kg）', sets: '3セット × 15回', detail: '胸の前でダンベルを持ってしゃがむ。下半身と血流を強化' },
       { name: 'シングルレッグブリッジ', sets: '左右各 2セット × 10回', detail: '片足を伸ばしてグルートブリッジ（より高負荷）' },
       { name: 'ケーゲル体操', sets: '5秒締める × 15セット', detail: '骨盤底筋を締める（性力向上）' },
     ],
     E: [ // 上級 Lv21-25
-      { name: 'ブルガリアンスクワット', sets: '左右各 3セット × 10回', detail: '椅子に後ろ足をかけて前足一本でスクワット' },
+      { name: 'ダンベル・ブルガリアンスクワット', sets: '左右各 3セット × 10回', detail: '2kgダンベルを持ち、椅子に後ろ足をかけて前足一本でスクワット' },
       { name: 'シングルレッグブリッジ', sets: '左右各 3セット × 12回', detail: '片足を伸ばしてグルートブリッジ' },
       { name: 'ケーゲル体操', sets: '5秒締める × 20セット', detail: '骨盤底筋を締める（性力・射精コントロール強化）' },
     ],
     F: [ // エキスパート Lv26-30
-      { name: 'ピストルスクワット（補助あり）', sets: '左右各 3セット × 5回', detail: '壁を軽く触りながら片足で深くスクワット' },
+      { name: 'ダンベル・ピストルスクワット（補助あり）', sets: '左右各 3セット × 5回', detail: '余裕があれば2kgダンベルを持つ。壁を軽く触りながら片足で深くスクワット' },
       { name: 'シングルレッグブリッジ（テンポ）', sets: '左右各 3セット × 15回', detail: '2秒で上げ→2秒で下げる片足ブリッジ' },
       { name: 'ケーゲル体操', sets: '5秒締める × 20セット', detail: '骨盤底筋を鍛える（最高レベルの性力・コントロール）' },
     ],
@@ -774,6 +843,178 @@ const EX = {
   },
 };
 ['B','C','D','E','F'].forEach(g => { EX.recovery[g] = EX.recovery.A; });
+
+// Lv1-10は現在の実力（脚上げプッシュアップバー10回前後）に合わせて細かく刻む
+const EXACT_EX = {
+  strength: {
+    1: [
+      { name: 'ぶら下がり or 肩甲骨懸垂', sets: '15秒 × 2回', detail: '懸垂機にぶら下がり、できれば肩甲骨だけ軽く上下。首をすくめない' },
+      { name: 'インバーテッドロウ', sets: '2セット × 8回', detail: '斜め懸垂。胸をバーに近づけ、背中で引く' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '2セット × 12回', detail: '肩幅用。反動なし、肩をすくめない' },
+    ],
+    2: [
+      { name: 'ぶら下がり or 肩甲骨懸垂', sets: '20秒 × 2回', detail: '広背筋と肩甲骨を目覚めさせる' },
+      { name: 'インバーテッドロウ', sets: '2セット × 10回', detail: '最後2回がきつい強度に角度調整' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '2セット × 14回', detail: 'ゆっくり下ろして肩の横に効かせる' },
+    ],
+    3: [
+      { name: 'ネガティブ懸垂', sets: '2セット × 2回', detail: '台を使って上で構え、3秒かけて下ろす' },
+      { name: 'インバーテッドロウ', sets: '3セット × 8回', detail: '背中を丸めず、肩甲骨を寄せる' },
+      { name: 'サイド＋リアレイズ（2kg）', sets: '各1セット × 12回', detail: '肩の横と後ろを両方刺激' },
+    ],
+    4: [
+      { name: 'ネガティブ懸垂', sets: '3セット × 2回', detail: '下ろす時間を3〜4秒にする' },
+      { name: 'インバーテッドロウ', sets: '3セット × 9回', detail: '胸を張って引く' },
+      { name: 'サイド＋リアレイズ（2kg）', sets: '各1セット × 15回', detail: '軽い重量なので丁寧なフォーム重視' },
+    ],
+    5: [
+      { name: 'ネガティブ懸垂', sets: '3セット × 3回', detail: '反動を使わず、下ろしをコントロール' },
+      { name: 'インバーテッドロウ', sets: '3セット × 10回', detail: '余裕があれば足を少し前へ出して負荷UP' },
+      { name: 'サイドレイズ（2kg）', sets: '2セット × 15回', detail: '肩幅の土台作り' },
+    ],
+    6: [
+      { name: '懸垂チャレンジ', sets: '1回狙い × 3セット', detail: '上がらなければネガティブ懸垂に変更' },
+      { name: 'インバーテッドロウ', sets: '3セット × 11回', detail: '背中で引く感覚を優先' },
+      { name: 'サイド＋リアレイズ（2kg）', sets: '各2セット × 12回', detail: '肩幅と姿勢の両方に効かせる' },
+    ],
+    7: [
+      { name: '懸垂チャレンジ', sets: '1〜2回 × 3セット', detail: 'できる回数だけ。足で補助してOK' },
+      { name: 'インバーテッドロウ', sets: '3セット × 12回', detail: '最終セットだけ限界手前まで' },
+      { name: 'サイドレイズ（2kg）', sets: '3セット × 12回', detail: '肩をすくめず横に上げる' },
+    ],
+    8: [
+      { name: '懸垂 or ネガティブ懸垂', sets: '合計5回', detail: '通常懸垂＋ネガティブで合計5回を目標' },
+      { name: 'インバーテッドロウ', sets: '3セット × 12回', detail: '角度を下げて少し高負荷にする' },
+      { name: 'サイド＋リアレイズ（2kg）', sets: '各2セット × 15回', detail: '肩の横と後ろを仕上げる' },
+    ],
+    9: [
+      { name: '懸垂', sets: '2回 × 3セット', detail: '足補助OK。フォームを崩さない' },
+      { name: 'インバーテッドロウ（高負荷）', sets: '3セット × 10回', detail: '足を前へ出して体を寝かせる' },
+      { name: 'サイドレイズ（テンポ）', sets: '3セット × 12回', detail: '2秒で上げ、2秒で下げる' },
+    ],
+    10: [
+      { name: '懸垂', sets: '3回 × 3セット', detail: '届かない分はネガティブ懸垂で補う' },
+      { name: 'インバーテッドロウ（高負荷）', sets: '3セット × 12回', detail: '胸を張ってバーへ近づける' },
+      { name: 'サイド＋リアレイズ（テンポ）', sets: '各2セット × 12回', detail: '肩幅の見た目を作る仕上げ' },
+    ],
+  },
+  push: {
+    1: [
+      { name: '脚上げプッシュアップバー', sets: '8回 / 5回 / 3回', detail: '現状の限界より少し手前。1セット目から潰れない' },
+      { name: 'パイクプッシュアップ', sets: '1セット × 6回', detail: '肩前部。きつければ可動域を浅くする' },
+      { name: '腹筋ローラー 膝コロ（短め）', sets: '1セット × 5回', detail: '腰を反らさず短く転がす' },
+    ],
+    2: [
+      { name: '脚上げプッシュアップバー', sets: '8回 / 6回 / 4回', detail: '最後1〜2回を残すつもりで止める' },
+      { name: 'パイクプッシュアップ', sets: '1セット × 7回', detail: '肩狙い' },
+      { name: '腹筋ローラー 膝コロ（短め）', sets: '1セット × 6回', detail: '腹圧を抜かない' },
+    ],
+    3: [
+      { name: '脚上げプッシュアップバー', sets: '9回 / 6回 / 4回', detail: '胸・肩・腕をまとめて強化' },
+      { name: 'ダンベル・サイドレイズ（2kg）', sets: '1セット × 15回', detail: '肩幅の横への刺激' },
+      { name: '腹筋ローラー 膝コロ', sets: '1セット × 7回', detail: '無理に遠くへ伸ばさない' },
+    ],
+    4: [
+      { name: '脚上げプッシュアップバー', sets: '9回 / 7回 / 5回', detail: '全セット合計21回を目標' },
+      { name: 'パイクプッシュアップ', sets: '1セット × 8回', detail: '肩の押す力を作る' },
+      { name: '腹筋ローラー 膝コロ', sets: '1セット × 8回', detail: '腰が反る前に戻す' },
+    ],
+    5: [
+      { name: '脚上げプッシュアップバー', sets: '10回 / 7回 / 5回', detail: 'Lv1開始時より明確に余裕が出る目標' },
+      { name: 'サイドレイズ（2kg）', sets: '2セット × 12回', detail: '肩の横を追加' },
+      { name: '腹筋ローラー 膝コロ', sets: '1セット × 10回', detail: '体幹強化' },
+    ],
+    6: [
+      { name: '脚上げプッシュアップバー', sets: '10回 / 8回 / 6回', detail: '合計24回。フォーム優先' },
+      { name: 'パイクプッシュアップ', sets: '2セット × 8回', detail: '肩前部を強化' },
+      { name: '腹筋ローラー 膝コロ', sets: '2セット × 8回', detail: '短めでもOK' },
+    ],
+    7: [
+      { name: '脚上げプッシュアップバー', sets: '11回 / 8回 / 6回', detail: '最後まで胸を落とす' },
+      { name: 'サイドレイズ（2kg）', sets: '2セット × 15回', detail: '肩幅用' },
+      { name: '腹筋ローラー 膝コロ', sets: '2セット × 9回', detail: '腹筋で戻す' },
+    ],
+    8: [
+      { name: '脚上げプッシュアップバー', sets: '12回 / 8回 / 6回', detail: '1セット目12回が安定したら次段階' },
+      { name: 'パイクプッシュアップ', sets: '2セット × 9回', detail: '頭を床へ近づける' },
+      { name: '腹筋ローラー 膝コロ', sets: '2セット × 10回', detail: '腰痛が出るなら短めに戻す' },
+    ],
+    9: [
+      { name: '脚上げプッシュアップバー（テンポ）', sets: '10回 / 8回 / 6回', detail: '3秒で下ろして負荷UP' },
+      { name: 'サイド＋リアレイズ（2kg）', sets: '各2セット × 12回', detail: '肩幅と姿勢を同時に補強' },
+      { name: '腹筋ローラー 膝コロ', sets: '2セット × 12回', detail: '安定した体幹を作る' },
+    ],
+    10: [
+      { name: '脚上げプッシュアップバー（テンポ）', sets: '12回 / 9回 / 6回', detail: 'Lv10到達の目安。かなり強くなっている状態' },
+      { name: 'パイクプッシュアップ', sets: '2セット × 10回', detail: '肩の押す力' },
+      { name: '腹筋ローラー 膝コロ（フル）', sets: '2セット × 10回', detail: 'しっかり伸ばして戻す' },
+    ],
+  },
+  hiit: {
+    1: [{ name: 'ステップタッチHIIT', sets: '30秒ON / 20秒OFF × 5セット', detail: '息が上がるが会話は少しできる強度' }],
+    2: [{ name: 'ステップタッチHIIT', sets: '30秒ON / 20秒OFF × 6セット', detail: '膝と足首に優しい心肺刺激' }],
+    3: [{ name: 'マウンテンクライマー（ゆっくり）', sets: '20秒ON / 20秒OFF × 6セット', detail: '腰を反らさない。フォーム優先' }],
+    4: [{ name: 'マウンテンクライマー', sets: '20秒ON / 15秒OFF × 6セット', detail: '心肺機能と体幹を同時に鍛える' }],
+    5: [{ name: 'マウンテンクライマー', sets: '20秒ON / 15秒OFF × 8セット', detail: '息が上がる強度まで上げる' }],
+    6: [{ name: 'マウンテンクライマー', sets: '20秒ON / 10秒OFF × 8セット', detail: '短時間で心肺を刺激' }],
+    7: [{ name: 'マウンテンクライマー＋スクワット', sets: '20秒ON / 10秒OFF × 8セット', detail: '交互に実施。性力に関わる下半身の血流も狙う' }],
+    8: [{ name: 'マウンテンクライマー＋スクワット', sets: '20秒ON / 10秒OFF × 10セット', detail: 'きつければ8セットで合格' }],
+    9: [{ name: '軽いバーピー', sets: '20秒ON / 15秒OFF × 8セット', detail: 'ジャンプなしでもOK' }],
+    10: [{ name: '軽いバーピー＋マウンテンクライマー', sets: '20秒ON / 10秒OFF × 10セット', detail: '交互に実施。心肺の成長確認' }],
+  },
+  lower: {
+    1: [
+      { name: 'ダンベル・ゴブレットスクワット（4kg）', sets: '2セット × 10回', detail: '2kgダンベル2個を胸の前で持つ。下半身と血流を強化' },
+      { name: 'グルートブリッジ', sets: '2セット × 12回', detail: 'お尻を上げて2秒キープ。骨盤を安定させる' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 8セット', detail: '骨盤底筋。性力・射精コントロールの土台' },
+    ],
+    2: [
+      { name: 'ダンベル・ゴブレットスクワット（4kg）', sets: '2セット × 12回', detail: '膝をつま先方向に向けてしゃがむ' },
+      { name: 'グルートブリッジ', sets: '2セット × 15回', detail: 'お尻と骨盤底筋の連動' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 10セット', detail: '締める・緩めるを丁寧に' },
+    ],
+    3: [
+      { name: 'ダンベル・ゴブレットスクワット（4kg）', sets: '3セット × 10回', detail: '血流と下半身筋力を上げる' },
+      { name: 'グルートブリッジ', sets: '3セット × 12回', detail: 'お尻を使う感覚を作る' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 10セット', detail: '呼吸を止めすぎない' },
+    ],
+    4: [
+      { name: 'ダンベル・ゴブレットスクワット（4kg）', sets: '3セット × 12回', detail: '最終セットだけ少しきつい強度' },
+      { name: 'シングルレッグブリッジ', sets: '左右各 2セット × 8回', detail: '片足でお尻を上げる' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 12セット', detail: '骨盤底筋の持久力' },
+    ],
+    5: [
+      { name: 'ダンベル・ゴブレットスクワット（4kg）', sets: '3セット × 15回', detail: 'Lv1より明確に下半身が強くなった目安' },
+      { name: 'シングルレッグブリッジ', sets: '左右各 2セット × 10回', detail: '骨盤の左右差を整える' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 15セット', detail: '締めた後にしっかり緩める' },
+    ],
+    6: [
+      { name: 'ダンベル・ブルガリアンスクワット', sets: '左右各 2セット × 8回', detail: '椅子やベッドに後ろ足を乗せる。きつければ通常スクワットへ' },
+      { name: 'シングルレッグブリッジ', sets: '左右各 2セット × 10回', detail: '片足で骨盤を安定' },
+      { name: 'ケーゲル体操', sets: '5秒締める × 15セット', detail: '性力・下半身の安定' },
+    ],
+    7: [
+      { name: 'ダンベル・ブルガリアンスクワット', sets: '左右各 2セット × 10回', detail: '前足で床を押す' },
+      { name: 'シングルレッグブリッジ', sets: '左右各 2セット × 12回', detail: 'お尻の収縮を意識' },
+      { name: 'ケーゲル体操', sets: '6秒締める × 12セット', detail: '少し長く保持' },
+    ],
+    8: [
+      { name: 'ダンベル・ブルガリアンスクワット', sets: '左右各 3セット × 8回', detail: '15分内に収めるため休憩短め' },
+      { name: 'シングルレッグブリッジ', sets: '左右各 2セット × 15回', detail: '骨盤周りを強化' },
+      { name: 'ケーゲル体操', sets: '6秒締める × 15セット', detail: 'コントロール重視' },
+    ],
+    9: [
+      { name: 'ダンベル・ブルガリアンスクワット', sets: '左右各 3セット × 10回', detail: '下半身強化の中核' },
+      { name: 'ヒップヒンジ（ダンベル）', sets: '2セット × 12回', detail: '股関節からお辞儀してハムストリングとお尻を刺激' },
+      { name: 'ケーゲル体操', sets: '7秒締める × 12セット', detail: '締める力と持久力' },
+    ],
+    10: [
+      { name: 'ダンベル・ブルガリアンスクワット', sets: '左右各 3セット × 12回', detail: 'Lv10の下半身基準' },
+      { name: 'シングルレッグブリッジ（テンポ）', sets: '左右各 2セット × 12回', detail: '2秒で上げ、2秒止め、2秒で下げる' },
+      { name: 'ケーゲル体操', sets: '7秒締める × 15セット', detail: '性力・射精コントロールの基礎完成' },
+    ],
+  },
+};
 
 // ===== STATE =====
 let state = loadState();
@@ -799,6 +1040,7 @@ function dstr(d) {
 function todayStr() { return dstr(new Date()); }
 function getDayCfg(d) { return DAY_CFG[d.getDay()]; }
 function getExercises(type, lv) {
+  if (EXACT_EX[type]?.[lv]) return EXACT_EX[type][lv];
   const g = LVL_GROUP(lv);
   return (EX[type] && EX[type][g]) || [];
 }
@@ -831,7 +1073,7 @@ function computeStats() {
     else break;
   }
 
-  // Achieved weeks (Mon-Sun with 4+ days)
+  // Achieved weeks: 3 main quests + any 1 extra day (mini or bonus)
   const wMap = {};
   for (const ds of completed) {
     const d = new Date(ds + 'T00:00:00');
@@ -840,9 +1082,15 @@ function computeStats() {
     const mon = new Date(d);
     mon.setDate(d.getDate() + diff);
     const wk = dstr(mon);
-    wMap[wk] = (wMap[wk] || 0) + 1;
+    const cfg = getDayCfg(d);
+    if (!wMap[wk]) wMap[wk] = { total: 0, main: 0 };
+    wMap[wk].total += 1;
+    if (cfg.role === 'main') wMap[wk].main += 1;
   }
-  const achievedEntries = Object.entries(wMap).filter(([,v]) => v >= 4).map(([k]) => k).sort();
+  const achievedEntries = Object.entries(wMap)
+    .filter(([,v]) => v.main >= 3 && v.total >= 4)
+    .map(([k]) => k)
+    .sort();
   const achievedWeeks = achievedEntries.length;
   const lastAchievedWeekKey = achievedEntries.length > 0 ? achievedEntries[achievedEntries.length - 1] : null;
 
@@ -888,6 +1136,7 @@ function renderStats() {
   const monday = new Date(todayD);
   monday.setDate(todayD.getDate() - (dow === 0 ? 6 : dow - 1));
   let weekDone = 0;
+  let weekMainDone = 0;
   const dotsEl = document.getElementById('week-dots');
   dotsEl.innerHTML = '';
   for (let i = 0; i < 7; i++) {
@@ -897,12 +1146,14 @@ function renderStats() {
     const done = !!state.log[ds]?.done;
     const isToday = ds === td;
     if (done) weekDone++;
+    if (done && getDayCfg(d).role === 'main') weekMainDone++;
     const dot = document.createElement('div');
     dot.className = 'week-dot' + (done ? ' filled' : '') + (isToday && !done ? ' today-dot' : '');
     dotsEl.appendChild(dot);
   }
+  const weekAchieved = weekMainDone >= 3 && weekDone >= 4;
   document.getElementById('week-count-lbl').textContent =
-    `${weekDone} / 7日${weekDone >= 4 ? ' ✓ 達成週！' : ''}`;
+    `必須${weekMainDone}/3・合計${weekDone}/4${weekAchieved ? ' ✓ 達成週！' : ''}`;
 
   renderHeader();
   if (selDate) updateProgressBar();
@@ -956,18 +1207,18 @@ function renderCalendar() {
     const isToday = ds === td;
     const isPast = ds < td;
     const done = !!state.log[ds]?.done;
-    const missed = isPast && !done;
+    const missed = isPast && !done && (cfg.role === 'main' || cfg.role === 'mini');
     const selected = selDate === ds;
 
     const el = document.createElement('div');
     el.className = [
-      'cal-day', cfg.cls,
+      'cal-day', cfg.cls, `role-${cfg.role}`,
       isToday ? 'today' : '',
       done ? 'done' : '',
       missed ? 'missed' : '',
       selected ? 'selected' : '',
     ].join(' ');
-    el.innerHTML = `<div class="day-num">${d}</div><div class="day-icon">${cfg.emoji}</div>`;
+    el.innerHTML = `<div class="day-num">${d}</div><div class="day-icon">${cfg.emoji}</div><div class="day-role">${cfg.roleLabel}</div>`;
     el.onclick = () => selectDay(ds);
     grid.appendChild(el);
   }
@@ -990,9 +1241,9 @@ function renderWorkout(ds) {
   const lv = state.level;
   const aw = state.achievedWeeks;
   const curr = LEVEL_THRESHOLDS[lv];
-  const next = lv < 10 ? LEVEL_THRESHOLDS[lv + 1] : 36;
-  const pct = lv >= 10 ? 100 : Math.min(100, Math.round(((aw - curr) / (next - curr)) * 100));
-  const remaining = lv < 10 ? next - aw : 0;
+  const next = lv < 30 ? LEVEL_THRESHOLDS[lv + 1] : LEVEL_THRESHOLDS[30];
+  const pct = lv >= 30 ? 100 : Math.min(100, Math.round(((aw - curr) / (next - curr)) * 100));
+  const remaining = lv < 30 ? Math.max(0, next - aw) : 0;
 
   let btnHTML;
   if (logEntry.done) {
@@ -1019,14 +1270,41 @@ function renderWorkout(ds) {
         </a>
       </div>`;
   }).join('');
+  const postureHTML = POSTURE_RESET.map((ex, i) => {
+    const idx = `p${i}`;
+    const checked = (logEntry.checked || []).includes(idx);
+    const ytQuery = encodeURIComponent((ex.yt || ex.name) + ' やり方');
+    const ytUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
+    return `
+      <div class="ex-item${checked ? ' checked' : ''}" onclick="toggleEx('${ds}','${idx}')">
+        <div class="ex-chk">${checked ? '✓' : ''}</div>
+        <div class="ex-body">
+          <div class="ex-name">${ex.name}</div>
+          <div class="ex-detail">${ex.sets} ｜ ${ex.detail}</div>
+        </div>
+        <a href="${ytUrl}" target="_blank" onclick="event.stopPropagation()">
+          <button class="ex-yt-btn">▶ 動画</button>
+        </a>
+      </div>`;
+  }).join('');
+  const timingHTML = WORKOUT_TIMING.map(item => `<div>${item}</div>`).join('');
 
   document.getElementById('workout-panel').innerHTML = `
     <div class="workout-header ${cfg.cls}">
       <div class="workout-name">${cfg.emoji} ${cfg.name}</div>
       <div class="workout-date">${dateLabel}</div>
-      <div class="workout-lv">適用レベル: Lv.${lv}（グループ${LVL_GROUP(lv)}）</div>
+      <div class="workout-lv">適用レベル: Lv.${lv}（グループ${LVL_GROUP(lv)}）｜${cfg.roleLabel}クエスト</div>
+    </div>
+    <div class="plan-card">
+      <div><strong>22時帰宅後の基本：</strong>食事前に15分トレーニング → 夕食。食後にやる場合は60〜90分空ける。</div>
+      ${timingHTML}
+      <div><strong>達成週：</strong>月・水・金の必須3日 + 火/木/土/日のどれか1日でLvUP判定。余裕なら手動LvUP、3週間ほぼ未実施ならLvDOWN。</div>
     </div>
     <div class="ex-scroll">
+      <div class="ex-section">
+        <div class="ex-section-title">毎日1分の姿勢リセット（首・顎上がり対策）</div>
+        ${postureHTML}
+      </div>
       <div class="ex-section">
         <div class="ex-section-title">今日のメニュー（クリックでチェック）</div>
         ${exHTML || '<div style="color:var(--text2);font-size:13px;padding:8px;">メニューなし（回復日）</div>'}
@@ -1035,13 +1313,13 @@ function renderWorkout(ds) {
     <div class="lv-box">
       <div class="lv-box-top">
         <span>Lv.${lv}　達成週：${aw}週</span>
-        <span>${lv < 10 ? `Lv.${lv+1}まで残り ${remaining}週` : '最高レベル！'}</span>
+        <span>${lv < 30 ? `Lv.${lv+1}まで残り ${remaining}週` : '最高レベル！'}</span>
       </div>
       <div class="lv-bar-outer">
         <div class="lv-bar-inner" id="lv-bar-inner" style="width:${pct}%"></div>
       </div>
       <div class="lv-box-bottom" id="lv-bar-text">
-        ${lv < 10 ? `あと ${remaining} 達成週で Lv.${lv+1} にレベルアップ！` : '🎉 目標達成！'}
+        ${lv < 30 ? `あと ${remaining} 達成週で Lv.${lv+1} にレベルアップ！` : '🎉 目標達成！'}
       </div>
     </div>
     ${btnHTML}
@@ -1060,6 +1338,16 @@ function toggleEx(ds, idx) {
 
 function markDone(ds) {
   if (!state.log[ds]) state.log[ds] = { done: false, checked: [] };
+  const date = new Date(ds + 'T00:00:00');
+  const cfg = getDayCfg(date);
+  const exercises = getExercises(cfg.type, state.level);
+  const required = [
+    ...POSTURE_RESET.map((_, i) => `p${i}`),
+    ...exercises.map((_, i) => i),
+  ];
+  const checked = state.log[ds].checked || [];
+  const missingCount = required.filter(i => !checked.includes(i)).length;
+  if (missingCount > 0 && !confirm(`未チェックのノルマが${missingCount}個あります。\nそれでも今日を完了にしますか？`)) return;
   state.log[ds].done = true;
   saveState();
   renderAll();
@@ -1087,7 +1375,7 @@ function closeResetModal() {
 }
 function doReset() {
   localStorage.removeItem(STORAGE_KEY);
-  state = { level: 1, achievedWeeks: 0, log: {} };
+  state = { level: 1, achievedWeeks: 0, log: {}, lastAchievedWeekKey: null, lastDecayWeeksSince: 0 };
   selDate = null;
   closeResetModal();
   document.getElementById('workout-panel').innerHTML = '<div class="placeholder">カレンダーの日付をクリックして<br>その日のメニューを表示</div>';
