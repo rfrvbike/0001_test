@@ -341,7 +341,7 @@ main {
 .plan-card strong { color: var(--gold); }
 .plan-card div + div { margin-top: 3px; }
 
-.ex-scroll { flex: 1; overflow-y: auto; }
+.ex-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .ex-section { margin-bottom: 12px; }
 .ex-section-title {
   font-size: 10px; font-weight: bold; color: var(--text2);
@@ -466,6 +466,123 @@ main {
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+
+/* MOBILE FINAL OVERRIDES - keep these after base styles */
+@media (max-width: 768px) {
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+  header {
+    padding: 8px 10px;
+    gap: 8px;
+    align-items: center;
+  }
+  .app-title {
+    font-size: 17px;
+    line-height: 1.1;
+    min-width: 80px;
+  }
+  .app-title small {
+    display: block;
+    margin-left: 0;
+    margin-top: 2px;
+    font-size: 10px;
+  }
+  .sync-status,
+  .sync-btn {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  .level-badge {
+    min-width: 150px;
+    padding: 5px 12px;
+  }
+  .lv-number { font-size: 26px; }
+  .lv-effect { max-width: 128px; font-size: 10px; }
+  .manual-lvlup-btn {
+    font-size: 10px;
+    padding: 3px 9px;
+  }
+  main {
+    display: block;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .cal-panel,
+  .workout-panel {
+    display: none !important;
+    height: 100%;
+    min-height: 0;
+    border-right: none;
+  }
+  .cal-panel.tab-active {
+    display: flex !important;
+    overflow-y: auto;
+  }
+  .workout-panel.tab-active {
+    display: flex !important;
+    padding: 10px;
+    gap: 8px;
+    overflow: hidden;
+  }
+  .cal-panel {
+    padding: 10px 12px;
+  }
+  .cal-grid {
+    flex: 0 0 auto;
+  }
+  .cal-day {
+    min-height: 42px;
+  }
+  .workout-header {
+    padding: 9px 10px;
+    overflow: visible;
+  }
+  .workout-name {
+    font-size: 16px;
+    line-height: 1.25;
+  }
+  .workout-date,
+  .workout-lv {
+    font-size: 10px;
+    line-height: 1.35;
+    white-space: normal;
+  }
+  .plan-card {
+    font-size: 10px;
+    line-height: 1.45;
+    padding: 8px;
+    max-height: 118px;
+    overflow-y: auto;
+  }
+  .ex-scroll {
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 6px;
+  }
+  .ex-item {
+    padding: 9px 8px;
+    gap: 8px;
+  }
+  .ex-name { font-size: 12px; }
+  .ex-detail { font-size: 10px; line-height: 1.35; }
+  .ex-yt-btn {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+  .lv-box {
+    padding: 9px;
+  }
+  .done-btn {
+    padding: 14px;
+    font-size: 15px;
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    box-shadow: 0 -6px 18px rgba(0,0,0,0.45);
+  }
+}
 </style>
 </head>
 <body>
