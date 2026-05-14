@@ -2,117 +2,76 @@
 
 ## 実施した作業
 
-- `0001_test` リポジトリ内に実アプリ本体が含まれているか再確認した。
-- 指定キーワード（`main.py`、`call_gemini_text`、`call_openai_text`、`TEXT_LLM_PROVIDER`、`OPENAI_MODEL`、GUI設定、`.env`、投稿生成、draft生成）で検索した。
-- 親フォルダ `C:\Users\oyue_\OneDrive\ドキュメント\GitHub` 配下を確認し、実アプリ本体候補を特定した。
-- 実APIは呼んでいない。
-- コード修正は行っていない。
+- 実アプリ本体候補 `C:\Users\oyue_\OneDrive\ドキュメント\GitHub\01_context01_myself` に対して、本文生成の Gemini 直呼びを provider routing へ統一した。
+- 実APIは呼ばず、`unittest.mock` によるモックテストのみ実行した。
+- `0001_test` 側に今回の作業結果を記録した。
 
 ## 調査内容
 
-- `0001_test` 内:
-  - `main.py` は存在しない。
-  - 既存の `call_gemini_text` / `call_openai_text` は、前回追加した `x_auto_ops/provider_routing.py` とテスト内のモックのみ。
-  - `training_app.html` は筋トレRPGであり、X自動運用の本体ではない。
-  - `discord_export_to_csv.py` は未追跡の Discord CSV exporter であり、X自動運用の本体ではない。
-- 親フォルダ `GitHub` 配下:
-  - `01_context01_myself` に X自動運用本体と思われる構成を確認。
-  - `yokaze_daily/main.py`
-  - `ai_pickup/main.py`
-  - `new_account_daily/main.py`
-  - `tools/settings_manager.py`
-  - `shared/llm/factory.py`
-  - `shared/llm/openai_client.py`
-  - `shared/llm/gemini_client.py`
-  - `shared/draft_pipeline/generate_draft.py`
-  - `shared/image_pipeline/*`
-  - 各アカウントの `.env` / `.env.example`
+- `yokaze_daily/main.py` の本文生成、preview生成、画像プロンプト生成で `call_gemini_text(...)` が直接呼ばれていた。
+- `ai_pickup/score_and_draft.py`、`ai_pickup/recommend_today_post.py`、`ai_pickup/x_research_analyze.py` でも Gemini 固定の `call_gemini(...)` 経由が残っていた。
+- `new_account_daily/main.py` も Gemini 固定関数を持っていた。
+- `tools/settings_manager.py` には `TEXT_LLM_PROVIDER` / `IMAGE_PROMPT_LLM_PROVIDER` / `QUALITY_CHECK_LLM_PROVIDER` / `OPENAI_MODEL=gpt-5.4` の GUI 管理項目が存在していた。
 
-## 発見した本体候補
+## 修正内容
 
-- 実アプリ本体の最有力候補:
-  - `C:\Users\oyue_\OneDrive\ドキュメント\GitHub\01_context01_myself`
-- アカウント別エントリ:
-  - `01_context01_myself\yokaze_daily\main.py`
-  - `01_context01_myself\ai_pickup\main.py`
-  - `01_context01_myself\new_account_daily\main.py`
-- GUI設定管理:
-  - `01_context01_myself\tools\settings_manager.py`
-- 共有LLM provider:
-  - `01_context01_myself\shared\llm\factory.py`
-  - `01_context01_myself\shared\llm\openai_client.py`
-  - `01_context01_myself\shared\llm\gemini_client.py`
-- draft生成:
-  - `01_context01_myself\shared\draft_pipeline\generate_draft.py`
-- 画像関連:
-  - `01_context01_myself\shared\image_pipeline\pipeline.py`
-  - `01_context01_myself\shared\image_pipeline\image_need_check.py`
-  - `01_context01_myself\shared\image_pipeline\openai_image_client.py`
-
-## 重要な発見
-
-- `yokaze_daily/main.py` は通常投稿生成で `call_gemini_text()` を直接呼んでいる。
-  - `call_gemini_text` 定義: `yokaze_daily/main.py:607`
-  - preview生成時の呼び出し: `yokaze_daily/main.py:949`
-  - 通常投稿生成時の呼び出し: `yokaze_daily/main.py:1065`
-  - 画像プロンプト生成時の呼び出し: `yokaze_daily/main.py:1124`
-- `tools/settings_manager.py` には GUI 管理対象として `TEXT_LLM_PROVIDER` / `IMAGE_PROMPT_LLM_PROVIDER` / `QUALITY_CHECK_LLM_PROVIDER` / `OPENAI_MODEL` が存在する。
-  - 管理キー: `tools/settings_manager.py:61`
-  - デフォルト `OPENAI_MODEL=gpt-5.4`: `tools/settings_manager.py:91`
-  - デフォルト `TEXT_LLM_PROVIDER=openai`: `tools/settings_manager.py:100`
-- `shared/llm/factory.py` は `client_for_role("text")` で `TEXT_LLM_PROVIDER` を読む設計になっている。
-  - role mapping: `shared/llm/factory.py:29`
-  - `TEXT_LLM_PROVIDER`: `shared/llm/factory.py:39`
-  - 未設定時 default は `gemini`: `shared/llm/factory.py:15`, `shared/llm/factory.py:36`
-- `shared/draft_pipeline/generate_draft.py` は共有 pipeline では role 別 client を使う。
-  - `client_for_role` import: `shared/draft_pipeline/generate_draft.py:44`
-  - env 読み込み候補: `shared/draft_pipeline/generate_draft.py:318`
-  - `text_client = client_for_role("text")`: `shared/draft_pipeline/generate_draft.py:386`
-  - `image_client = client_for_role("image_prompt")`: `shared/draft_pipeline/generate_draft.py:387`
-  - `qc_client = client_for_role("quality_check")`: `shared/draft_pipeline/generate_draft.py:388`
-
-## 推定
-
-- `0001_test` は実アプリ本体ではなく、docs / reports / 再発防止検討用のリポジトリである可能性が高い。
-- 実際に動作していたアプリ本体は `01_context01_myself` である可能性が高い。
-- GUIで `TEXT_LLM_PROVIDER=openai` を選んでも `call_gemini_text()` が呼ばれた問題は、少なくとも `yokaze_daily/main.py` の通常生成ルートが共有 `shared/llm/factory.py` を通らず、Gemini直呼びしていることと整合する。
-- `USE_SHARED_DRAFT_PIPELINE=true` の詳細draft生成では共有 provider 分岐を使うが、その前段の `yokaze_daily/main.py` 通常生成は Gemini 固定に見える。
-
-## 変更内容
-
-- コード修正なし。
-- `reports/latest_report.md` と時刻付き report のみ更新。
+- `shared/llm/factory.py`: role別routing wrapper、provider/model/functionログ、provider不一致停止、lazy import を追加。
+- `shared/llm/__init__.py`: Gemini/OpenAI client の即時importをやめ、lazy export に変更。
+- `yokaze_daily/main.py`: 本文生成は `client_for_role("text")`、画像プロンプト生成は `client_for_role("image_prompt")` 経由に変更。
+- `new_account_daily/main.py`: 本文生成を `client_for_role("text")` 経由に変更。
+- `ai_pickup/score_and_draft.py`: `generate_llm_text(...)` を追加し、本文生成を `client_for_role("text")` 経由に変更。
+- `ai_pickup/recommend_today_post.py` / `ai_pickup/x_research_analyze.py`: `generate_llm_text(...)` 経由に変更。
 
 ## 変更ファイル
 
+実アプリ本体側（Git管理外）:
+
+- `C:\Users\oyue_\OneDrive\ドキュメント\GitHub\01_context01_myself\shared\llm\factory.py`
+- `C:\Users\oyue_\OneDrive\ドキュメント\GitHub\01_context01_myself\shared\llm\__init__.py`
+- `C:\Users\oyue_\OneDrive\ドキュメント\GitHub\01_context01_myself\yokaze_daily\main.py`
+- `C:\Users\oyue_\OneDrive\ドキュメント\GitHub\01_context01_myself\new_account_daily\main.py`
+- `C:\Users\oyue_\OneDrive\ドキュメント\GitHub\01_context01_myself\ai_pickup\score_and_draft.py`
+- `C:\Users\oyue_\OneDrive\ドキュメント\GitHub\01_context01_myself\ai_pickup\recommend_today_post.py`
+- `C:\Users\oyue_\OneDrive\ドキュメント\GitHub\01_context01_myself\ai_pickup\x_research_analyze.py`
+- `C:\Users\oyue_\OneDrive\ドキュメント\GitHub\01_context01_myself\tests\test_provider_routing_runtime.py`
+
+共有用リポジトリ側:
+
+- `docs/BUG_HISTORY.md`
 - `reports/latest_report.md`
-- `reports/codex_report_20260515_0020.md`
+- `reports/codex_report_20260515_0045.md`
 
 ## テスト結果
 
-- 実API呼び出しなし。
-- コード修正なしのためテスト未実行。
-- `rg` / `Get-ChildItem` / `Get-Content` による読み取り調査のみ。
+- 実API呼び出し: なし。
+- 構文確認: `python -m compileall ...` 結果 OK。
+- モックテスト: `python -m unittest discover -s tests -v` 結果 8 tests OK。
+- 確認内容:
+  - `TEXT_LLM_PROVIDER=openai` のとき text role が openai を選ぶ。
+  - `IMAGE_PROMPT_LLM_PROVIDER=gemini` が本文providerと混線しない。
+  - provider mismatch は `RuntimeError` で停止。
+  - `yokaze_daily` / `ai_pickup` / `new_account_daily` が provider routing を経由する。
+  - 対象ランタイム内の `call_gemini_text(` / `call_gemini(` / `requests.post(` 直呼び残件なし。
 
 ## 発見した問題
 
-- 実アプリ本体が `0001_test` ではなく、隣接フォルダ `01_context01_myself` にある可能性が高い。
-- `01_context01_myself\yokaze_daily\main.py` に Gemini 固定の直接呼び出しが残っている。
-- GUI設定管理と通常投稿生成ルートが接続されていない可能性がある。
+- 実アプリ本体 `01_context01_myself` は Git リポジトリではなかったため、コード修正そのものを GitHub に commit / push できない。
+- `0001_test` は docs / reports 共有用の Git リポジトリであり、今回 push できるのはレポートと履歴のみ。
+- `factory.normalize_provider(None)` は既存互換のため未設定時 `gemini` のまま。GUI保存値が必ず入る運用なら問題は出にくいが、未設定時の既定providerを `openai` に寄せるかは別途判断が必要。
 
 ## 未解決事項
 
-- `01_context01_myself` 側で実際に修正するかどうか。
-- `0001_test` の docs / tests を `01_context01_myself` へ移すか、または本体リポジトリ側で同等の修正を行うか。
-- `.env` 本体には秘密情報が含まれる可能性があるため、内容表示は避けた。設定値の実態確認はユーザー許可・秘匿方針に沿って行う必要がある。
+- `01_context01_myself` を Git 管理する、または本体コードを GitHub 管理リポジトリへ移す必要がある。
+- 今回のコード差分はローカル実アプリフォルダに存在するが、GitHub URL として直接レビューできない。
+- `tools/settings_manager.py` 自体は今回コード変更なし。GUI保存値は既に存在していたため、routing側で実行時の整合性を担保した。
 
 ## 次にやるべきこと
 
-- 次回作業では `01_context01_myself` を対象に、`yokaze_daily/main.py` の Gemini 固定呼び出しを調査・修正する。
-- `tools/settings_manager.py` の GUI 設定が `shared/llm/factory.py` と通常生成ルートに反映されるよう接続する。
-- 実APIを呼ばず、`requests.post` または LLM client をモックして provider 分岐テストを追加する。
+- `01_context01_myself` を GitHub 管理対象にする。
+- そのうえで、今回の実アプリ修正差分を commit / push し、コードレビュー可能なURLを作る。
+- 実API確認はユーザー許可後に限定して行う。
 
 ## ChatGPTへ相談したいこと
 
-- 修正対象を `01_context01_myself` に切り替えるべきか。
-- `0001_test` を docs/report 用として維持し、本体コード修正は `01_context01_myself` 側で行う運用にするべきか。
+- `TEXT_LLM_PROVIDER` 未設定時の default を既存互換の `gemini` に残すか、GUI default と合わせて `openai` に変更するか。
+- 実アプリ本体 `01_context01_myself` を `0001_test` に統合するか、別リポジトリとして管理するか。

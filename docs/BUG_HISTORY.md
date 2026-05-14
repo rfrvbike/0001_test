@@ -85,3 +85,22 @@
 | **関連 provider** | |
 | **実 API 消費有無** | |
 ```
+
+---
+
+## BUG-003: 実アプリ本体で Gemini 直呼びが残り、provider routing を迂回していた
+
+| 項目 | 内容 |
+|------|------|
+| **日付** | 2026-05-15 |
+| **発生内容** | `TEXT_LLM_PROVIDER=openai` / `OPENAI_MODEL=gpt-5.4` をGUIで選んでも、実アプリ本体 `01_context01_myself` の複数ランタイムで Gemini 固定関数が直接呼ばれる可能性があった。 |
+| **発見方法** | `call_gemini_text(` / `call_gemini(` / `requests.post(` を対象ランタイムで全検索。 |
+| **原因** | `yokaze_daily/main.py`、`new_account_daily/main.py`、`ai_pickup/*` に過去実装の Gemini 固定関数が残り、`shared/llm/factory.py` を経由していなかった。 |
+| **影響範囲** | 本文生成、preview生成、画像プロンプト生成、AI pickup分析・推薦生成。 |
+| **修正内容** | `shared/llm/factory.py` に role-aware routing wrapper を追加し、`TEXT_LLM_PROVIDER` / `IMAGE_PROMPT_LLM_PROVIDER` / `QUALITY_CHECK_LLM_PROVIDER` を分離。各アカウントの本文生成・画像プロンプト生成を `client_for_role(...)` 経由に統一。 |
+| **追加したテスト** | `tests/test_provider_routing_runtime.py`。OpenAI/Gemini provider分岐、role分離、provider mismatch停止、各アカウントのrouting経由、直呼び残件なしをモックで確認。 |
+| **再発防止策** | 「Gemini固定」「OpenAI固定」「実API直呼び」を禁止し、LLM本文・画像プロンプト・品質チェックは必ず `shared/llm/factory.py` を経由する。ログに provider / model / function / role / request_label を出す。 |
+| **関連ファイル** | `01_context01_myself/shared/llm/factory.py`, `01_context01_myself/yokaze_daily/main.py`, `01_context01_myself/new_account_daily/main.py`, `01_context01_myself/ai_pickup/*.py` |
+| **関連 provider** | openai / gemini |
+| **実API 消費有無** | なし。モックテストのみ。 |
+| **未解決事項** | 実アプリ本体 `01_context01_myself` は Git 管理外だったため、コード差分を直接GitHubへpushできない。Git管理化または本体リポジトリ移行が必要。 |
