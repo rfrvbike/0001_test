@@ -2021,3 +2021,133 @@ referenced_tweets,media_keys,excluded,exclusion_reason
 
 - Documentation-only change. Unit tests were not run because no executable code
   was changed.
+## 2026-05-30 Mock Genre Buzz Collector Skeleton
+
+Added a mock-only, dry-run-only skeleton for future genre-specific X buzz-post
+collection. No real X API call, X API key lookup, token lookup, `.env` edit,
+cookie access, or posting was performed.
+
+### Added Files
+
+- `data/x_buzz_genres.json.example`
+- `x_auto_ops/mock_buzz_collector.py`
+- `tools/mock_buzz_collector.py`
+- `tests/test_mock_buzz_collector.py`
+- `reports/mock_buzz_report.md`
+
+### Updated Files
+
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Generated Local Output
+
+- `data/mock_buzz_posts.csv`
+
+This CSV is a local dry-run output and is not intended to be committed.
+
+### Implementation
+
+- Added JSON config skeleton for three genres:
+  - `yokaze`
+  - `ai_side_business`
+  - `daily`
+- Each genre supports:
+  - `keywords`
+  - `min_likes`
+  - `min_reposts`
+  - `min_replies`
+  - `min_quotes`
+  - `days_back`
+  - optional `score_weights`
+- Added `x_auto_ops/mock_buzz_collector.py` with:
+  - config loading
+  - deterministic mock post generation
+  - threshold and period filtering
+  - configurable score calculation
+  - CSV output
+  - Markdown report output
+  - non-dry-run blocking
+- Added CLI:
+  - `tools/mock_buzz_collector.py --dry-run`
+- GUI integration remains out of scope.
+
+### Score Formula
+
+```text
+score =
+  likes * 1
+  + reposts * 3
+  + replies * 2
+  + quotes * 2
+```
+
+Weights are read from config defaults and can be overridden per genre.
+
+### CSV Columns
+
+```text
+genre,post_id,author,text,likes,reposts,replies,quotes,score,created_at
+```
+
+### CLI Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_buzz_collector.py --dry-run
+```
+
+Result:
+
+```text
+DRY-RUN mock buzz collection complete.
+Generated mock posts: 12
+Filtered posts: 6
+CSV: data\mock_buzz_posts.csv
+Report: reports\mock_buzz_report.md
+No X API call, token access, .env edit, or posting was performed.
+```
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest tests.test_mock_buzz_collector -v
+```
+
+Result:
+
+```text
+Ran 6 tests
+OK
+```
+
+Full discovery command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 138 tests
+OK
+```
+
+### Safety Notes
+
+- The collector does not import or use an X client.
+- The collector does not read `.env`.
+- The collector does not inspect API keys, tokens, cookies, or local secret
+  files.
+- The CLI errors unless `--dry-run` is provided.
+- Future live API support should be added as an injected read-client boundary in
+  a separate phase.
+
+### Unresolved
+
+- `data/mock_buzz_posts.csv` should be ignored or cleaned before future commits.
+- YAML support is not included; JSON was used to avoid adding dependencies.

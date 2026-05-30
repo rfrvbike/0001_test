@@ -364,3 +364,91 @@ Useful fixture shape:
   constraints before enabling live collection.
 - Treat source post text as reference data for analysis only. Do not copy or
   closely rewrite source wording into generated posts.
+
+## Mock Skeleton Implemented
+
+Implemented on 2026-05-30 as a mock-only CLI skeleton.
+
+Added files:
+
+- `data/x_buzz_genres.json.example`
+- `x_auto_ops/mock_buzz_collector.py`
+- `tools/mock_buzz_collector.py`
+- `tests/test_mock_buzz_collector.py`
+- `reports/mock_buzz_report.md`
+
+Generated but not intended for commit:
+
+- `data/mock_buzz_posts.csv`
+
+The implementation uses JSON rather than YAML so it can run with only the
+Python standard library. A future phase can add YAML support if the project
+accepts a dependency such as PyYAML.
+
+Current config shape:
+
+```json
+{
+  "version": 1,
+  "defaults": {
+    "min_likes": 100,
+    "min_reposts": 10,
+    "min_replies": 0,
+    "min_quotes": 0,
+    "days_back": 7,
+    "score_weights": {
+      "likes": 1,
+      "reposts": 3,
+      "replies": 2,
+      "quotes": 2
+    }
+  },
+  "genres": [
+    {
+      "id": "yokaze",
+      "keywords": ["night", "feeling", "relationship"],
+      "min_likes": 400,
+      "min_reposts": 25,
+      "min_replies": 5,
+      "days_back": 7
+    }
+  ]
+}
+```
+
+Current CLI:
+
+```powershell
+python tools/mock_buzz_collector.py --dry-run
+```
+
+In this environment, use the bundled Python runtime:
+
+```powershell
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_buzz_collector.py --dry-run
+```
+
+Current behavior:
+
+- loads `data/x_buzz_genres.json.example`
+- generates deterministic mock posts for `yokaze`, `ai_side_business`, and
+  `daily`
+- filters by likes, reposts, replies, quotes, and `days_back`
+- computes `score = likes * 1 + reposts * 3 + replies * 2 + quotes * 2`
+- writes `data/mock_buzz_posts.csv`
+- writes `reports/mock_buzz_report.md`
+- refuses non-dry-run mode
+- never reads `.env`, tokens, cookies, or API keys
+- never calls X or any external API
+
+Current tests:
+
+- config loading and default merging
+- score calculation
+- filtering
+- CSV output column order
+- mock collection
+- non-dry-run blocking
+
+Next live-read phase should add a separate injected read client boundary instead
+of modifying the mock collector to call X directly.

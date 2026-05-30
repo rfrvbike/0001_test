@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "defaults": {
+    "min_likes": 100,
+    "min_reposts": 10,
+    "min_replies": 0,
+    "min_quotes": 0,
+    "days_back": 7,
+    "score_weights": {
+      "likes": 1,
+      "reposts": 3,
+      "replies": 2,
+      "quotes": 2
+    }
+  },
+  "genres": [
+    {
+      "id": "yokaze",
+      "label": "yokaze",
+      "keywords": ["night", "feeling", "relationship"],
+      "min_likes": 400,
+      "min_reposts": 25,
+      "min_replies": 5,
+      "days_back": 7
+    },
+    {
+      "id": "ai_side_business",
+      "label": "AI side business",
+      "keywords": ["ai", "side business", "automation"],
+      "min_likes": 250,
+      "min_reposts": 20,
+      "min_replies": 3,
+      "days_back": 5
+    },
+    {
+      "id": "daily",
+      "label": "daily",
+      "keywords": ["daily", "habit", "life"],
+      "min_likes": 120,
+      "min_reposts": 8,
+      "min_replies": 0,
+      "days_back": 3
+    }
+  ]
+}
