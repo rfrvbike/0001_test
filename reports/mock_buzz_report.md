@@ -33,9 +33,9 @@ Mock-only dry-run report. No X API call, token access, `.env` edit, or posting w
 - mock-ai_side_business-steady: ai_side_business (matched: ai, side business, automation, productivity)
 - mock-daily-top: daily (matched: daily, coffee, room, sunday night, before work, habit, small joke, life)
 - mock-daily-steady: daily (matched: daily, coffee, room, before work)
-- mock-unknown-general: unknown (no keyword match)
+- mock-unknown-general: unknown (genre score 0 below min_genre_score 1)
 - mock-yokaze-top: yokaze (matched: night, hurt, relationship, lonely, healing, quiet support, woman)
-- mock-mixed-yokaze-ai: yokaze (matched: night, relationship, lonely)
+- mock-mixed-yokaze-ai: yokaze (matched: night, relationship, lonely; tie among yokaze, ai_side_business; selected by tie_break_priority)
 
 ## Buzz Score Top Posts
 - yokaze / mock-yokaze-top / buzz_score 982 / rank 1 / mock_author_1

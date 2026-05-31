@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import csv
 import json
+import subprocess
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tools.mock_buzz_collector import main as mock_buzz_cli_main
+from x_auto_ops.buzz_read_client import MockBuzzReadClient, XApiBuzzReadClient
 from x_auto_ops.mock_buzz_collector import (
     CSV_FIELDS,
     calculate_score,
@@ -25,6 +28,8 @@ def write_config(path: Path) -> None:
         json.dumps(
             {
                 "version": 1,
+                "min_genre_score": 1,
+                "tie_break_priority": ["yokaze", "ai_side_business", "daily"],
                 "defaults": {
                     "min_likes": 100,
                     "min_reposts": 10,
@@ -65,6 +70,34 @@ def write_config(path: Path) -> None:
 
 
 class MockBuzzCollectorTests(unittest.TestCase):
+    def test_generated_outputs_and_local_config_are_gitignored(self) -> None:
+        ignored = subprocess.run(
+            [
+                "git",
+                "check-ignore",
+                "data/mock_buzz_posts.csv",
+                "data/mock_buzz_posts_yokaze.csv",
+                "data/x_buzz_genres.json",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(ignored.returncode, 0, ignored.stderr)
+        self.assertIn("data/mock_buzz_posts.csv", ignored.stdout)
+        self.assertIn("data/mock_buzz_posts_yokaze.csv", ignored.stdout)
+        self.assertIn("data/x_buzz_genres.json", ignored.stdout)
+
+        example = subprocess.run(
+            ["git", "check-ignore", "data/x_buzz_genres.json.example"],
+            cwd=Path(__file__).resolve().parents[1],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertNotEqual(example.returncode, 0)
+
     def test_load_genre_config_merges_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             config = Path(tmp) / "genres.json"
@@ -77,6 +110,8 @@ class MockBuzzCollectorTests(unittest.TestCase):
         self.assertEqual(genres[0].min_reposts, 10)
         self.assertEqual(genres[2].days_back, 3)
         self.assertIn("relationship", genres[0].detection_keywords)
+        self.assertEqual(genres[0].min_genre_score, 1)
+        self.assertEqual(genres[0].tie_break_priority[0], "yokaze")
 
     def test_calculate_score_uses_weights(self) -> None:
         post = {"likes": 10, "reposts": 3, "replies": 4, "quotes": 5}
@@ -152,7 +187,21 @@ class MockBuzzCollectorTests(unittest.TestCase):
             result = detect_genre("Plain unrelated update with no signal.", genres)
 
         self.assertEqual(result.genre, "unknown")
-        self.assertEqual(result.reason, "no keyword match")
+        self.assertIn("below min_genre_score", result.reason)
+
+    def test_detect_genre_returns_unknown_below_min_genre_score(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "genres.json"
+            write_config(config)
+            data = json.loads(config.read_text(encoding="utf-8"))
+            data["min_genre_score"] = 2
+            config.write_text(json.dumps(data), encoding="utf-8")
+            genres = load_genre_config(config)
+
+            result = detect_genre("Only night appears once.", genres)
+
+        self.assertEqual(result.genre, "unknown")
+        self.assertEqual(result.score, 1)
 
     def test_detect_genre_uses_highest_score_for_mixed_post(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -166,6 +215,35 @@ class MockBuzzCollectorTests(unittest.TestCase):
             )
 
         self.assertEqual(result.genre, "ai_side_business")
+
+    def test_detect_genre_tie_uses_tie_break_priority(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "genres.json"
+            write_config(config)
+            data = json.loads(config.read_text(encoding="utf-8"))
+            data["tie_break_priority"] = ["daily", "ai_side_business", "yokaze"]
+            config.write_text(json.dumps(data), encoding="utf-8")
+            genres = load_genre_config(config)
+
+            result = detect_genre("night coffee", genres)
+
+        self.assertEqual(result.genre, "daily")
+        self.assertIn("tie among", result.reason)
+
+    def test_detect_genre_tie_without_priority_is_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "genres.json"
+            write_config(config)
+            data = json.loads(config.read_text(encoding="utf-8"))
+            data["tie_break_priority"] = ["missing_genre"]
+            config.write_text(json.dumps(data), encoding="utf-8")
+            genres = load_genre_config(config)
+
+            first = detect_genre("night coffee", genres)
+            second = detect_genre("night coffee", genres)
+
+        self.assertEqual(first.genre, "yokaze")
+        self.assertEqual(second.genre, "yokaze")
 
     def test_rank_posts_by_genre_adds_rank_by_buzz_score(self) -> None:
         rows = rank_posts_by_genre(
@@ -261,6 +339,46 @@ class MockBuzzCollectorTests(unittest.TestCase):
 
         self.assertEqual(result.filtered_count, 3)
         self.assertEqual({row["detected_genre"] for row in rows}, {"yokaze"})
+
+    def test_mock_buzz_read_client_fetches_posts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "genres.json"
+            write_config(config)
+            genres = load_genre_config(config)
+            client = MockBuzzReadClient(
+                post_factory=generate_mock_posts,
+                now=datetime(2026, 5, 30, tzinfo=timezone.utc),
+            )
+
+            posts = client.fetch_posts(genres)
+
+        self.assertEqual(len(posts), 15)
+        self.assertIn("post_id", posts[0])
+
+    def test_x_api_buzz_read_client_placeholder_errors_without_api_call(self) -> None:
+        with self.assertRaises(NotImplementedError):
+            XApiBuzzReadClient().fetch_posts([])
+
+    def test_cli_dry_run_still_works(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "genres.json"
+            output = Path(tmp) / "out.csv"
+            report = Path(tmp) / "report.md"
+            write_config(config)
+
+            exit_code = mock_buzz_cli_main(
+                [
+                    "--dry-run",
+                    "--config",
+                    str(config),
+                    "--output",
+                    str(output),
+                    "--report",
+                    str(report),
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
 
     def test_live_mode_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,5 +1,11 @@
 {
   "version": 1,
+  "min_genre_score": 1,
+  "tie_break_priority": [
+    "yokaze",
+    "ai_side_business",
+    "daily"
+  ],
   "defaults": {
     "min_likes": 100,
     "min_reposts": 10,

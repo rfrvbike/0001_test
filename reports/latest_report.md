@@ -2301,3 +2301,120 @@ Not committed:
 - Tie-breaking currently follows config order when genre scores are equal.
 - Local dry-run output `data/mock_buzz_posts.csv` remains generated but
   uncommitted.
+## 2026-05-31 Buzz Collector Safety and Read Client Boundary
+
+Strengthened the mock-only genre buzz collector safety settings, classification
+configuration, and future read-client boundary. No real X API call, API key
+lookup, token lookup, cookie access, `.env` edit, or posting was performed.
+
+### Changed Files
+
+- `.gitignore`
+- `data/x_buzz_genres.json.example`
+- `x_auto_ops/mock_buzz_collector.py`
+- `tests/test_mock_buzz_collector.py`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Added Files
+
+- `x_auto_ops/buzz_read_client.py`
+
+### .gitignore Updates
+
+Added:
+
+```text
+data/mock_buzz_posts.csv
+data/mock_buzz_posts_*.csv
+data/x_buzz_genres.json
+```
+
+Kept tracked:
+
+```text
+data/x_buzz_genres.json.example
+```
+
+### Genre Detection Updates
+
+- Added top-level `min_genre_score`.
+- Added top-level `tie_break_priority`.
+- If best `genre_score` is below `min_genre_score`, classification becomes
+  `unknown`.
+- If multiple genres tie, `tie_break_priority` chooses the winner.
+- If tied genres are not in `tie_break_priority`, stable config order is used.
+- `genre_reason` now records below-threshold and tie-break decisions.
+
+### Read Client Interface
+
+Added `x_auto_ops/buzz_read_client.py` with:
+
+- `BuzzPost`: normalized post dataclass
+- `BuzzReadClient`: protocol exposing `fetch_posts(config)`
+- `MockBuzzReadClient`: local dry-run read client
+- `XApiBuzzReadClient`: placeholder that raises `NotImplementedError`
+
+The mock collector now fetches posts through `MockBuzzReadClient` by default.
+The placeholder X client does not call any API.
+
+### CLI Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_buzz_collector.py --dry-run
+```
+
+Result:
+
+```text
+DRY-RUN mock buzz collection complete.
+Generated mock posts: 15
+Filtered posts: 9
+CSV: data\mock_buzz_posts.csv
+Report: reports\mock_buzz_report.md
+No X API call, token access, .env edit, or posting was performed.
+```
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest tests.test_mock_buzz_collector -v
+```
+
+Result:
+
+```text
+Ran 20 tests
+OK
+```
+
+Full discovery command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 152 tests
+OK
+```
+
+### Safety Notes
+
+- `.env`, API keys, tokens, cookies, generated CSVs, logs, images, zip/xlsx
+  files, and `__pycache__` are not intended for commit.
+- `data/mock_buzz_posts.csv` remains a generated dry-run output only.
+- `data/x_buzz_genres.json` is reserved for local untracked settings.
+
+### Unresolved
+
+- `XApiBuzzReadClient` is only a placeholder.
+- No live X API read path exists yet.
+- Tie-break behavior is deterministic, but business priority should be reviewed
+  before live use.

@@ -451,7 +451,11 @@ Current classification:
 - `detection_keywords` are configured per genre in
   `data/x_buzz_genres.json.example`
 - each matched keyword adds `1` to the genre score
+- `min_genre_score` controls the minimum score required for classification
 - the genre with the highest score becomes `detected_genre`
+- ties are resolved by `tie_break_priority`
+- ties between genres outside `tie_break_priority` fall back to stable config
+  order
 - if no keyword matches, `detected_genre` becomes `unknown`
 - short ASCII keywords such as `ai` are matched with word boundaries to avoid
   false positives such as `plain`
@@ -490,6 +494,41 @@ python tools/mock_buzz_collector.py --dry-run --genre daily
 
 The `--genre` option filters by `detected_genre`, not by the mock seed genre.
 
+## Safety and Read Client Boundary Implemented
+
+Implemented on 2026-05-31 as a mock-only safety extension.
+
+Git ignore safety:
+
+- `data/mock_buzz_posts.csv`
+- `data/mock_buzz_posts_*.csv`
+- `data/x_buzz_genres.json`
+
+Tracked example remains allowed:
+
+- `data/x_buzz_genres.json.example`
+
+Config now includes:
+
+```json
+{
+  "min_genre_score": 1,
+  "tie_break_priority": ["yokaze", "ai_side_business", "daily"]
+}
+```
+
+Read client interface:
+
+- `x_auto_ops/buzz_read_client.py`
+- `BuzzReadClient` protocol with `fetch_posts(config)`
+- `BuzzPost` normalized post dataclass
+- `MockBuzzReadClient` for local deterministic dry-run data
+- `XApiBuzzReadClient` placeholder that raises `NotImplementedError`
+
+The mock collector now obtains posts through `MockBuzzReadClient` by default.
+The future X API client should implement the same `fetch_posts(config)` boundary
+without changing scoring, classification, ranking, CSV output, or reports.
+
 Current tests:
 
 - config loading and default merging
@@ -503,6 +542,13 @@ Current tests:
 - mixed-genre winner by highest score
 - per-genre ranking by `buzz_score`
 - report sections for genre rankings and top buzz posts
+- generated CSV and local config are gitignored
+- tracked config example is not ignored
+- `min_genre_score` below-threshold classification becomes `unknown`
+- `tie_break_priority` resolves tied genre scores
+- `MockBuzzReadClient` returns normalized posts
+- `XApiBuzzReadClient` placeholder raises without external API access
+- CLI dry-run still works
 
 Next live-read phase should add a separate injected read client boundary instead
 of modifying the mock collector to call X directly.

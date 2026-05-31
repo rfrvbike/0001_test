@@ -15,6 +15,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from x_auto_ops.buzz_read_client import BuzzReadClient, MockBuzzReadClient
+
 
 DEFAULT_CONFIG_PATH = Path("data/x_buzz_genres.json.example")
 DEFAULT_OUTPUT_PATH = Path("data/mock_buzz_posts.csv")
@@ -58,6 +60,15 @@ class GenreConfig:
     min_quotes: int
     days_back: int
     score_weights: dict[str, int]
+    min_genre_score: int
+    tie_break_priority: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BuzzCollectionConfig:
+    genres: list[GenreConfig]
+    min_genre_score: int
+    tie_break_priority: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -77,6 +88,10 @@ class MockBuzzResult:
 
 
 def load_genre_config(path: str | Path = DEFAULT_CONFIG_PATH) -> list[GenreConfig]:
+    return load_buzz_collection_config(path).genres
+
+
+def load_buzz_collection_config(path: str | Path = DEFAULT_CONFIG_PATH) -> BuzzCollectionConfig:
     config_path = Path(path)
     data = json.loads(config_path.read_text(encoding="utf-8"))
     defaults = data.get("defaults") or {}
@@ -84,6 +99,9 @@ def load_genre_config(path: str | Path = DEFAULT_CONFIG_PATH) -> list[GenreConfi
         **DEFAULT_SCORE_WEIGHTS,
         **dict(defaults.get("score_weights") or {}),
     }
+    min_genre_score = _int(data.get("min_genre_score", 1))
+    raw_priority = data.get("tie_break_priority") or []
+    tie_break_priority = tuple(str(item).strip() for item in raw_priority if str(item).strip())
 
     genres: list[GenreConfig] = []
     for row in data.get("genres") or []:
@@ -113,11 +131,32 @@ def load_genre_config(path: str | Path = DEFAULT_CONFIG_PATH) -> list[GenreConfi
                     **default_weights,
                     **dict(row.get("score_weights") or {}),
                 },
+                min_genre_score=min_genre_score,
+                tie_break_priority=tie_break_priority,
             )
         )
     if not genres:
         raise ValueError("at least one genre is required")
-    return genres
+    if not tie_break_priority:
+        tie_break_priority = tuple(genre.id for genre in genres)
+        genres = [
+            GenreConfig(
+                id=genre.id,
+                label=genre.label,
+                keywords=genre.keywords,
+                detection_keywords=genre.detection_keywords,
+                min_likes=genre.min_likes,
+                min_reposts=genre.min_reposts,
+                min_replies=genre.min_replies,
+                min_quotes=genre.min_quotes,
+                days_back=genre.days_back,
+                score_weights=genre.score_weights,
+                min_genre_score=genre.min_genre_score,
+                tie_break_priority=tie_break_priority,
+            )
+            for genre in genres
+        ]
+    return BuzzCollectionConfig(genres, min_genre_score, tie_break_priority)
 
 
 def calculate_score(post: Mapping[str, Any], weights: Mapping[str, int] | None = None) -> int:
@@ -131,22 +170,40 @@ def calculate_score(post: Mapping[str, Any], weights: Mapping[str, int] | None =
 
 
 def detect_genre(text: str, genres: Iterable[GenreConfig]) -> GenreDetection:
+    genre_list = list(genres)
     normalized = text.lower()
-    best_genre = "unknown"
-    best_score = 0
-    best_matches: list[str] = []
+    min_genre_score = genre_list[0].min_genre_score if genre_list else 1
+    tie_break_priority = genre_list[0].tie_break_priority if genre_list else ()
+    genre_order = {genre.id: index for index, genre in enumerate(genre_list)}
+    priority_order = {genre_id: index for index, genre_id in enumerate(tie_break_priority)}
 
-    for genre in genres:
+    scored: list[tuple[GenreConfig, int, list[str]]] = []
+    for genre in genre_list:
         matches = [keyword for keyword in genre.detection_keywords if _keyword_matches(normalized, keyword)]
-        score = len(matches)
-        if score > best_score:
-            best_genre = genre.id
-            best_score = score
-            best_matches = matches
+        scored.append((genre, len(matches), matches))
 
-    if best_score <= 0:
-        return GenreDetection("unknown", 0, "no keyword match")
-    return GenreDetection(best_genre, best_score, f"matched: {', '.join(best_matches)}")
+    best_score = max((score for _, score, _ in scored), default=0)
+    if best_score < min_genre_score:
+        return GenreDetection(
+            "unknown",
+            best_score,
+            f"genre score {best_score} below min_genre_score {min_genre_score}",
+        )
+
+    candidates = [(genre, matches) for genre, score, matches in scored if score == best_score]
+    candidates.sort(
+        key=lambda item: (
+            priority_order.get(item[0].id, len(priority_order) + genre_order.get(item[0].id, 9999)),
+            genre_order.get(item[0].id, 9999),
+            item[0].id,
+        )
+    )
+    best_genre, best_matches = candidates[0]
+    reason = f"matched: {', '.join(best_matches)}"
+    if len(candidates) > 1:
+        tied = ", ".join(genre.id for genre, _ in candidates)
+        reason = f"{reason}; tie among {tied}; selected by tie_break_priority"
+    return GenreDetection(best_genre.id, best_score, reason)
 
 
 def generate_mock_posts(genres: Iterable[GenreConfig], now: datetime | None = None) -> list[dict[str, Any]]:
@@ -360,14 +417,17 @@ def collect_mock_buzz_posts(
     report_path: str | Path = DEFAULT_REPORT_PATH,
     dry_run: bool,
     genre_filter: str | None = None,
+    read_client: BuzzReadClient | None = None,
     now: datetime | None = None,
 ) -> MockBuzzResult:
     if not dry_run:
         raise RuntimeError("mock buzz collector only supports --dry-run")
-    genres = load_genre_config(config_path)
+    config = load_buzz_collection_config(config_path)
+    genres = config.genres
     if genre_filter and genre_filter not in {genre.id for genre in genres}:
         raise ValueError(f"unknown genre filter: {genre_filter}")
-    generated = generate_mock_posts(genres, now=now)
+    client = read_client or MockBuzzReadClient(post_factory=generate_mock_posts, now=now)
+    generated = client.fetch_posts(config)
     filtered = filter_posts(generated, genres, now=now, genre_filter=genre_filter)
     output = write_posts_csv(output_path, filtered)
     report = write_report(report_path, filtered, genres)
