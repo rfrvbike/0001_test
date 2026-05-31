@@ -694,6 +694,99 @@ The normalizer is the intended next boundary for a future `XApiBuzzReadClient`:
 the live client should fetch JSON, pass it to the normalizer, then return the
 same `BuzzFetchResult` contract used by the mock collector.
 
+## Recent Search Query Builder and Rate Limit Header Parser
+
+Implemented on 2026-05-31 with local config and mock header fixtures only. No X
+API request, token lookup, `.env` read, or posting is performed.
+
+Query builder:
+
+```text
+x_auto_ops/query_builder.py
+build_recent_search_query(config)
+```
+
+Input:
+
+- `search_queries`
+- `keywords` as fallback when `search_queries` is absent
+- `target_accounts`
+- `exclude_keywords`
+- `source_genre`, `id`, or `genre`
+- optional `lang` / `language`, default `ja`
+
+Output:
+
+- `RecentSearchQuery`
+- `.query`: recent-search query string
+- `.source_genre`: genre identity carried forward for fetch metadata
+- `.search_terms`, `.target_accounts`, `.exclude_keywords`: normalized source
+  components for logging/tests
+
+Safety behavior:
+
+- empty search query is rejected
+- query longer than the configured `max_length` is rejected
+- duplicate keywords/accounts/excludes are removed case-insensitively
+- target accounts are converted to `from:username`
+- exclude keywords are emitted as negative terms
+- multi-word terms are quoted
+- the builder only formats local values and performs no credential or network
+  access
+
+Example:
+
+```text
+(AI OR ChatGPT OR Claude) -giveaway lang:ja
+```
+
+Rate limit header parser:
+
+```text
+x_auto_ops/rate_limit_parser.py
+parse_rate_limit_headers(headers, status_code=None, now=None)
+```
+
+Input headers:
+
+- `Retry-After`
+- `x-rate-limit-remaining`
+- `x-rate-limit-reset`
+
+Output:
+
+- `RateLimitInfo.rate_limited`
+- `RateLimitInfo.retry_after_seconds`
+- `RateLimitInfo.remaining_requests`
+- `RateLimitInfo.reset_timestamp`
+
+Parser behavior:
+
+- `Retry-After` seconds are preferred when present
+- HTTP-date `Retry-After` values are also accepted
+- `x-rate-limit-reset` is converted to wait seconds only when the response is
+  rate limited or remaining requests are zero
+- missing headers are safe and return `None` values
+- invalid header values are ignored instead of raising
+
+Recent search use policy:
+
+- Future live reads should build query strings only through this builder.
+- Query strings should be logged without credentials and associated with
+  `source_genre`.
+- Recent search may be limited to a recent window and plan-specific result
+  limits.
+- The future client should pass raw JSON to the response normalizer and pass
+  response headers to the rate limit parser.
+
+Rate limit policy:
+
+- Respect `Retry-After` when present.
+- If remaining requests are zero, compute wait time from `x-rate-limit-reset`.
+- Preserve `remaining_requests` and `reset_timestamp` for reports/debugging.
+- Do not retry automatically inside the collector until live-read behavior is
+  explicitly approved.
+
 Current tests:
 
 - config loading and default merging

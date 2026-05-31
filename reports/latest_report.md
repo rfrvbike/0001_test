@@ -2700,3 +2700,129 @@ OK
 - Response header parsing for real `Retry-After` / `x-rate-limit-reset` is not
   implemented yet.
 - Query builder is still not connected to any live read path.
+## 2026-05-31 Recent Search Query Builder and Rate Limit Header Parser
+
+Added the final mock-only pre-X-API foundations for recent search. No real X API
+call, API key lookup, token lookup, cookie access, `.env` edit, or posting was
+performed.
+
+### Added Files
+
+- `x_auto_ops/query_builder.py`
+- `x_auto_ops/rate_limit_parser.py`
+- `tests/test_query_builder_and_rate_limit_parser.py`
+- `tests/fixtures/rate_limit_headers_normal.json`
+- `tests/fixtures/rate_limit_headers_retry_after.json`
+- `tests/fixtures/rate_limit_headers_reset_only.json`
+
+### Changed Files
+
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Query Builder Spec
+
+Function:
+
+```text
+build_recent_search_query(config)
+```
+
+Input fields:
+
+- `search_queries`
+- `keywords`
+- `target_accounts`
+- `exclude_keywords`
+- `source_genre` / `id` / `genre`
+- optional `lang` / `language`
+
+Returns:
+
+```text
+RecentSearchQuery
+```
+
+The returned object carries:
+
+- `query`
+- `source_genre`
+- `search_terms`
+- `target_accounts`
+- `exclude_keywords`
+- `language`
+
+Safety behavior:
+
+- rejects empty query input
+- rejects query strings over the configured max length
+- removes duplicate search terms/accounts/excludes
+- formats accounts as `from:username`
+- formats excluded terms with a leading `-`
+- quotes multi-word terms
+- defaults to `lang:ja`
+- performs no network access and no credential lookup
+
+### Header Parser Spec
+
+Function:
+
+```text
+parse_rate_limit_headers(headers, status_code=None, now=None)
+```
+
+Returns:
+
+```text
+RateLimitInfo
+```
+
+Fields:
+
+- `rate_limited`
+- `retry_after_seconds`
+- `remaining_requests`
+- `reset_timestamp`
+
+Behavior:
+
+- parses `Retry-After`
+- parses `x-rate-limit-remaining`
+- parses `x-rate-limit-reset`
+- computes retry seconds from reset time only when limited or remaining is zero
+- tolerates missing headers
+- ignores invalid values without raising
+
+### Fixture List
+
+- `tests/fixtures/rate_limit_headers_normal.json`
+- `tests/fixtures/rate_limit_headers_retry_after.json`
+- `tests/fixtures/rate_limit_headers_reset_only.json`
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 174 tests
+OK
+```
+
+### Safety
+
+- Only local config/fixture parsing was added.
+- No X API client implementation was added.
+- No `.env`, API key, token, cookie, real CSV, or personal data was added.
+- Generated CSV files remain gitignored.
+
+### Unresolved
+
+- Live HTTP transport is still not implemented.
+- Query builder is not yet wired into `XApiBuzzReadClient`.
+- Header parser is not yet wired to real HTTP response headers.
