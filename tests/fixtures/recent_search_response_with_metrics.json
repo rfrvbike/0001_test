@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "id": "2001",
+      "author_id": "501",
+      "text": "AI automation paper for side business workflow.",
+      "created_at": "2026-05-31T00:00:00.000Z",
+      "public_metrics": {
+        "like_count": 120,
+        "retweet_count": 30,
+        "reply_count": 8,
+        "quote_count": 6,
+        "impression_count": 15000
+      }
+    }
+  ],
+  "includes": {
+    "users": [
+      {
+        "id": "501",
+        "username": "mock_ai_author",
+        "name": "Mock AI Author"
+      }
+    ]
+  },
+  "meta": {
+    "result_count": 1
+  }
+}

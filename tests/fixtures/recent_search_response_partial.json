@@ -1,0 +1,32 @@
+{
+  "data": [
+    {
+      "id": "4001",
+      "author_id": "701",
+      "text": "Lonely night relationship post with partial pagination.",
+      "created_at": "2026-05-31T02:00:00.000Z",
+      "public_metrics": {
+        "like_count": 210,
+        "retweet_count": 44,
+        "reply_count": 12,
+        "quote_count": 9
+      }
+    }
+  ],
+  "includes": {
+    "users": [
+      {
+        "id": "701",
+        "username": "mock_yokaze_author"
+      }
+    ]
+  },
+  "meta": {
+    "result_count": 1,
+    "next_token": "next-page-token",
+    "partial_result": true,
+    "rate_limited": true,
+    "retry_after_seconds": 900
+  },
+  "request_window": "15min"
+}

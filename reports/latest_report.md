@@ -2573,3 +2573,130 @@ OK
 - `XApiBuzzReadClient` is still only a placeholder.
 - The exact live mapping from X response JSON to `BuzzPost` is not implemented.
 - Real rate-limit header parsing is not implemented.
+## 2026-05-31 X Response Normalizer
+
+Added a mock-only X API response normalizer for future recent-search
+integration. No real X API call, API key lookup, token lookup, cookie access,
+`.env` edit, or posting was performed.
+
+### Added Files
+
+- `x_auto_ops/x_response_normalizer.py`
+- `tests/test_x_response_normalizer.py`
+- `tests/fixtures/recent_search_response_minimal.json`
+- `tests/fixtures/recent_search_response_with_metrics.json`
+- `tests/fixtures/recent_search_response_missing_metrics.json`
+- `tests/fixtures/recent_search_response_partial.json`
+
+### Changed Files
+
+- `x_auto_ops/buzz_read_client.py`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Normalizer Spec
+
+Function:
+
+```text
+normalize_recent_search_response(response_json, source_query, source_genre)
+```
+
+Returns:
+
+```text
+BuzzFetchResult
+```
+
+Normalizes post fields:
+
+- `id` -> `post_id`
+- `text` -> `text`
+- `created_at` -> `created_at`
+- `author_id` -> `author_id`
+
+Normalizes author fields:
+
+- `includes.users[].username` -> `author_username`
+
+Normalizes metrics:
+
+- `public_metrics.like_count` -> `like_count`
+- `public_metrics.retweet_count` -> `repost_count`
+- `public_metrics.reply_count` -> `reply_count`
+- `public_metrics.quote_count` -> `quote_count`
+- `public_metrics.impression_count` -> `impression_count`
+
+Adds source fields:
+
+- `source_query`
+- `source_genre`
+- `fetched_at`
+
+### Missing Field Handling
+
+The normalizer does not crash when these are absent:
+
+- `includes.users`
+- `public_metrics`
+- `impression_count`
+- `quote_count`
+- `author_id`
+
+Missing fields are recorded in `metrics_missing`, for example:
+
+- `missing_impression_count`
+- `missing_author_username`
+- `missing_public_metrics`
+- `missing_quote_count`
+
+### Rate Metadata
+
+The normalizer preserves:
+
+- `rate_limited`
+- `retry_after_seconds`
+- `partial_result`
+- `next_token`
+- `request_window`
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest tests.test_x_response_normalizer -v
+```
+
+Result:
+
+```text
+Ran 5 tests
+OK
+```
+
+Full discovery command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 163 tests
+OK
+```
+
+### Safety
+
+- Fixtures are synthetic.
+- No `.env`, API key, token, cookie, real CSV, or personal data was added.
+- `XApiBuzzReadClient` still raises `NotImplementedError`.
+
+### Unresolved
+
+- Live HTTP transport is not implemented.
+- Response header parsing for real `Retry-After` / `x-rate-limit-reset` is not
+  implemented yet.
+- Query builder is still not connected to any live read path.

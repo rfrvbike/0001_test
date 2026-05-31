@@ -642,6 +642,58 @@ References:
 - https://docs.x.com/x-api/posts/search/quickstart/recent-search
 - https://docs.x.com/x-api/posts/search/integrate/paginate
 
+## X API Response Normalizer Implemented
+
+Implemented on 2026-05-31 with mock fixtures only. No X API request, token
+lookup, `.env` read, or posting is performed.
+
+Normalizer:
+
+```text
+x_auto_ops/x_response_normalizer.py
+normalize_recent_search_response(response_json, source_query, source_genre)
+```
+
+Input assumptions:
+
+- Recent-search-like JSON with `data`, optional `includes.users`, and optional
+  `meta`.
+- Post fields may include `id`, `text`, `created_at`, `author_id`, and
+  `public_metrics`.
+- `public_metrics` may include `like_count`, `retweet_count`, `reply_count`,
+  `quote_count`, and `impression_count`.
+- `includes.users` links author data by `author_id`.
+
+Output:
+
+- `BuzzFetchResult`
+- normalized `BuzzPost` dictionaries in `posts`
+- rate-limit/pagination metadata from `meta` or top-level mock fields
+
+Missing-field behavior:
+
+- missing `includes.users` does not fail
+- missing `public_metrics` does not fail
+- missing `impression_count` becomes `None`
+- missing `quote_count` becomes `0`
+- missing `author_id` / username become empty strings
+- missing fields are recorded in `metrics_missing` with values such as:
+  - `missing_impression_count`
+  - `missing_author_username`
+  - `missing_public_metrics`
+  - `missing_quote_count`
+
+Fixture coverage:
+
+- `tests/fixtures/recent_search_response_minimal.json`
+- `tests/fixtures/recent_search_response_with_metrics.json`
+- `tests/fixtures/recent_search_response_missing_metrics.json`
+- `tests/fixtures/recent_search_response_partial.json`
+
+The normalizer is the intended next boundary for a future `XApiBuzzReadClient`:
+the live client should fetch JSON, pass it to the normalizer, then return the
+same `BuzzFetchResult` contract used by the mock collector.
+
 Current tests:
 
 - config loading and default merging

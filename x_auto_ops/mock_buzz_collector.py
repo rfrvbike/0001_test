@@ -557,10 +557,10 @@ def _fetch_posts(fetch_result: BuzzFetchResult | list[dict[str, Any]]) -> list[d
 def _metrics_missing(row: Mapping[str, Any]) -> str:
     explicit = str(row.get("metrics_missing") or "")
     values = [item.strip() for item in explicit.split("|") if item.strip()]
-    if _nullable_int(row.get("impression_count")) is None and "impression_count" not in values:
-        values.append("impression_count")
-    if "quote_count" in row and row.get("quote_count") in {None, ""} and "quote_count" not in values:
-        values.append("quote_count")
+    if _nullable_int(row.get("impression_count")) is None and "missing_impression_count" not in values:
+        values.append("missing_impression_count")
+    if "quote_count" in row and row.get("quote_count") in {None, ""} and "missing_quote_count" not in values:
+        values.append("missing_quote_count")
     return "|".join(values)
 
 
@@ -605,7 +605,7 @@ def _mixed_mock_posts(base_now: datetime) -> list[dict[str, Any]]:
             "replies": 12,
             "quotes": 8,
             "impression_count": None,
-            "metrics_missing": "impression_count",
+            "metrics_missing": "missing_impression_count",
             "author_id": "mock_author_mixed_id",
             "author_username": "mock_author_mixed",
             "source_query": "coffee ai workflow",
@@ -623,7 +623,7 @@ def _mixed_mock_posts(base_now: datetime) -> list[dict[str, Any]]:
             "replies": 8,
             "quotes": 6,
             "impression_count": None,
-            "metrics_missing": "impression_count",
+            "metrics_missing": "missing_impression_count",
             "author_id": "",
             "author_username": "",
             "source_query": "unknown mock query",

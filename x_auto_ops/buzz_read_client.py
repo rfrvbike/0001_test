@@ -37,14 +37,14 @@ class BuzzPost:
         if isinstance(row.get("metrics_missing"), str):
             missing = [item.strip() for item in str(row.get("metrics_missing")).split("|") if item.strip()]
         impression_count = _nullable_int(impression_value)
-        if impression_count is None and "impression_count" not in missing:
-            missing.append("impression_count")
-        if not row.get("author_id") and "author_id" not in missing:
-            missing.append("author_id")
-        if not author_username and "author_username" not in missing:
-            missing.append("author_username")
-        if row.get("quote_count", row.get("quotes")) in {None, ""} and "quote_count" not in missing:
-            missing.append("quote_count")
+        if impression_count is None and "missing_impression_count" not in missing:
+            missing.append("missing_impression_count")
+        if not row.get("author_id") and "missing_author_id" not in missing:
+            missing.append("missing_author_id")
+        if not author_username and "missing_author_username" not in missing:
+            missing.append("missing_author_username")
+        if row.get("quote_count", row.get("quotes")) in {None, ""} and "missing_quote_count" not in missing:
+            missing.append("missing_quote_count")
         return BuzzPost(
             post_id=str(row.get("post_id") or ""),
             author_id=str(row.get("author_id") or ""),
