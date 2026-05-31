@@ -441,6 +441,55 @@ Current behavior:
 - never reads `.env`, tokens, cookies, or API keys
 - never calls X or any external API
 
+## Genre Detection and Ranking Implemented
+
+Implemented on 2026-05-31 as a mock-only extension.
+
+Current classification:
+
+- rule-based keyword scoring
+- `detection_keywords` are configured per genre in
+  `data/x_buzz_genres.json.example`
+- each matched keyword adds `1` to the genre score
+- the genre with the highest score becomes `detected_genre`
+- if no keyword matches, `detected_genre` becomes `unknown`
+- short ASCII keywords such as `ai` are matched with word boundaries to avoid
+  false positives such as `plain`
+- multi-word and Japanese keywords use substring matching
+
+Configured target genres:
+
+- `yokaze`: hurt people, women trying hard, relationships, night, loneliness,
+  healing, quiet support
+- `ai_side_business`: AI use, side business, workflow automation, papers,
+  monetization, non-engineer productivity
+- `daily`: everyday life, coffee, room, Sunday night, before work, habits, light
+  jokes
+
+CSV columns now include:
+
+```text
+genre,post_id,author,text,likes,reposts,replies,quotes,score,detected_genre,
+genre_score,genre_reason,buzz_score,rank_in_genre,created_at
+```
+
+Ranking:
+
+- rows are grouped by `detected_genre`
+- each group is sorted by `buzz_score` descending
+- `rank_in_genre` starts at `1` for each detected genre
+- `unknown` is ranked as its own group
+
+CLI filtering:
+
+```powershell
+python tools/mock_buzz_collector.py --dry-run --genre yokaze
+python tools/mock_buzz_collector.py --dry-run --genre ai_side_business
+python tools/mock_buzz_collector.py --dry-run --genre daily
+```
+
+The `--genre` option filters by `detected_genre`, not by the mock seed genre.
+
 Current tests:
 
 - config loading and default merging
@@ -449,6 +498,11 @@ Current tests:
 - CSV output column order
 - mock collection
 - non-dry-run blocking
+- `yokaze` / `ai_side_business` / `daily` classification
+- `unknown` classification
+- mixed-genre winner by highest score
+- per-genre ranking by `buzz_score`
+- report sections for genre rankings and top buzz posts
 
 Next live-read phase should add a separate injected read client boundary instead
 of modifying the mock collector to call X directly.

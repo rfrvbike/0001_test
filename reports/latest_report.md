@@ -2151,3 +2151,153 @@ OK
 
 - `data/mock_buzz_posts.csv` should be ignored or cleaned before future commits.
 - YAML support is not included; JSON was used to avoid adding dependencies.
+
+## 2026-05-31 Mock Genre Detection and Ranking
+
+Added rule-based genre detection and per-genre ranking to the mock-only genre
+buzz collector. No real X API call, API key lookup, token lookup, cookie access,
+`.env` edit, or posting was performed.
+
+### Changed Files
+
+- `data/x_buzz_genres.json.example`
+- `x_auto_ops/mock_buzz_collector.py`
+- `tools/mock_buzz_collector.py`
+- `tests/test_mock_buzz_collector.py`
+- `reports/mock_buzz_report.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Implementation
+
+- Added `detection_keywords` per genre in `data/x_buzz_genres.json.example`.
+- Added `detect_genre()` rule-based classifier.
+- Added `GenreDetection` result with:
+  - `genre`
+  - `score`
+  - `reason`
+- Added mixed mock posts:
+  - yokaze-like post
+  - AI side-business-like post
+  - daily-like post
+  - unknown post
+  - cross-genre posts
+- Added `rank_posts_by_genre()`.
+- Added `--genre yokaze|ai_side_business|daily` CLI filtering.
+- Extended CSV columns:
+  - `detected_genre`
+  - `genre_score`
+  - `genre_reason`
+  - `buzz_score`
+  - `rank_in_genre`
+- Extended report with:
+  - genre summary
+  - genre rankings
+  - unknown count
+  - genre detection reason examples
+  - buzz score top posts
+
+### Genre Detection Spec
+
+- Each genre has `detection_keywords`.
+- A post is lowercased and checked against every genre keyword list.
+- Each matched keyword adds `1` to that genre's `genre_score`.
+- The highest-scoring genre becomes `detected_genre`.
+- If no keyword matches, `detected_genre=unknown`.
+- Short ASCII keywords such as `ai` use word-boundary matching to avoid false
+  positives like `plain`.
+- Multi-word and Japanese keywords use substring matching.
+- Rankings are grouped by `detected_genre` and sorted by `buzz_score`
+  descending.
+- `unknown` is ranked in its own group.
+
+### CLI Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_buzz_collector.py --dry-run
+```
+
+Result:
+
+```text
+DRY-RUN mock buzz collection complete.
+Generated mock posts: 15
+Filtered posts: 9
+CSV: data\mock_buzz_posts.csv
+Report: reports\mock_buzz_report.md
+No X API call, token access, .env edit, or posting was performed.
+```
+
+Genre-filter check:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_buzz_collector.py --dry-run --genre yokaze --output data\mock_buzz_posts_yokaze.csv --report reports\mock_buzz_report_yokaze.md
+```
+
+Result:
+
+```text
+DRY-RUN mock buzz collection complete.
+Generated mock posts: 15
+Filtered posts: 3
+CSV: data\mock_buzz_posts_yokaze.csv
+Report: reports\mock_buzz_report_yokaze.md
+Genre filter: yokaze
+No X API call, token access, .env edit, or posting was performed.
+```
+
+The genre-filter output files were removed after verification and were not
+committed.
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest tests.test_mock_buzz_collector -v
+```
+
+Result:
+
+```text
+Ran 13 tests
+OK
+```
+
+Full discovery command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 145 tests
+OK
+```
+
+### Safety Check
+
+Not committed:
+
+- `.env`
+- API keys
+- tokens
+- cookies
+- generated CSV outputs
+- local-only genre-filter reports
+- logs
+- images
+- zip/xlsx files
+- `__pycache__`
+
+### Unresolved
+
+- This is still rule-based and mock-only; no semantic classifier or X API read
+  client exists yet.
+- Tie-breaking currently follows config order when genre scores are equal.
+- Local dry-run output `data/mock_buzz_posts.csv` remains generated but
+  uncommitted.

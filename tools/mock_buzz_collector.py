@@ -22,6 +22,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT_PATH))
     parser.add_argument("--report", default=str(DEFAULT_REPORT_PATH))
+    parser.add_argument(
+        "--genre",
+        choices=["yokaze", "ai_side_business", "daily"],
+        help="Only output posts detected as this genre.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args(argv)
 
@@ -34,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
             output_path=args.output,
             report_path=args.report,
             dry_run=args.dry_run,
+            genre_filter=args.genre,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -44,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Filtered posts: {result.filtered_count}")
     print(f"CSV: {result.output_path}")
     print(f"Report: {result.report_path}")
+    if args.genre:
+        print(f"Genre filter: {args.genre}")
     print("No X API call, token access, .env edit, or posting was performed.")
     return 0
 
