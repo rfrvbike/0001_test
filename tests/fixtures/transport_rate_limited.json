@@ -1,0 +1,15 @@
+{
+  "status_code": 429,
+  "headers": {
+    "Retry-After": "180",
+    "x-rate-limit-remaining": "0",
+    "x-rate-limit-reset": "1780186200"
+  },
+  "json_body": {
+    "data": [],
+    "meta": {
+      "result_count": 0,
+      "partial_result": true
+    }
+  }
+}

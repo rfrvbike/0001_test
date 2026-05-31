@@ -2826,3 +2826,132 @@ OK
 - Live HTTP transport is still not implemented.
 - Query builder is not yet wired into `XApiBuzzReadClient`.
 - Header parser is not yet wired to real HTTP response headers.
+## 2026-05-31 Mock Transport Integration Test Layer
+
+Added a mock-only integration layer for the future recent-search read path. No
+real X API call, API key lookup, token lookup, cookie access, `.env` edit, or
+posting was performed.
+
+### Added Files
+
+- `x_auto_ops/mock_transport.py`
+- `tests/test_mock_transport_pipeline.py`
+- `tests/fixtures/transport_success.json`
+- `tests/fixtures/transport_partial.json`
+- `tests/fixtures/transport_rate_limited.json`
+
+### Changed Files
+
+- `x_auto_ops/buzz_read_client.py`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Transport Spec
+
+Transport:
+
+```text
+MockRecentSearchTransport.send_recent_search(query)
+```
+
+Returns:
+
+```text
+TransportResponse
+```
+
+Fields:
+
+- `status_code`
+- `headers`
+- `json_body`
+
+The transport is fixture-backed and never performs HTTP.
+
+### Integration Pipeline Spec
+
+Function:
+
+```text
+run_mock_recent_search_pipeline(config, transport)
+```
+
+Flow:
+
+```text
+Query Builder
+-> Mock Transport
+-> Rate Limit Header Parser
+-> Response Normalizer
+-> BuzzFetchResult
+```
+
+Returned object:
+
+- `query`
+- `transport_response`
+- `rate_limit`
+- `fetch_result`
+- `debug_log`
+
+### Credential Leak Test
+
+The test injects config values containing:
+
+- `API_KEY`
+- `TOKEN`
+- `BEARER`
+- `SECRET`
+
+Assertions:
+
+- those markers do not appear in `debug_log`
+- those markers do not appear in rendered CSV output
+- debug field names avoid credential words such as `token`
+
+### Dry-run Gate
+
+`XApiBuzzReadClient` now blocks non-dry-run execution before any live API path
+could exist:
+
+```text
+XApiBuzzReadClient(dry_run=False).fetch_posts(...)
+XApiBuzzReadClient().fetch_posts({"dry_run": false, ...})
+```
+
+Both raise `RuntimeError`. Dry-run placeholder mode still raises
+`NotImplementedError`.
+
+### Fixture List
+
+- `tests/fixtures/transport_success.json`
+- `tests/fixtures/transport_partial.json`
+- `tests/fixtures/transport_rate_limited.json`
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 180 tests
+OK
+```
+
+### Safety
+
+- Mock fixtures only.
+- No X API client implementation was added.
+- No `.env`, API key, token, cookie, real CSV, or personal data was added.
+- Generated CSV files remain gitignored.
+
+### Unresolved
+
+- Live HTTP transport is still not implemented.
+- Mock transport is not wired into CLI because this phase is test-only.
+- Real retry scheduling is still not implemented.

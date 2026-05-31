@@ -144,7 +144,19 @@ class MockBuzzReadClient:
 class XApiBuzzReadClient:
     """Placeholder for a future approved X API read client."""
 
+    def __init__(self, *, dry_run: bool = True) -> None:
+        self.dry_run = dry_run
+
     def fetch_posts(self, config: Any) -> BuzzFetchResult:
+        config_dry_run = getattr(config, "dry_run", None)
+        if isinstance(config, Mapping):
+            config_dry_run = config.get("dry_run", config_dry_run)
+        dry_run = self.dry_run if config_dry_run is None else bool(config_dry_run)
+        if not dry_run:
+            raise RuntimeError(
+                "XApiBuzzReadClient live mode is blocked. Set dry_run=True and "
+                "use mock transport until real X API access is explicitly approved."
+            )
         raise NotImplementedError(
             "X API buzz collection is not implemented. Use MockBuzzReadClient "
             "and --dry-run until live read access is explicitly approved."

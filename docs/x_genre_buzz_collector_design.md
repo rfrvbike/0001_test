@@ -787,6 +787,74 @@ Rate limit policy:
 - Do not retry automatically inside the collector until live-read behavior is
   explicitly approved.
 
+## Mock Transport Integration Layer
+
+Implemented on 2026-05-31 with fixture-backed transport only. No X API request,
+token lookup, cookie lookup, `.env` read, or posting is performed.
+
+Transport layer:
+
+```text
+x_auto_ops/mock_transport.py
+MockRecentSearchTransport.send_recent_search(query)
+```
+
+Transport response:
+
+```text
+TransportResponse(
+  status_code,
+  headers,
+  json_body
+)
+```
+
+Mock pipeline:
+
+```text
+run_mock_recent_search_pipeline(config, transport)
+```
+
+Flow:
+
+```text
+Query Builder
+-> Mock Transport
+-> Rate Limit Header Parser
+-> Response Normalizer
+-> BuzzFetchResult
+```
+
+Pipeline output:
+
+- `query`: the `RecentSearchQuery`
+- `transport_response`: mock HTTP-shaped response
+- `rate_limit`: parsed `RateLimitInfo`
+- `fetch_result`: normalized `BuzzFetchResult`
+- `debug_log`: credential-redacted local debug summary
+
+Fixture coverage:
+
+- `tests/fixtures/transport_success.json`
+- `tests/fixtures/transport_partial.json`
+- `tests/fixtures/transport_rate_limited.json`
+
+Credential leak protection:
+
+- The mock pipeline does not read API keys, bearer tokens, cookies, or `.env`.
+- Debug output records query length and status metadata, not raw config.
+- Leak tests check that `API_KEY`, `TOKEN`, `BEARER`, and `SECRET` do not appear
+  in debug logs or rendered CSV output.
+- Debug field names avoid credential words such as `token`.
+
+Dry-run gate:
+
+- `XApiBuzzReadClient(dry_run=False).fetch_posts(...)` raises `RuntimeError`.
+- `XApiBuzzReadClient().fetch_posts({"dry_run": false, ...})` also raises
+  `RuntimeError`.
+- Dry-run placeholder mode still raises `NotImplementedError` because live X API
+  collection is not implemented.
+
 Current tests:
 
 - config loading and default merging

@@ -1,0 +1,35 @@
+{
+  "status_code": 200,
+  "headers": {
+    "x-rate-limit-remaining": "8",
+    "x-rate-limit-reset": "1780186200"
+  },
+  "json_body": {
+    "data": [
+      {
+        "id": "3002",
+        "text": "Sunday night coffee before work.",
+        "created_at": "2026-05-31T01:00:00Z",
+        "author_id": "702",
+        "public_metrics": {
+          "like_count": 160,
+          "retweet_count": 14,
+          "reply_count": 7
+        }
+      }
+    ],
+    "includes": {
+      "users": [
+        {
+          "id": "702",
+          "username": "mock_daily"
+        }
+      ]
+    },
+    "meta": {
+      "result_count": 1,
+      "next_token": "partial-next-token",
+      "partial_result": true
+    }
+  }
+}
