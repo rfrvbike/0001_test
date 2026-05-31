@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+import csv
+import json
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from tools.mock_recent_search_pipeline import main as pipeline_cli_main
+from x_auto_ops.buzz_read_client import BuzzFetchResult, XApiBuzzReadClient
+from x_auto_ops.dry_run_recent_search_pipeline import (
+    load_mock_transport_fixture,
+    run_dry_run_recent_search_pipeline,
+)
+from x_auto_ops.mock_transport import (
+    MockRecentSearchTransport,
+    contains_sensitive_marker,
+)
+
+
+FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_fixture(name: str) -> dict:
+    return json.loads((FIXTURE_DIR / name).read_text(encoding="utf-8"))
+
+
+class DryRunRecentSearchPipelineTests(unittest.TestCase):
+    def test_x_api_read_client_uses_injected_mock_transport(self) -> None:
+        client = XApiBuzzReadClient(
+            transport=MockRecentSearchTransport(load_fixture("pipeline_success.json")),
+            dry_run=True,
+        )
+
+        result = client.fetch_posts(
+            {
+                "source_genre": "ai_side_business",
+                "search_queries": ["AI workflow"],
+                "exclude_keywords": ["giveaway"],
+            }
+        )
+
+        self.assertIsInstance(result, BuzzFetchResult)
+        self.assertEqual(len(result.posts), 2)
+        self.assertEqual(result.posts[0]["source_genre"], "ai_side_business")
+        self.assertFalse(result.rate_limited)
+
+    def test_success_pipeline_writes_csv_and_report_with_ranking(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "pipeline.csv"
+            report = Path(tmp) / "pipeline.md"
+
+            result = run_dry_run_recent_search_pipeline(
+                output_path=output,
+                report_path=report,
+                transport=load_mock_transport_fixture(FIXTURE_DIR / "pipeline_success.json"),
+                source_genre="ai_side_business",
+                dry_run=True,
+            )
+
+            with output.open(encoding="utf-8") as fh:
+                rows = list(csv.DictReader(fh))
+            report_text = report.read_text(encoding="utf-8")
+            output_exists = output.exists()
+            report_exists = report.exists()
+
+        self.assertEqual(len(result.fetch_result.posts), 2)
+        self.assertEqual(len(result.ranked_rows), 2)
+        self.assertTrue(output_exists)
+        self.assertTrue(report_exists)
+        self.assertEqual(rows[0]["detected_genre"], "ai_side_business")
+        self.assertEqual(rows[0]["rank_in_genre"], "1")
+        self.assertIn("Mock Recent Search Pipeline Report", report_text)
+        self.assertIn("Top Posts", report_text)
+
+    def test_partial_pipeline_preserves_next_token_and_metrics_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = run_dry_run_recent_search_pipeline(
+                output_path=Path(tmp) / "pipeline.csv",
+                report_path=Path(tmp) / "pipeline.md",
+                transport=load_mock_transport_fixture(FIXTURE_DIR / "pipeline_partial.json"),
+                source_genre="daily",
+                dry_run=True,
+            )
+
+        self.assertTrue(result.fetch_result.partial_result)
+        self.assertEqual(result.fetch_result.next_token, "pipeline-next-token")
+        self.assertIn("missing_impression_count", result.ranked_rows[0]["metrics_missing"])
+        self.assertEqual(result.ranked_rows[0]["detected_genre"], "daily")
+
+    def test_rate_limited_pipeline_preserves_retry_after(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = run_dry_run_recent_search_pipeline(
+                output_path=Path(tmp) / "pipeline.csv",
+                report_path=Path(tmp) / "pipeline.md",
+                transport=load_mock_transport_fixture(FIXTURE_DIR / "pipeline_rate_limited.json"),
+                source_genre="ai_side_business",
+                dry_run=True,
+            )
+
+        self.assertTrue(result.fetch_result.rate_limited)
+        self.assertEqual(result.fetch_result.retry_after_seconds, 240)
+        self.assertTrue(result.fetch_result.partial_result)
+        self.assertEqual(result.ranked_rows, [])
+
+    def test_credential_leak_regression_for_debug_report_csv_and_exception(self) -> None:
+        secret_config = {
+            "source_genre": "ai_side_business",
+            "search_queries": ["AI workflow"],
+            "api_key": "API_KEY_SHOULD_NOT_APPEAR",
+            "token": "TOKEN_SHOULD_NOT_APPEAR",
+            "bearer": "BEARER_SHOULD_NOT_APPEAR",
+            "secret": "SECRET_SHOULD_NOT_APPEAR",
+            "cookie": "COOKIE_SHOULD_NOT_APPEAR",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "pipeline.csv"
+            report = Path(tmp) / "pipeline.md"
+            transport = MockRecentSearchTransport(load_fixture("pipeline_success.json"))
+
+            result = run_dry_run_recent_search_pipeline(
+                output_path=output,
+                report_path=report,
+                transport=transport,
+                source_genre="ai_side_business",
+                dry_run=True,
+            )
+            csv_text = output.read_text(encoding="utf-8")
+            report_text = report.read_text(encoding="utf-8")
+
+        self.assertFalse(contains_sensitive_marker(result.debug_log), result.debug_log)
+        self.assertFalse(contains_sensitive_marker(report_text), report_text)
+        self.assertFalse(contains_sensitive_marker(csv_text), csv_text)
+
+        with self.assertRaises(RuntimeError) as ctx:
+            XApiBuzzReadClient(dry_run=False).fetch_posts(secret_config)
+        self.assertFalse(contains_sensitive_marker(str(ctx.exception)), str(ctx.exception))
+
+        with self.assertRaises(RuntimeError) as ctx:
+            run_dry_run_recent_search_pipeline(
+                transport=MockRecentSearchTransport(load_fixture("pipeline_success.json")),
+                dry_run=False,
+            )
+        self.assertFalse(contains_sensitive_marker(str(ctx.exception)), str(ctx.exception))
+
+    def test_cli_dry_run_pipeline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "pipeline.csv"
+            report = Path(tmp) / "pipeline.md"
+
+            exit_code = pipeline_cli_main(
+                [
+                    "--dry-run",
+                    "--fixture",
+                    str(FIXTURE_DIR / "pipeline_success.json"),
+                    "--output",
+                    str(output),
+                    "--report",
+                    str(report),
+                    "--genre",
+                    "ai_side_business",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+
+    def test_pipeline_generated_csv_is_gitignored(self) -> None:
+        ignored = subprocess.run(
+            [
+                "git",
+                "check-ignore",
+                "data/mock_recent_search_pipeline_posts.csv",
+                "data/mock_recent_search_pipeline_posts_20260531.csv",
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(ignored.returncode, 0, ignored.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

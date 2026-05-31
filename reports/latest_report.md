@@ -2955,3 +2955,165 @@ OK
 - Live HTTP transport is still not implemented.
 - Mock transport is not wired into CLI because this phase is test-only.
 - Real retry scheduling is still not implemented.
+## 2026-05-31 XApiBuzzReadClient Injection and Full Dry-run Pipeline
+
+Added dependency injection support to `XApiBuzzReadClient` and a complete
+mock-only dry-run recent-search pipeline. No real X API call, credential lookup,
+`.env` edit, or posting was performed.
+
+### Added Files
+
+- `x_auto_ops/dry_run_recent_search_pipeline.py`
+- `tools/mock_recent_search_pipeline.py`
+- `tests/test_dry_run_recent_search_pipeline.py`
+- `tests/fixtures/pipeline_success.json`
+- `tests/fixtures/pipeline_partial.json`
+- `tests/fixtures/pipeline_rate_limited.json`
+- `reports/mock_recent_search_pipeline_report.md`
+
+### Changed Files
+
+- `.gitignore`
+- `x_auto_ops/buzz_read_client.py`
+- `x_auto_ops/mock_transport.py`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Transport Injection Spec
+
+`XApiBuzzReadClient` now accepts an injected transport:
+
+```text
+XApiBuzzReadClient(transport=MockRecentSearchTransport(...), dry_run=True)
+```
+
+Behavior:
+
+- default transport is `None`
+- no default live HTTP transport exists
+- with no transport, dry-run placeholder mode raises `NotImplementedError`
+- with injected mock transport, `fetch_posts(config)` returns `BuzzFetchResult`
+- `dry_run=False` raises `RuntimeError` before transport execution
+
+### Transport Interface
+
+```text
+RecentSearchTransport.send_recent_search(query) -> TransportResponse
+```
+
+`MockRecentSearchTransport` implements the interface. A future live transport
+must implement the same method and remain injectable.
+
+### Dry-run Pipeline Spec
+
+Function:
+
+```text
+run_dry_run_recent_search_pipeline(...)
+```
+
+Flow:
+
+```text
+Query Builder
+-> XApiBuzzReadClient
+-> Mock Transport
+-> Header Parser
+-> Response Normalizer
+-> BuzzFetchResult
+-> Genre Detection
+-> Ranking
+-> CSV Export
+-> Report
+```
+
+Default outputs:
+
+- `data/mock_recent_search_pipeline_posts.csv`
+- `reports/mock_recent_search_pipeline_report.md`
+
+Generated CSV is gitignored.
+
+### CLI Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_recent_search_pipeline.py --dry-run
+```
+
+Result:
+
+```text
+DRY-RUN recent search pipeline complete.
+Fetched posts: 2
+Ranked posts: 2
+Rate limited: False
+Retry after seconds: None
+Partial result: False
+CSV: data\mock_recent_search_pipeline_posts.csv
+Report: reports\mock_recent_search_pipeline_report.md
+No X API call, credential lookup, .env edit, or posting was performed.
+```
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 187 tests
+OK
+```
+
+### Credential Leak Regression Test
+
+The test injects config values containing:
+
+- `API_KEY`
+- `TOKEN`
+- `BEARER`
+- `SECRET`
+- `COOKIE`
+
+Assertions:
+
+- markers do not appear in `debug_log`
+- markers do not appear in the pipeline report
+- markers do not appear in generated CSV
+- markers do not appear in dry-run gate exceptions
+
+### Dry-run Gate
+
+These paths are blocked:
+
+```text
+XApiBuzzReadClient(dry_run=False)
+run_dry_run_recent_search_pipeline(..., dry_run=False)
+```
+
+Both raise `RuntimeError` before any live transport can run.
+
+### Fixture List
+
+- `tests/fixtures/pipeline_success.json`
+- `tests/fixtures/pipeline_partial.json`
+- `tests/fixtures/pipeline_rate_limited.json`
+
+### Safety
+
+- Mock fixture transport only.
+- No live HTTP transport was added.
+- No `.env`, credential, real CSV, or personal data was added.
+- Generated pipeline CSV is gitignored.
+
+### Unresolved
+
+- Live HTTP transport remains unimplemented.
+- Real retry scheduling remains unimplemented.
+- CLI is dry-run only and requires `--dry-run`.

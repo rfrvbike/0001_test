@@ -144,7 +144,8 @@ class MockBuzzReadClient:
 class XApiBuzzReadClient:
     """Placeholder for a future approved X API read client."""
 
-    def __init__(self, *, dry_run: bool = True) -> None:
+    def __init__(self, *, transport: Any | None = None, dry_run: bool = True) -> None:
+        self.transport = transport
         self.dry_run = dry_run
 
     def fetch_posts(self, config: Any) -> BuzzFetchResult:
@@ -156,6 +157,31 @@ class XApiBuzzReadClient:
             raise RuntimeError(
                 "XApiBuzzReadClient live mode is blocked. Set dry_run=True and "
                 "use mock transport until real X API access is explicitly approved."
+            )
+        if self.transport is not None:
+            from x_auto_ops.query_builder import build_recent_search_query
+            from x_auto_ops.rate_limit_parser import parse_rate_limit_headers
+            from x_auto_ops.x_response_normalizer import normalize_recent_search_response
+
+            query = build_recent_search_query(config)
+            response = self.transport.send_recent_search(query.query)
+            rate_limit = parse_rate_limit_headers(
+                response.headers,
+                status_code=response.status_code,
+            )
+            normalized = normalize_recent_search_response(
+                response.json_body,
+                source_query=query.query,
+                source_genre=query.source_genre,
+                request_window="recent_search_dry_run",
+            )
+            return BuzzFetchResult(
+                posts=normalized.posts,
+                rate_limited=rate_limit.rate_limited or normalized.rate_limited,
+                retry_after_seconds=rate_limit.retry_after_seconds or normalized.retry_after_seconds,
+                partial_result=normalized.partial_result,
+                next_token=normalized.next_token,
+                request_window=normalized.request_window,
             )
         raise NotImplementedError(
             "X API buzz collection is not implemented. Use MockBuzzReadClient "

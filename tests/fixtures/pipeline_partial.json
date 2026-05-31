@@ -1,0 +1,36 @@
+{
+  "status_code": 200,
+  "headers": {
+    "x-rate-limit-remaining": "7",
+    "x-rate-limit-reset": "1780186200"
+  },
+  "json_body": {
+    "data": [
+      {
+        "id": "4101",
+        "text": "Sunday night coffee in a small room before work, a daily life habit with a small joke.",
+        "created_at": "2026-05-31T00:10:00Z",
+        "author_id": "811",
+        "public_metrics": {
+          "like_count": 300,
+          "retweet_count": 28,
+          "reply_count": 8,
+          "quote_count": 4
+        }
+      }
+    ],
+    "includes": {
+      "users": [
+        {
+          "id": "811",
+          "username": "pipeline_daily"
+        }
+      ]
+    },
+    "meta": {
+      "result_count": 1,
+      "next_token": "pipeline-next-token",
+      "partial_result": true
+    }
+  }
+}

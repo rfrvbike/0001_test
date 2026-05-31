@@ -10,7 +10,7 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, Protocol
 
 from x_auto_ops.buzz_read_client import BuzzFetchResult
 from x_auto_ops.query_builder import RecentSearchQuery, build_recent_search_query
@@ -18,7 +18,7 @@ from x_auto_ops.rate_limit_parser import RateLimitInfo, parse_rate_limit_headers
 from x_auto_ops.x_response_normalizer import normalize_recent_search_response
 
 
-SENSITIVE_MARKERS = ("API_KEY", "TOKEN", "BEARER", "SECRET")
+SENSITIVE_MARKERS = ("API_KEY", "TOKEN", "BEARER", "SECRET", "COOKIE")
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,11 @@ class TransportResponse:
     status_code: int
     headers: dict[str, str]
     json_body: dict[str, Any]
+
+
+class RecentSearchTransport(Protocol):
+    def send_recent_search(self, query: str) -> TransportResponse:
+        """Return an HTTP-shaped response for a recent-search query."""
 
 
 @dataclass(frozen=True)
@@ -114,7 +119,7 @@ def render_posts_csv_for_leak_test(posts: list[dict[str, Any]]) -> str:
     writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
     writer.writeheader()
     for row in posts:
-        writer.writerow({field: _redact(row.get(field, "")) for field in fields})
+        writer.writerow({field: redact_sensitive(row.get(field, "")) for field in fields})
     return output.getvalue()
 
 
@@ -124,10 +129,10 @@ def contains_sensitive_marker(value: str) -> bool:
 
 
 def _safe_debug_log(values: Mapping[str, Any]) -> str:
-    return " ".join(f"{key}={_redact(value)}" for key, value in values.items())
+    return " ".join(f"{key}={redact_sensitive(value)}" for key, value in values.items())
 
 
-def _redact(value: Any) -> str:
+def redact_sensitive(value: Any) -> str:
     text = str(value)
     for marker in SENSITIVE_MARKERS:
         text = text.replace(marker, "[REDACTED]")

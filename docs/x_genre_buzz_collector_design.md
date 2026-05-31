@@ -855,6 +855,101 @@ Dry-run gate:
 - Dry-run placeholder mode still raises `NotImplementedError` because live X API
   collection is not implemented.
 
+## Transport Injection and Full Dry-run Pipeline
+
+Implemented on 2026-05-31 with injected mock transport only. No X API request,
+credential lookup, `.env` read, or posting is performed.
+
+Transport injection:
+
+```text
+XApiBuzzReadClient(transport=MockRecentSearchTransport(...), dry_run=True)
+```
+
+Behavior:
+
+- `transport` is optional and injected from outside.
+- Without a transport, dry-run mode remains a placeholder and raises
+  `NotImplementedError`.
+- With an injected transport, `fetch_posts(config)` runs:
+  - `build_recent_search_query(config)`
+  - `transport.send_recent_search(query)`
+  - `parse_rate_limit_headers(...)`
+  - `normalize_recent_search_response(...)`
+  - returns `BuzzFetchResult`
+- `dry_run=False` always raises `RuntimeError` before any transport call.
+
+Transport interface:
+
+```text
+RecentSearchTransport.send_recent_search(query) -> TransportResponse
+```
+
+`MockRecentSearchTransport` implements this interface. A future live transport
+should implement the same method but must stay outside collector logic and must
+not be enabled without explicit approval.
+
+Full dry-run pipeline:
+
+```text
+x_auto_ops/dry_run_recent_search_pipeline.py
+run_dry_run_recent_search_pipeline(...)
+```
+
+Flow:
+
+```text
+Query Builder
+-> XApiBuzzReadClient
+-> Mock Transport
+-> Header Parser
+-> Response Normalizer
+-> BuzzFetchResult
+-> Genre Detection
+-> Ranking
+-> CSV Export
+-> Report
+```
+
+CLI:
+
+```text
+python tools/mock_recent_search_pipeline.py --dry-run
+```
+
+Default outputs:
+
+- `data/mock_recent_search_pipeline_posts.csv` (gitignored)
+- `reports/mock_recent_search_pipeline_report.md`
+
+Pipeline report includes:
+
+- query
+- source_genre
+- post_count
+- rate_limited
+- retry_after_seconds
+- partial_result
+- top_posts
+- metrics_missing summary
+
+Credential leak protection:
+
+- Regression tests inject `API_KEY`, `TOKEN`, `BEARER`, `SECRET`, and `COOKIE`
+  markers into config values.
+- Tests assert those markers do not appear in debug logs, reports, CSV output,
+  or dry-run gate exceptions.
+- Report output redacts sensitive markers before writing.
+- Debug output records query length and status metadata instead of raw config.
+
+Future live transport strategy:
+
+- Keep `XApiBuzzReadClient` dependent on an injected `RecentSearchTransport`.
+- Implement live HTTP only in a separate transport class.
+- Keep query building, header parsing, normalization, scoring, CSV, and reports
+  independent from credentials.
+- Add redacted request/response logging tests before enabling live reads.
+
 Current tests:
 
 - config loading and default merging

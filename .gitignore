@@ -9,6 +9,8 @@ logs/
 data/manual_account_posts.csv
 data/mock_buzz_posts.csv
 data/mock_buzz_posts_*.csv
+data/mock_recent_search_pipeline_posts.csv
+data/mock_recent_search_pipeline_posts_*.csv
 data/source_accounts.csv
 data/x_buzz_genres.json
 data/reference_posts/manual_reference_posts.csv
