@@ -1,0 +1,12 @@
+{
+  "name": "japan-stock-analyzer-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "server": "node server/index.js",
+    "start:server": "node server/index.js",
+    "start:frontend": "python -m http.server 4173 --bind 127.0.0.1",
+    "test": "node tests/stock-analyzer.test.js"
+  }
+}

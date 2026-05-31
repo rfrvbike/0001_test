@@ -3117,3 +3117,131 @@ Both raise `RuntimeError` before any live transport can run.
 - Live HTTP transport remains unimplemented.
 - Real retry scheduling remains unimplemented.
 - CLI is dry-run only and requires `--dry-run`.
+## 2026-06-01 J-Quants Stock Master Mock Foundation
+
+Added the mock-only foundation for future J-Quants listed-info/master import in
+the stock analyzer app. No real J-Quants API call, API key addition,
+credential storage, frontend direct J-Quants fetch, AI API call, or news API
+call was performed.
+
+### Added Files
+
+- `src/services/jquantsMasterService.js`
+
+Note: the stock analyzer frontend/backend files were still untracked in this
+workspace before this task. To make the pushed GitHub state runnable, the
+existing app foundation files under `src/`, `server/`, `stock-analyzer.html`,
+`package.json`, and `tests/stock-analyzer.test.js` were included with this
+commit. No real `.env` file was included.
+
+### Changed Files
+
+- `src/components/StockAnalyzer.js`
+- `src/components/StockMasterCsvPanel.js`
+- `src/services/stockMasterCsvService.js`
+- `tests/stock-analyzer.test.js`
+- `reports/latest_report.md`
+
+### Service
+
+`src/services/jquantsMasterService.js` provides:
+
+- `fetchMasterMock()`
+- `normalizeMasterData()`
+- `buildCsvFromMasterData()`
+- `buildMasterMockDryRun()`
+
+Mock sample rows:
+
+- `7203` トヨタ自動車
+- `6758` ソニーグループ
+- `8035` 東京エレクトロン
+- `9984` ソフトバンクグループ
+- `9434` ソフトバンク
+- `7011` 三菱重工業
+- `5803` フジクラ
+- `6861` キーエンス
+- `6098` リクルートHD
+
+### UI
+
+`StockMasterCsvPanel` now shows:
+
+- `J-Quants銘柄マスター取得（Mock）`
+- `J-Quants取得 Dry-run`
+- saved stock master count
+- source metadata such as `JQUANTS_MOCK`
+- dry-run fetched count, sample rows, and CSV count
+
+Existing CSV template download and CSV import controls remain in place.
+
+### Metadata
+
+`stockAnalyzer.stockMasterCsvMeta` now preserves:
+
+- `source: CSV_IMPORT`
+- `source: JQUANTS_MOCK`
+
+The generated mock rows can be saved into the current stock master state and
+used by company-name search candidates.
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe tests\stock-analyzer.test.js
+```
+
+Result:
+
+```text
+stock-analyzer backend foundation tests passed
+```
+
+Additional assertions:
+
+- `fetchMasterMock()`
+- `normalizeMasterData()`
+- `buildCsvFromMasterData()`
+- `buildMasterMockDryRun()`
+- `source=JQUANTS_MOCK`
+- CSV generation count is 9
+- dry-run result includes fetched count, sample rows, and CSV count
+- frontend service does not contain `fetch(`, `localStorage`, `JQUANTS_API_KEY`,
+  or `api.jquants`
+
+### Manual Browser Check
+
+URL:
+
+```text
+http://127.0.0.1:4173/stock-analyzer.html
+```
+
+Result:
+
+- page rendered
+- console error count: 0
+- `J-Quants銘柄マスター取得（Mock）` button present and visible
+- `J-Quants取得 Dry-run` button present and visible
+- stock master CSV file input remains present
+- template download button remains present
+- dry-run displayed fetched count and CSV count
+- mock fetch saved 9 rows and displayed `JQUANTS_MOCK`
+
+### Safety
+
+- no real J-Quants API connection
+- no API key addition
+- no localStorage API key storage
+- no frontend direct J-Quants fetch
+- no OpenAI / Claude / Gemini connection
+- no news API connection
+
+### Unresolved
+
+- Live J-Quants listed-info/master transport is not implemented.
+- Backend endpoint for live master refresh is not implemented.
+- Scheduled or cached master refresh is not implemented.
+- CSV download of the fetched mock master is not exposed as a button yet.
