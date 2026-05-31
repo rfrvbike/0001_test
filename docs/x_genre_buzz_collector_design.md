@@ -529,6 +529,119 @@ The mock collector now obtains posts through `MockBuzzReadClient` by default.
 The future X API client should implement the same `fetch_posts(config)` boundary
 without changing scoring, classification, ranking, CSV output, or reports.
 
+## Read Client Contract Finalized Before X API Connection
+
+Implemented on 2026-05-31 as a mock-only interface hardening step.
+
+`fetch_posts(config)` returns `BuzzFetchResult`:
+
+```text
+posts: list[dict]
+rate_limited: bool
+retry_after_seconds: int | None
+partial_result: bool
+next_token: str
+request_window: str
+```
+
+Each post dict must contain these stable keys:
+
+```text
+post_id
+author_id
+author_username
+text
+created_at
+like_count
+repost_count
+reply_count
+quote_count
+impression_count
+source_query
+source_genre
+fetched_at
+metrics_missing
+```
+
+Compatibility aliases are also emitted for the current mock collector:
+
+```text
+genre
+author
+likes
+reposts
+replies
+quotes
+```
+
+Nullable and missing data handling:
+
+- `impression_count` may be `None`.
+- missing `impression_count` is recorded in `metrics_missing`.
+- missing `author_id` / `author_username` is recorded in `metrics_missing`.
+- missing `quote_count` is treated as `0` and recorded in `metrics_missing`.
+- missing public metrics are treated as `0` so the collector can continue.
+
+Score source:
+
+- `score_source=impression_adjusted` when `impression_count` is available.
+- `score_source=engagement_fallback` when `impression_count` is missing.
+- fallback score uses likes, reposts, replies, and quotes only.
+- CSV now includes `impression_count`, `score_source`, and `metrics_missing`.
+
+Current score formula:
+
+```text
+base = like_count * likes_weight
+     + repost_count * reposts_weight
+     + reply_count * replies_weight
+     + quote_count * quotes_weight
+
+if impression_count exists:
+  buzz_score = base + impression_count * impressions_weight
+else:
+  buzz_score = base
+```
+
+Config additions:
+
+```json
+{
+  "search_queries": [],
+  "target_accounts": [],
+  "exclude_keywords": [],
+  "max_results_per_genre": 50,
+  "include_impressions_if_available": true,
+  "min_buzz_score": 0
+}
+```
+
+Rate-limit and pagination design:
+
+- `rate_limited`: true when a read client hit a limit.
+- `retry_after_seconds`: seconds to wait before retrying, from `Retry-After` or
+  computed from `x-rate-limit-reset` in a future live client.
+- `partial_result`: true when only part of the requested result set was
+  returned.
+- `next_token`: pagination cursor for continuing a query.
+- `request_window`: the current request window label, such as `15min`.
+
+X API notes checked against official docs on 2026-05-31:
+
+- public metrics can include reposts, likes, replies, quotes, and impressions
+  through `public_metrics`, but availability can depend on endpoint/access.
+- recent search is limited to a recent window and endpoint result limits.
+- `next_token` is used for pagination.
+- rate limit response headers include limit, remaining count, and reset time.
+- 429 responses should be handled with backoff/retry-after behavior.
+
+References:
+
+- https://docs.x.com/x-api/fundamentals/metrics
+- https://docs.x.com/x-api/fundamentals/rate-limits
+- https://docs.x.com/x-api/posts/search/quickstart/recent-search
+- https://docs.x.com/x-api/posts/search/integrate/paginate
+
 Current tests:
 
 - config loading and default merging

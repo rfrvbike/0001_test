@@ -11,12 +11,16 @@
     "min_reposts": 10,
     "min_replies": 0,
     "min_quotes": 0,
+    "min_buzz_score": 0,
     "days_back": 7,
+    "max_results_per_genre": 100,
+    "include_impressions_if_available": true,
     "score_weights": {
       "likes": 1,
       "reposts": 3,
       "replies": 2,
-      "quotes": 2
+      "quotes": 2,
+      "impressions": 0.01
     }
   },
   "genres": [
@@ -24,6 +28,12 @@
       "id": "yokaze",
       "label": "yokaze",
       "keywords": ["night", "feeling", "relationship"],
+      "search_queries": ["night relationship lonely", "hurt woman quiet support"],
+      "target_accounts": [],
+      "exclude_keywords": ["giveaway", "campaign"],
+      "max_results_per_genre": 50,
+      "include_impressions_if_available": true,
+      "min_buzz_score": 500,
       "detection_keywords": [
         "night",
         "hurt",
@@ -48,6 +58,12 @@
       "id": "ai_side_business",
       "label": "AI side business",
       "keywords": ["ai", "side business", "automation"],
+      "search_queries": ["AI side business automation", "non-engineer AI workflow"],
+      "target_accounts": [],
+      "exclude_keywords": ["crypto giveaway"],
+      "max_results_per_genre": 50,
+      "include_impressions_if_available": true,
+      "min_buzz_score": 350,
       "detection_keywords": [
         "ai",
         "side business",
@@ -72,6 +88,12 @@
       "id": "daily",
       "label": "daily",
       "keywords": ["daily", "habit", "life"],
+      "search_queries": ["daily coffee before work", "sunday night room"],
+      "target_accounts": [],
+      "exclude_keywords": ["ad", "giveaway"],
+      "max_results_per_genre": 50,
+      "include_impressions_if_available": true,
+      "min_buzz_score": 150,
       "detection_keywords": [
         "daily",
         "coffee",

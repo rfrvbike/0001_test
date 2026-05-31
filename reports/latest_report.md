@@ -2418,3 +2418,158 @@ OK
 - No live X API read path exists yet.
 - Tie-break behavior is deterministic, but business priority should be reviewed
   before live use.
+## 2026-05-31 Buzz Read Client Contract Finalization
+
+Finalized the pre-X-API read client contract for the genre buzz collector. This
+was mock/dry-run only. No real X API call, API key lookup, token lookup, cookie
+access, `.env` edit, or posting was performed.
+
+### Changed Files
+
+- `data/x_buzz_genres.json.example`
+- `x_auto_ops/buzz_read_client.py`
+- `x_auto_ops/mock_buzz_collector.py`
+- `tests/test_mock_buzz_collector.py`
+- `reports/mock_buzz_report.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Fetch Contract
+
+`fetch_posts(config)` now returns `BuzzFetchResult`:
+
+```text
+posts
+rate_limited
+retry_after_seconds
+partial_result
+next_token
+request_window
+```
+
+Each post dict has stable keys:
+
+```text
+post_id, author_id, author_username, text, created_at,
+like_count, repost_count, reply_count, quote_count,
+impression_count, source_query, source_genre, fetched_at
+```
+
+Compatibility aliases remain available:
+
+```text
+genre, author, likes, reposts, replies, quotes
+```
+
+### Missing Metrics Handling
+
+- `impression_count` can be `None`.
+- missing `impression_count` is recorded in `metrics_missing`.
+- missing `author_id` / `author_username` is recorded in `metrics_missing`.
+- missing `quote_count` is treated as `0` and recorded in `metrics_missing`.
+- missing public metrics are treated as `0` so the collector keeps running.
+
+### Score Source
+
+- `score_source=impression_adjusted` when `impression_count` is present.
+- `score_source=engagement_fallback` when `impression_count` is missing.
+- CSV now includes:
+  - `impression_count`
+  - `score_source`
+  - `metrics_missing`
+
+### Rate Limit Design
+
+`BuzzFetchResult` carries:
+
+- `rate_limited`
+- `retry_after_seconds`
+- `partial_result`
+- `next_token`
+- `request_window`
+
+The mock client can simulate these fields. The `XApiBuzzReadClient` placeholder
+still raises `NotImplementedError` and does not call any external API.
+
+### Config Updates
+
+Added to `data/x_buzz_genres.json.example`:
+
+- `search_queries`
+- `target_accounts`
+- `exclude_keywords`
+- `max_results_per_genre`
+- `include_impressions_if_available`
+- `min_buzz_score`
+- `score_weights.impressions`
+
+### X API Design Notes
+
+Official docs checked on 2026-05-31:
+
+- https://docs.x.com/x-api/fundamentals/metrics
+- https://docs.x.com/x-api/fundamentals/rate-limits
+- https://docs.x.com/x-api/posts/search/quickstart/recent-search
+- https://docs.x.com/x-api/posts/search/integrate/paginate
+
+Design assumptions:
+
+- `public_metrics` may include likes, reposts, replies, quotes, and impressions.
+- recent search may be limited by plan, recent time window, max results, and
+  query length.
+- pagination should use `next_token`.
+- rate limits should preserve reset/retry-after state.
+- if impressions are unavailable, use engagement fallback score.
+
+### CLI Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_buzz_collector.py --dry-run
+```
+
+Result:
+
+```text
+DRY-RUN mock buzz collection complete.
+Generated mock posts: 15
+Filtered posts: 9
+CSV: data\mock_buzz_posts.csv
+Report: reports\mock_buzz_report.md
+No X API call, token access, .env edit, or posting was performed.
+```
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest tests.test_mock_buzz_collector -v
+```
+
+Result:
+
+```text
+Ran 25 tests
+OK
+```
+
+Full discovery command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 158 tests
+OK
+```
+
+### Unresolved
+
+- `XApiBuzzReadClient` is still only a placeholder.
+- The exact live mapping from X response JSON to `BuzzPost` is not implemented.
+- Real rate-limit header parsing is not implemented.

@@ -9,9 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tools.mock_buzz_collector import main as mock_buzz_cli_main
-from x_auto_ops.buzz_read_client import MockBuzzReadClient, XApiBuzzReadClient
+from x_auto_ops.buzz_read_client import BuzzFetchResult, BuzzPost, MockBuzzReadClient, XApiBuzzReadClient
 from x_auto_ops.mock_buzz_collector import (
     CSV_FIELDS,
+    calculate_buzz_score,
     calculate_score,
     collect_mock_buzz_posts,
     detect_genre,
@@ -35,30 +36,52 @@ def write_config(path: Path) -> None:
                     "min_reposts": 10,
                     "min_replies": 1,
                     "min_quotes": 0,
+                    "min_buzz_score": 0,
                     "days_back": 7,
+                    "max_results_per_genre": 100,
+                    "include_impressions_if_available": True,
                     "score_weights": {
                         "likes": 1,
                         "reposts": 3,
                         "replies": 2,
                         "quotes": 2,
+                        "impressions": 0.01,
                     },
                 },
                 "genres": [
                     {
                         "id": "yokaze",
                         "keywords": ["night"],
+                        "search_queries": ["night relationship"],
+                        "target_accounts": [],
+                        "exclude_keywords": ["giveaway"],
+                        "max_results_per_genre": 50,
+                        "include_impressions_if_available": True,
+                        "min_buzz_score": 0,
                         "detection_keywords": ["night", "hurt", "relationship", "lonely"],
                         "min_likes": 200,
                     },
                     {
                         "id": "ai_side_business",
                         "keywords": ["ai"],
+                        "search_queries": ["ai side business"],
+                        "target_accounts": [],
+                        "exclude_keywords": [],
+                        "max_results_per_genre": 50,
+                        "include_impressions_if_available": True,
+                        "min_buzz_score": 0,
                         "detection_keywords": ["ai", "side business", "automation", "paper"],
                         "min_reposts": 20,
                     },
                     {
                         "id": "daily",
                         "keywords": ["daily"],
+                        "search_queries": ["daily coffee"],
+                        "target_accounts": [],
+                        "exclude_keywords": [],
+                        "max_results_per_genre": 50,
+                        "include_impressions_if_available": True,
+                        "min_buzz_score": 0,
                         "detection_keywords": ["daily", "coffee", "sunday night", "room"],
                         "days_back": 3,
                     },
@@ -112,6 +135,8 @@ class MockBuzzCollectorTests(unittest.TestCase):
         self.assertIn("relationship", genres[0].detection_keywords)
         self.assertEqual(genres[0].min_genre_score, 1)
         self.assertEqual(genres[0].tie_break_priority[0], "yokaze")
+        self.assertEqual(genres[0].search_queries[0], "night relationship")
+        self.assertEqual(genres[0].max_results_per_genre, 50)
 
     def test_calculate_score_uses_weights(self) -> None:
         post = {"likes": 10, "reposts": 3, "replies": 4, "quotes": 5}
@@ -121,6 +146,34 @@ class MockBuzzCollectorTests(unittest.TestCase):
             calculate_score(post, {"likes": 1, "reposts": 10, "replies": 0, "quotes": 0}),
             40,
         )
+
+    def test_calculate_buzz_score_uses_impressions_when_available(self) -> None:
+        post = {
+            "like_count": 10,
+            "repost_count": 3,
+            "reply_count": 4,
+            "quote_count": 5,
+            "impression_count": 1000,
+        }
+
+        score, score_source = calculate_buzz_score(post)
+
+        self.assertEqual(score_source, "impression_adjusted")
+        self.assertEqual(score, 47)
+
+    def test_calculate_buzz_score_falls_back_without_impressions(self) -> None:
+        post = {
+            "like_count": 10,
+            "repost_count": 3,
+            "reply_count": 4,
+            "quote_count": 5,
+            "impression_count": None,
+        }
+
+        score, score_source = calculate_buzz_score(post)
+
+        self.assertEqual(score_source, "engagement_fallback")
+        self.assertEqual(score, 37)
 
     def test_filter_posts_applies_thresholds_and_days_back(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -273,7 +326,10 @@ class MockBuzzCollectorTests(unittest.TestCase):
                         "reposts": 2,
                         "replies": 3,
                         "quotes": 4,
+                        "impression_count": None,
                         "score": 25,
+                        "score_source": "engagement_fallback",
+                        "metrics_missing": "impression_count",
                         "detected_genre": "daily",
                         "genre_score": 1,
                         "genre_reason": "matched: daily",
@@ -291,6 +347,9 @@ class MockBuzzCollectorTests(unittest.TestCase):
         self.assertEqual(reader.fieldnames, CSV_FIELDS)
         self.assertEqual(rows[0]["post_id"], "p1")
         self.assertEqual(rows[0]["detected_genre"], "daily")
+        self.assertIn("impression_count", reader.fieldnames or [])
+        self.assertIn("score_source", reader.fieldnames or [])
+        self.assertIn("metrics_missing", reader.fieldnames or [])
 
     def test_collect_mock_buzz_posts_writes_csv_and_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -352,8 +411,100 @@ class MockBuzzCollectorTests(unittest.TestCase):
 
             posts = client.fetch_posts(genres)
 
-        self.assertEqual(len(posts), 15)
-        self.assertIn("post_id", posts[0])
+        self.assertIsInstance(posts, BuzzFetchResult)
+        self.assertEqual(len(posts.posts), 15)
+        self.assertIn("post_id", posts.posts[0])
+
+    def test_fetch_posts_return_shape_is_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "genres.json"
+            write_config(config)
+            genres = load_genre_config(config)
+            client = MockBuzzReadClient(
+                post_factory=generate_mock_posts,
+                now=datetime(2026, 5, 30, tzinfo=timezone.utc),
+            )
+
+            result = client.fetch_posts(genres)
+
+        required = {
+            "post_id",
+            "author_id",
+            "author_username",
+            "text",
+            "created_at",
+            "like_count",
+            "repost_count",
+            "reply_count",
+            "quote_count",
+            "impression_count",
+            "source_query",
+            "source_genre",
+            "fetched_at",
+        }
+        self.assertTrue(required.issubset(result.posts[0].keys()))
+
+    def test_missing_author_and_quote_metrics_are_recorded(self) -> None:
+        row = BuzzPost.from_mapping(
+            {
+                "post_id": "missing",
+                "text": "missing fields",
+                "created_at": "2026-05-31T00:00:00+00:00",
+                "like_count": 1,
+                "repost_count": 0,
+                "reply_count": 0,
+                "quote_count": None,
+                "source_genre": "unknown",
+            }
+        ).as_dict()
+
+        self.assertIn("author_id", row["metrics_missing"])
+        self.assertIn("author_username", row["metrics_missing"])
+        self.assertIn("quote_count", row["metrics_missing"])
+
+    def test_mock_read_client_can_represent_rate_limit_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "genres.json"
+            write_config(config)
+            genres = load_genre_config(config)
+            client = MockBuzzReadClient(
+                post_factory=generate_mock_posts,
+                now=datetime(2026, 5, 30, tzinfo=timezone.utc),
+                rate_limited=True,
+                retry_after_seconds=900,
+                partial_result=True,
+                next_token="next-page",
+                request_window="15min",
+            )
+
+            result = client.fetch_posts(genres)
+
+        self.assertTrue(result.rate_limited)
+        self.assertEqual(result.retry_after_seconds, 900)
+        self.assertTrue(result.partial_result)
+        self.assertEqual(result.next_token, "next-page")
+        self.assertEqual(result.request_window, "15min")
+
+    def test_impression_count_none_does_not_crash_collector(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "genres.json"
+            output = Path(tmp) / "mock_buzz_posts.csv"
+            report = Path(tmp) / "mock_buzz_report.md"
+            write_config(config)
+
+            collect_mock_buzz_posts(
+                config_path=config,
+                output_path=output,
+                report_path=report,
+                dry_run=True,
+                now=datetime(2026, 5, 30, tzinfo=timezone.utc),
+            )
+
+            with output.open(encoding="utf-8") as fh:
+                rows = list(csv.DictReader(fh))
+
+        self.assertIn("engagement_fallback", {row["score_source"] for row in rows})
+        self.assertTrue(any("impression_count" in row["metrics_missing"] for row in rows))
 
     def test_x_api_buzz_read_client_placeholder_errors_without_api_call(self) -> None:
         with self.assertRaises(NotImplementedError):

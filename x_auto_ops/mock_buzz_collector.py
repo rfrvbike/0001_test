@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from x_auto_ops.buzz_read_client import BuzzReadClient, MockBuzzReadClient
+from x_auto_ops.buzz_read_client import BuzzFetchResult, BuzzReadClient, MockBuzzReadClient
 
 
 DEFAULT_CONFIG_PATH = Path("data/x_buzz_genres.json.example")
@@ -31,7 +31,10 @@ CSV_FIELDS = [
     "reposts",
     "replies",
     "quotes",
+    "impression_count",
     "score",
+    "score_source",
+    "metrics_missing",
     "detected_genre",
     "genre_score",
     "genre_reason",
@@ -45,6 +48,7 @@ DEFAULT_SCORE_WEIGHTS = {
     "reposts": 3,
     "replies": 2,
     "quotes": 2,
+    "impressions": 0.01,
 }
 
 
@@ -58,7 +62,13 @@ class GenreConfig:
     min_reposts: int
     min_replies: int
     min_quotes: int
+    min_buzz_score: int
     days_back: int
+    max_results_per_genre: int
+    include_impressions_if_available: bool
+    search_queries: tuple[str, ...]
+    target_accounts: tuple[str, ...]
+    exclude_keywords: tuple[str, ...]
     score_weights: dict[str, int]
     min_genre_score: int
     tie_break_priority: tuple[str, ...]
@@ -126,7 +136,20 @@ def load_buzz_collection_config(path: str | Path = DEFAULT_CONFIG_PATH) -> BuzzC
                 min_reposts=_int(row.get("min_reposts", defaults.get("min_reposts", 0))),
                 min_replies=_int(row.get("min_replies", defaults.get("min_replies", 0))),
                 min_quotes=_int(row.get("min_quotes", defaults.get("min_quotes", 0))),
+                min_buzz_score=_int(row.get("min_buzz_score", defaults.get("min_buzz_score", 0))),
                 days_back=_int(row.get("days_back", defaults.get("days_back", 7))),
+                max_results_per_genre=_int(
+                    row.get("max_results_per_genre", defaults.get("max_results_per_genre", 100))
+                ),
+                include_impressions_if_available=bool(
+                    row.get(
+                        "include_impressions_if_available",
+                        defaults.get("include_impressions_if_available", True),
+                    )
+                ),
+                search_queries=_tuple(row.get("search_queries", keywords)),
+                target_accounts=_tuple(row.get("target_accounts", [])),
+                exclude_keywords=_tuple(row.get("exclude_keywords", [])),
                 score_weights={
                     **default_weights,
                     **dict(row.get("score_weights") or {}),
@@ -149,7 +172,13 @@ def load_buzz_collection_config(path: str | Path = DEFAULT_CONFIG_PATH) -> BuzzC
                 min_reposts=genre.min_reposts,
                 min_replies=genre.min_replies,
                 min_quotes=genre.min_quotes,
+                min_buzz_score=genre.min_buzz_score,
                 days_back=genre.days_back,
+                max_results_per_genre=genre.max_results_per_genre,
+                include_impressions_if_available=genre.include_impressions_if_available,
+                search_queries=genre.search_queries,
+                target_accounts=genre.target_accounts,
+                exclude_keywords=genre.exclude_keywords,
                 score_weights=genre.score_weights,
                 min_genre_score=genre.min_genre_score,
                 tie_break_priority=tie_break_priority,
@@ -160,13 +189,22 @@ def load_buzz_collection_config(path: str | Path = DEFAULT_CONFIG_PATH) -> BuzzC
 
 
 def calculate_score(post: Mapping[str, Any], weights: Mapping[str, int] | None = None) -> int:
+    return calculate_buzz_score(post, weights)[0]
+
+
+def calculate_buzz_score(post: Mapping[str, Any], weights: Mapping[str, int] | None = None) -> tuple[int, str]:
     active_weights = weights or DEFAULT_SCORE_WEIGHTS
-    return (
-        _int(post.get("likes")) * _int(active_weights.get("likes", 1))
-        + _int(post.get("reposts")) * _int(active_weights.get("reposts", 3))
-        + _int(post.get("replies")) * _int(active_weights.get("replies", 2))
-        + _int(post.get("quotes")) * _int(active_weights.get("quotes", 2))
+    base_score = (
+        _int(post.get("like_count", post.get("likes"))) * _number(active_weights.get("likes", 1))
+        + _int(post.get("repost_count", post.get("reposts"))) * _number(active_weights.get("reposts", 3))
+        + _int(post.get("reply_count", post.get("replies"))) * _number(active_weights.get("replies", 2))
+        + _int(post.get("quote_count", post.get("quotes"))) * _number(active_weights.get("quotes", 2))
     )
+    impression_count = _nullable_int(post.get("impression_count"))
+    if impression_count is None:
+        return int(round(base_score)), "engagement_fallback"
+    score = base_score + impression_count * _number(active_weights.get("impressions", 0))
+    return int(round(score)), "impression_adjusted"
 
 
 def detect_genre(text: str, genres: Iterable[GenreConfig]) -> GenreDetection:
@@ -282,6 +320,12 @@ def generate_mock_posts(genres: Iterable[GenreConfig], now: datetime | None = No
                     "reposts": sample["reposts"],
                     "replies": sample["replies"],
                     "quotes": sample["quotes"],
+                    "impression_count": _mock_impression_count(str(sample["suffix"]), int(sample["likes"])),
+                    "author_id": f"mock_author_id_{genre_index + 1}",
+                    "author_username": f"mock_author_{genre_index + 1}",
+                    "source_query": genre.search_queries[0] if genre.search_queries else keyword,
+                    "source_genre": genre.id,
+                    "fetched_at": base_now.isoformat(timespec="seconds"),
                     "created_at": created_at.isoformat(timespec="seconds"),
                 }
             )
@@ -321,8 +365,12 @@ def filter_posts(
                 continue
         row = dict(post)
         weights = genre.score_weights if genre is not None else DEFAULT_SCORE_WEIGHTS
-        buzz_score = calculate_score(row, weights)
+        buzz_score, score_source = calculate_buzz_score(row, weights)
+        if genre is not None and buzz_score < genre.min_buzz_score:
+            continue
         row["score"] = buzz_score
+        row["score_source"] = score_source
+        row["metrics_missing"] = _metrics_missing(row)
         row["detected_genre"] = detection.genre
         row["genre_score"] = detection.score
         row["genre_reason"] = detection.reason
@@ -427,7 +475,8 @@ def collect_mock_buzz_posts(
     if genre_filter and genre_filter not in {genre.id for genre in genres}:
         raise ValueError(f"unknown genre filter: {genre_filter}")
     client = read_client or MockBuzzReadClient(post_factory=generate_mock_posts, now=now)
-    generated = client.fetch_posts(config)
+    fetch_result = client.fetch_posts(config)
+    generated = _fetch_posts(fetch_result)
     filtered = filter_posts(generated, genres, now=now, genre_filter=genre_filter)
     output = write_posts_csv(output_path, filtered)
     report = write_report(report_path, filtered, genres)
@@ -445,6 +494,26 @@ def _int(value: Any) -> int:
         return int(str(value or "0"))
     except ValueError:
         return 0
+
+
+def _number(value: Any) -> float:
+    try:
+        return float(str(value or "0"))
+    except ValueError:
+        return 0.0
+
+
+def _nullable_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(str(value).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _tuple(values: Any) -> tuple[str, ...]:
+    return tuple(str(item).strip() for item in values or [] if str(item).strip())
 
 
 def _parse_datetime(value: str) -> datetime | None:
@@ -479,6 +548,28 @@ def _max_days_back(genres: Iterable[GenreConfig]) -> int:
     return max(values)
 
 
+def _fetch_posts(fetch_result: BuzzFetchResult | list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if isinstance(fetch_result, BuzzFetchResult):
+        return fetch_result.posts
+    return fetch_result
+
+
+def _metrics_missing(row: Mapping[str, Any]) -> str:
+    explicit = str(row.get("metrics_missing") or "")
+    values = [item.strip() for item in explicit.split("|") if item.strip()]
+    if _nullable_int(row.get("impression_count")) is None and "impression_count" not in values:
+        values.append("impression_count")
+    if "quote_count" in row and row.get("quote_count") in {None, ""} and "quote_count" not in values:
+        values.append("quote_count")
+    return "|".join(values)
+
+
+def _mock_impression_count(suffix: str, likes: int) -> int | None:
+    if suffix == "steady":
+        return None
+    return likes * 25
+
+
 def _mixed_mock_posts(base_now: datetime) -> list[dict[str, Any]]:
     return [
         {
@@ -493,6 +584,12 @@ def _mixed_mock_posts(base_now: datetime) -> list[dict[str, Any]]:
             "reposts": 44,
             "replies": 15,
             "quotes": 10,
+            "impression_count": 32000,
+            "author_id": "mock_author_mixed_id",
+            "author_username": "mock_author_mixed",
+            "source_query": "night relationship ai automation",
+            "source_genre": "mixed",
+            "fetched_at": base_now.isoformat(timespec="seconds"),
             "created_at": (base_now - timedelta(days=1, hours=5)).isoformat(timespec="seconds"),
         },
         {
@@ -507,6 +604,13 @@ def _mixed_mock_posts(base_now: datetime) -> list[dict[str, Any]]:
             "reposts": 45,
             "replies": 12,
             "quotes": 8,
+            "impression_count": None,
+            "metrics_missing": "impression_count",
+            "author_id": "mock_author_mixed_id",
+            "author_username": "mock_author_mixed",
+            "source_query": "coffee ai workflow",
+            "source_genre": "mixed",
+            "fetched_at": base_now.isoformat(timespec="seconds"),
             "created_at": (base_now - timedelta(days=1, hours=6)).isoformat(timespec="seconds"),
         },
         {
@@ -518,6 +622,13 @@ def _mixed_mock_posts(base_now: datetime) -> list[dict[str, Any]]:
             "reposts": 22,
             "replies": 8,
             "quotes": 6,
+            "impression_count": None,
+            "metrics_missing": "impression_count",
+            "author_id": "",
+            "author_username": "",
+            "source_query": "unknown mock query",
+            "source_genre": "unknown_seed",
+            "fetched_at": base_now.isoformat(timespec="seconds"),
             "created_at": (base_now - timedelta(days=1, hours=7)).isoformat(timespec="seconds"),
         },
     ]
