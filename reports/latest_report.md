@@ -3748,3 +3748,92 @@ Result:
 - Differential update provider is not implemented.
 - The in-app Browser blank-root issue should be rechecked separately before a
   visual UI release.
+
+## 2026-06-02 Blank-root Triage
+
+### Purpose
+
+Investigate the in-app Browser blank-root symptom where
+`http://127.0.0.1:4173/stock-analyzer.html` loaded the page title but the app
+root appeared empty during a prior check.
+
+### Root Cause
+
+The likely failure mode was the static module import in `src/main.js`.
+With a static import, an import/export error in any dependency can prevent the
+main module body from running at all. In that state, `#app` remains empty and the
+page can appear as a blank root. This matches the earlier class of issue where a
+component imported a missing formatter export.
+
+### Fix
+
+- Changed `src/main.js` to render a visible loading state before loading the app.
+- Changed the StockAnalyzer module load to a guarded dynamic import.
+- Added visible mount failure UI if initialization fails.
+- Added `data-app-mounted="true|false"` to the app root for smoke checks.
+- Added small boot/error styles in `src/styles.css`.
+- Added static blank-root smoke assertions to `tests/stock-analyzer.test.js`.
+
+### Verification
+
+Commands:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe --input-type=module -e "await import('./src/components/StockAnalyzer.js'); await import('./src/components/StockMasterCsvPanel.js'); console.log('component imports ok');"
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe tests\stock-analyzer.test.js
+```
+
+Results:
+
+```text
+component imports ok
+stock-analyzer backend foundation tests passed
+```
+
+### Browser Check
+
+URL:
+
+```text
+http://127.0.0.1:4173/stock-analyzer.html
+```
+
+Observed in in-app Browser:
+
+- title: `AI株分析アプリ`
+- `#app` exists
+- `#app` child count: `1`
+- `#app` text length: `705` on initial render
+- `data-app-mounted`: `true`
+- `#analyzeBtn`: present
+- `#fetchJquantsMasterMockBtn`: present
+- `#dryRunJquantsMasterBtn`: present
+- `#downloadStockMasterTemplateBtn`: present
+- console error count: `0`
+
+Dry-run interaction:
+
+- Opened the CSV/save-data collapsible section.
+- Clicked `J-Quants取得 Dry-run`.
+- `#app` remained mounted.
+- Dry-run result included `JQUANTS_MOCK` and count `9`.
+- console error count remained `0`.
+
+### Safety
+
+- no real J-Quants API connection
+- no API key reference added
+- no token reference added
+- no `.env` change
+- no OpenAI / Claude / Gemini connection
+- no news API connection
+- no score logic change
+- no master-sync endpoint behavior change
+
+### Remaining Notes
+
+- The blank-root symptom did not reproduce after the guard change.
+- The app now shows a visible initialization error instead of leaving `#app`
+  empty if a future module import fails.
+- Full browser network inspection is still limited by the in-app Browser API,
+  but DOM, console, root mount, and UI button smoke checks passed.
