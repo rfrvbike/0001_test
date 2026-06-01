@@ -1060,3 +1060,34 @@ Disallowed responsibility:
 
 Before live connection, tests must continue to prove that credentials cannot
 appear in report, CSV, debug log, or exception output.
+
+## LiveRecentSearchTransport Implementation Review
+
+Added on 2026-06-02 as a design-only review before any live X API connection.
+See `docs/live_recent_search_transport_review.md` for the full checklist, field
+matrix, pagination review, rate-limit review, credential-loader policy, gap
+analysis, and risk list.
+
+Review outcome:
+
+- Do not enable HTTP in the next step.
+- Keep `XApiBuzzReadClient` fail-closed for `dry_run=False`.
+- Add a future live transport only behind explicit live approval.
+- Keep Query Builder, Header Parser, Response Normalizer, Retry Queue,
+  redaction, scoring, CSV, and report generation separated.
+- Treat `impression_count` as nullable and preserve the engagement-only fallback
+  score path.
+- Preserve `next_token`, `request_window`, and `partial_result` so pagination
+  and rate-limit interruptions are visible to downstream code.
+- Keep credentials backend-only and absent from frontend code, logs, reports,
+  CSV, exceptions, fixtures, and debug output.
+
+Current gaps before live transport:
+
+- live transport class remains intentionally missing
+- backend-only credential loader remains intentionally missing
+- HTTP client and timeout/error mapping remain intentionally missing
+- endpoint-specific header mapping must be verified against the selected X API
+  plan
+- pagination controller must be implemented outside the transport
+- `max_retry_count` policy must be added to the controller layer

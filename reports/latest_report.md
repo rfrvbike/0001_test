@@ -1,5 +1,126 @@
 # latest_report.md
 
+## 2026-06-02 LiveRecentSearchTransport Implementation Review
+
+Completed a design-only pre-implementation review for the future X recent-search
+live transport. No X API call, HTTP request, API key lookup, token lookup,
+cookie access, `.env` edit, or posting was performed.
+
+### Added Document
+
+- `docs/live_recent_search_transport_review.md`
+
+### Changed Documents
+
+- `docs/live_recent_search_transport.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Checklist Summary
+
+The review fixes the future transport boundary:
+
+- accept only a query built by Query Builder
+- return `TransportResponse(status_code, headers, json_body)`
+- preserve rate-limit headers for Header Parser
+- preserve response JSON for Response Normalizer
+- keep retry scheduling outside the transport
+- keep genre detection, scoring, CSV, and report writing outside the transport
+- keep dry-run and live-mode gates fail-closed
+- redact transport debug output and exceptions
+
+### Field Review
+
+The reviewed common fields are:
+
+- `post_id`
+- `text`
+- `created_at`
+- `author_id`
+- `author_username`
+- `like_count`
+- `repost_count`
+- `reply_count`
+- `quote_count`
+- `impression_count`
+
+`impression_count` remains nullable. Missing metrics continue to use
+`metrics_missing`, and scoring keeps the engagement-only fallback when
+impressions are absent.
+
+### Pagination Policy
+
+Pagination remains outside the transport:
+
+- preserve `next_token`
+- respect configured `max_results_per_genre`
+- keep `request_window`
+- set `partial_result=True` when a rate limit, timeout, or incomplete upstream
+  response interrupts collection
+
+### Rate Limit Policy
+
+Rate-limit handling remains controller/queue-driven:
+
+- prefer `Retry-After`
+- fall back to `x-rate-limit-reset`
+- preserve remaining request count for diagnostics
+- enqueue retry tasks instead of sleeping inside the transport
+- add future `max_retry_count` in the controller layer
+
+### Gap Analysis
+
+Already in place:
+
+- Query Builder
+- RecentSearchTransport interface
+- MockRecentSearchTransport
+- Header Parser
+- Response Normalizer
+- BuzzFetchResult
+- Redaction Utility
+- Retry Queue mock
+- Dry-run Gate
+
+Still intentionally missing:
+
+- LiveRecentSearchTransport implementation
+- backend-only credential loader
+- HTTP client
+- endpoint-specific header mapping validation
+- pagination controller
+- controller-level `max_retry_count`
+
+### Verification
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 190 tests
+OK
+```
+
+### Safety
+
+- No real X API call was made.
+- No HTTP communication was added.
+- No credential lookup was added.
+- No `.env` change was made.
+- No posting behavior was added.
+- Generated CSV and local config files remain excluded from the commit.
+
+### Implementation Gate
+
+The next code step should still be mock-first: add a disabled live transport
+skeleton and fake-value credential loader tests before any live request path is
+allowed.
+
 ## 2026-06-02 Live Transport Spec, Redaction, and Retry Queue
 
 Added the mock-only safety layer for the future X recent-search read path. No

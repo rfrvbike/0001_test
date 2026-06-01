@@ -135,3 +135,25 @@ The current mock implementation redacts:
 
 Any output still containing those markers must fail tests before live transport
 work can proceed.
+
+## Pre-implementation Review
+
+The implementation review is recorded in
+`docs/live_recent_search_transport_review.md`. It confirms that live transport
+work must not start by enabling HTTP. The next code step should be a disabled
+transport skeleton plus fake-value tests only.
+
+Review conclusions:
+
+- `LiveRecentSearchTransport` must only handle read-only recent-search HTTP
+  transport when an explicit live gate is approved.
+- Query construction, genre detection, scoring, CSV writing, reporting, and
+  retry scheduling remain outside the transport.
+- `impression_count` must remain nullable and scoring must keep the
+  engagement-only fallback.
+- Pagination is controlled outside the transport with `next_token`,
+  `max_results`, `request_window`, and `partial_result`.
+- Rate limit handling uses parsed headers and the retry queue; the transport
+  must not sleep or loop.
+- Credentials are backend-only and must never appear in frontend code, logs,
+  reports, CSV, exceptions, fixtures, or debug output.
