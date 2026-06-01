@@ -3245,3 +3245,145 @@ Result:
 - Backend endpoint for live master refresh is not implemented.
 - Scheduled or cached master refresh is not implemented.
 - CSV download of the fetched mock master is not exposed as a button yet.
+
+## 2026-06-01 Master Sync Service Interface
+
+### Summary
+
+Added a mock-only Master Sync Service Interface for the stock analyzer master
+data workflow. This creates a common shape for future CSV import, J-Quants live
+master sync, cache sync, and differential update flows without connecting to
+the real J-Quants API.
+
+### Added Files
+
+- `src/services/masterSyncService.js`
+- `server/services/masterSync/index.js`
+
+### Changed Files
+
+- `src/components/StockAnalyzer.js`
+- `src/components/StockMasterCsvPanel.js`
+- `src/services/stockMasterCsvService.js`
+- `tests/stock-analyzer.test.js`
+- `reports/latest_report.md`
+
+### MasterSync Structure
+
+`src/services/masterSyncService.js` defines:
+
+- `MASTER_SYNC_SOURCES`
+- `MasterSyncProvider`
+- `MockMasterSyncProvider`
+- `CsvMasterSyncProvider`
+- `JQuantsMasterSyncProvider`
+- `MasterSyncManager`
+- `syncMaster(source)`
+- `buildMasterSyncDryRun(source)`
+- `buildMasterSyncResult()`
+
+Common result shape:
+
+- `source`
+- `count`
+- `importedAt`
+- `records`
+- `warnings`
+- `didNetworkRequest`
+- `fetchedCount`
+- `csvCount`
+- `csvText`
+
+### Provider Behavior
+
+- `MockMasterSyncProvider` uses the existing mock master rows and never performs
+  a network request.
+- `CsvMasterSyncProvider` wraps existing CSV rows into the same result shape.
+- `JQuantsMasterSyncProvider` is a placeholder only. Calling it throws an
+  explicit error and performs no real API access.
+- `MasterSyncManager` routes `CSV_IMPORT`, `JQUANTS_MOCK`, and `JQUANTS_REAL`
+  through the common provider interface.
+
+### UI
+
+The stock master panel now displays sync metadata:
+
+- `Current Source`
+- `Last Sync Count`
+- `Last Sync`
+
+The existing buttons remain:
+
+- `J-Quants銘柄マスター取得（Mock）`
+- `J-Quants取得 Dry-run`
+- CSV file import
+- CSV template download
+
+### Metadata
+
+`stockAnalyzer.stockMasterCsvMeta` now preserves:
+
+- `source`
+- `lastSyncSource`
+- `lastSyncCount`
+- `lastSyncAt`
+
+### Tests
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe tests\stock-analyzer.test.js
+```
+
+Result:
+
+```text
+stock-analyzer backend foundation tests passed
+```
+
+Covered:
+
+- `MockMasterSyncProvider`
+- `CsvMasterSyncProvider`
+- `MasterSyncManager` routing
+- `JQUANTS_REAL` placeholder error
+- dry-run result
+- metadata save and restore
+- `Current Source` UI output
+
+### Manual Browser Check
+
+URL:
+
+```text
+http://127.0.0.1:4173/stock-analyzer.html
+```
+
+Result:
+
+- page rendered
+- console error count: 0
+- mock sync button visible
+- dry-run button visible
+- dry-run result displayed
+- mock sync saved and displayed `JQUANTS_MOCK`
+- `Current Source` displayed
+- CSV file input remained available
+
+### Safety
+
+- no real J-Quants API connection
+- no API key addition
+- no token usage
+- no `.env` change
+- no OpenAI / Claude / Gemini connection
+- no news API connection
+- `JQUANTS_REAL` provider remains disabled by explicit error
+
+### Unresolved
+
+- Live J-Quants master sync is not implemented.
+- Cache provider is not implemented yet.
+- Differential update logic is not implemented yet.
+- Backend API route for master sync is not implemented yet.

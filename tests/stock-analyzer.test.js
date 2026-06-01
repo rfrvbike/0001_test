@@ -73,6 +73,15 @@ import {
   normalizeMasterData
 } from "../src/services/jquantsMasterService.js";
 import {
+  MASTER_SYNC_SOURCES,
+  CsvMasterSyncProvider,
+  JQuantsMasterSyncProvider,
+  MasterSyncManager,
+  MockMasterSyncProvider,
+  buildMasterSyncDryRun,
+  syncMaster
+} from "../src/services/masterSyncService.js";
+import {
   buildSearchIndex,
   isStockCodeQuery,
   mergeDuplicateCandidates,
@@ -501,9 +510,37 @@ assert.equal(jquantsMasterDryRun.ok, true);
 assert.equal(jquantsMasterDryRun.fetchedCount, 9);
 assert.equal(jquantsMasterDryRun.csvCount, 9);
 assert.equal(jquantsMasterDryRun.sampleRows[0].source, "JQUANTS_MOCK");
+const mockMasterSyncProvider = new MockMasterSyncProvider();
+const mockMasterSyncResult = await mockMasterSyncProvider.sync();
+assert.equal(mockMasterSyncResult.source, MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+assert.equal(mockMasterSyncResult.count, 9);
+assert.equal(mockMasterSyncResult.didNetworkRequest, false);
+assert.equal(Array.isArray(mockMasterSyncResult.records), true);
+const csvMasterSyncProvider = new CsvMasterSyncProvider([{ code: "1111", name: "CSV同期", market: "テスト", sector: "テスト" }]);
+const csvMasterSyncResult = await csvMasterSyncProvider.sync();
+assert.equal(csvMasterSyncResult.source, MASTER_SYNC_SOURCES.CSV_IMPORT);
+assert.equal(csvMasterSyncResult.count, 1);
+assert.equal(csvMasterSyncResult.didNetworkRequest, false);
+const masterSyncManager = new MasterSyncManager();
+const managerMockResult = await masterSyncManager.syncMaster(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+assert.equal(managerMockResult.source, MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+assert.equal(managerMockResult.count, 9);
+const masterSyncDryRun = await buildMasterSyncDryRun(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+assert.equal(masterSyncDryRun.source, MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+assert.equal(masterSyncDryRun.count, 9);
+assert.equal(masterSyncDryRun.didNetworkRequest, false);
+const directSyncResult = await syncMaster(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+assert.equal(directSyncResult.count, 9);
+await assert.rejects(
+  () => new JQuantsMasterSyncProvider().sync(),
+  /not implemented|disabled/
+);
 const jquantsMasterStorage = createMockStorage();
 const savedJquantsMaster = saveStoredStockMaster(normalizedJquantsMaster, jquantsMasterStorage, {
   source: JQUANTS_MASTER_MOCK_SOURCE,
+  lastSyncSource: MASTER_SYNC_SOURCES.JQUANTS_MOCK,
+  lastSyncCount: normalizedJquantsMaster.length,
+  lastSyncAt: "2026-06-01T00:00:00.000Z",
   selectedEncoding: "utf-8",
   detectedEncoding: "utf-8"
 });
@@ -511,6 +548,8 @@ assert.equal(savedJquantsMaster.ok, true);
 assert.equal(savedJquantsMaster.count, 9);
 assert.equal(savedJquantsMaster.meta.source, "JQUANTS_MOCK");
 assert.equal(getStoredStockMasterMeta(jquantsMasterStorage).source, "JQUANTS_MOCK");
+assert.equal(getStoredStockMasterMeta(jquantsMasterStorage).lastSyncSource, "JQUANTS_MOCK");
+assert.equal(getStoredStockMasterMeta(jquantsMasterStorage).lastSyncCount, 9);
 
 const cleared = clearCsvDataStorage(storage);
 assert.equal(cleared.ok, true);
@@ -1523,9 +1562,19 @@ assert.equal(StockMasterCsvPanel({ rows: undefined }).includes("fetchJquantsMast
 assert.equal(StockMasterCsvPanel({ rows: undefined }).includes("dryRunJquantsMasterBtn"), true);
 assert.equal(StockMasterCsvPanel({
   rows: normalizedJquantsMaster,
-  meta: { source: "JQUANTS_MOCK", count: normalizedJquantsMaster.length },
+  meta: {
+    source: "JQUANTS_MOCK",
+    count: normalizedJquantsMaster.length,
+    lastSyncSource: "JQUANTS_MOCK",
+    lastSyncCount: normalizedJquantsMaster.length,
+    lastSyncAt: "2026-06-01T00:00:00.000Z"
+  },
   dryRunResult: jquantsMasterDryRun
 }).includes("J-Quants取得 Dry-run結果"), true);
+assert.equal(StockMasterCsvPanel({
+  rows: normalizedJquantsMaster,
+  meta: { source: "JQUANTS_MOCK", lastSyncSource: "JQUANTS_MOCK", lastSyncCount: 9 }
+}).includes("Current Source"), true);
 assert.equal(StockMasterCsvPanel({
   rows: [{ code: "9434", name: "ソフトバンク", market: "プライム", sector: "情報・通信業", source: "CSV_MASTER" }]
 }).includes("CSV_MASTER"), true);
@@ -2173,6 +2222,11 @@ assert.equal(jquantsMasterServiceSource.includes("fetch("), false);
 assert.equal(jquantsMasterServiceSource.includes("localStorage"), false);
 assert.equal(jquantsMasterServiceSource.includes("JQUANTS_API_KEY"), false);
 assert.equal(jquantsMasterServiceSource.includes("api.jquants"), false);
+const masterSyncServiceSource = readFileSync("src/services/masterSyncService.js", "utf8");
+assert.equal(masterSyncServiceSource.includes("fetch("), false);
+assert.equal(masterSyncServiceSource.includes("localStorage"), false);
+assert.equal(masterSyncServiceSource.includes("JQUANTS_API_KEY"), false);
+assert.equal(masterSyncServiceSource.includes("api.jquants"), false);
 assert.equal(stockAnalyzerSource.includes("searchStockCandidates"), true);
 
 console.log("stock-analyzer backend foundation tests passed");

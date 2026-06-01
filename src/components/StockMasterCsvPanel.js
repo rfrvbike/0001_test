@@ -12,6 +12,9 @@ export function StockMasterCsvPanel({
   const stats = result?.stats || {};
   const encoding = result?.encoding || meta || {};
   const source = meta?.source || "CSV_IMPORT";
+  const currentSource = meta?.lastSyncSource || source;
+  const lastSyncCount = Number(meta?.lastSyncCount ?? count);
+  const lastSyncAt = meta?.lastSyncAt || meta?.importedAt || "";
   const mojibakeWarning = Boolean(encoding.mojibakeSuspected);
   return `
     <section class="csv-panel stock-master-csv-panel">
@@ -39,6 +42,8 @@ export function StockMasterCsvPanel({
         <button id="clearStockMasterCsvBtn" ${count ? "" : "disabled"}>保存済み銘柄マスターを削除</button>
       </div>
       <div class="storage-grid compact-storage-grid">
+        <div><span>Current Source</span><strong>${escapeHtml(currentSource)}</strong></div>
+        <div><span>Last Sync Count</span><strong>${lastSyncCount}莉ｶ</strong></div>
         <div><span>保存済み</span><strong>${count}件</strong></div>
         <div><span>取得元</span><strong>${escapeHtml(source)}</strong></div>
         <div><span>銘柄数</span><strong>${count}件</strong></div>
@@ -48,6 +53,7 @@ export function StockMasterCsvPanel({
         <div><span>文字化け疑い</span><strong>${mojibakeWarning ? "あり" : "なし"}</strong></div>
       </div>
       ${meta?.importedAt ? `<div class="csv-help">最終保存: ${escapeHtml(formatMetaDate(meta.importedAt))}</div>` : ""}
+      ${lastSyncAt ? `<div class="csv-help">Last Sync: ${escapeHtml(formatMetaDate(lastSyncAt))}</div>` : ""}
       ${message ? `<div class="storage-message">${escapeHtml(message)}</div>` : ""}
       ${dryRunResult ? dryRunBlock(dryRunResult) : ""}
       ${encoding.decodeWarning ? `<div class="csv-warning">${escapeHtml(encoding.decodeWarning)}</div>` : ""}

@@ -46,12 +46,10 @@ import {
   saveStoredStockMaster
 } from "../services/stockMasterCsvService.js";
 import {
-  JQUANTS_MASTER_MOCK_SOURCE,
-  buildCsvFromMasterData,
-  buildMasterMockDryRun,
-  fetchMasterMock,
-  normalizeMasterData
-} from "../services/jquantsMasterService.js";
+  MASTER_SYNC_SOURCES,
+  buildMasterSyncDryRun,
+  syncMaster
+} from "../services/masterSyncService.js";
 import {
   isStockCodeQuery,
   searchStockCandidates
@@ -449,7 +447,10 @@ export function mountStockAnalyzer(root) {
     }
     const saved = saveStoredStockMaster(parsed.rows, undefined, {
       ...parsed.encoding,
-      source: "CSV_IMPORT"
+      source: MASTER_SYNC_SOURCES.CSV_IMPORT,
+      lastSyncSource: MASTER_SYNC_SOURCES.CSV_IMPORT,
+      lastSyncCount: parsed.rows.length,
+      lastSyncAt: new Date().toISOString()
     });
     if (!saved.ok) {
       state.stockMasterCsvError = saved.error;
@@ -466,15 +467,16 @@ export function mountStockAnalyzer(root) {
   };
 
   const fetchJQuantsMasterMock = async () => {
-    const fetched = await fetchMasterMock();
-    const rows = normalizeMasterData(fetched.rows);
-    const csv = buildCsvFromMasterData(rows);
-    const saved = saveStoredStockMaster(rows, undefined, {
-      source: JQUANTS_MASTER_MOCK_SOURCE,
+    const syncResult = await syncMaster(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+    const saved = saveStoredStockMaster(syncResult.records, undefined, {
+      source: syncResult.source,
+      lastSyncSource: syncResult.source,
+      lastSyncCount: syncResult.count,
+      lastSyncAt: syncResult.importedAt,
       selectedEncoding: "utf-8",
       detectedEncoding: "utf-8",
       mock: true,
-      didNetworkRequest: false
+      didNetworkRequest: syncResult.didNetworkRequest
     });
     if (!saved.ok) {
       state.stockMasterCsvError = saved.error;
@@ -486,16 +488,16 @@ export function mountStockAnalyzer(root) {
     state.stockMasterCsvMeta = saved.meta;
     state.stockMasterCsvResult = {
       ok: true,
-      rows,
-      errors: [],
+      rows: syncResult.records,
+      errors: syncResult.warnings,
       stats: {
-        readCount: fetched.rows.length,
-        validCount: rows.length,
+        readCount: syncResult.fetchedCount,
+        validCount: syncResult.count,
         excludedCount: 0,
-        duplicateCount: Math.max(fetched.rows.length - rows.length, 0),
+        duplicateCount: Math.max(syncResult.fetchedCount - syncResult.count, 0),
         storedCount: saved.count,
         truncatedCount: 0,
-        csvCount: csv.count
+        csvCount: syncResult.csvCount
       },
       encoding: saved.meta
     };
@@ -507,7 +509,7 @@ export function mountStockAnalyzer(root) {
   };
 
   const runJQuantsMasterDryRun = async () => {
-    const result = await buildMasterMockDryRun();
+    const result = await buildMasterSyncDryRun(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
     state.stockMasterDryRunResult = result;
     state.stockMasterCsvError = "";
     state.stockMasterCsvMessage = `J-Quants取得 Dry-run: 取得${result.fetchedCount}件 / CSV${result.csvCount}件。保存・実API接続は行っていません。`;

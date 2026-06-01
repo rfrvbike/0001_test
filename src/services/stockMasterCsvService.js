@@ -298,6 +298,7 @@ export function sanitizeStockMasterRow(row) {
 function normalizeStockMasterSource(source) {
   const value = normalizeText(source || "CSV_MASTER").toUpperCase();
   if (value === "JQUANTS_MOCK") return "JQUANTS_MOCK";
+  if (value === "JQUANTS_REAL") return "JQUANTS_REAL";
   if (value === "CSV_IMPORT") return "CSV_IMPORT";
   return "CSV_MASTER";
 }
@@ -478,10 +479,15 @@ function buildEncodingMeta(csvText, options = {}) {
 }
 
 function sanitizeStockMasterCsvMeta(meta = {}) {
+  const source = normalizeText(meta.source || meta.lastSyncSource || "CSV_IMPORT");
+  const count = Number.isFinite(Number(meta.count)) ? Number(meta.count) : 0;
   return {
     importedAt: normalizeText(meta.importedAt || meta.savedAt || ""),
-    count: Number.isFinite(Number(meta.count)) ? Number(meta.count) : 0,
-    source: normalizeText(meta.source || "CSV_IMPORT"),
+    count,
+    source,
+    lastSyncSource: normalizeText(meta.lastSyncSource || source),
+    lastSyncCount: Number.isFinite(Number(meta.lastSyncCount)) ? Number(meta.lastSyncCount) : count,
+    lastSyncAt: normalizeText(meta.lastSyncAt || meta.importedAt || meta.savedAt || ""),
     selectedEncoding: normalizeEncodingOption(meta.selectedEncoding || meta.encoding || "auto"),
     detectedEncoding: normalizeEncodingOption(meta.detectedEncoding || "unknown"),
     decodeWarning: normalizeText(meta.decodeWarning || ""),
