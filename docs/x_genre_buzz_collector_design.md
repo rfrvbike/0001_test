@@ -1139,3 +1139,42 @@ Report/debug behavior:
 Related policy:
 
 - `docs/live_mode_policy.md`
+
+## LiveRecentSearchTransport Disabled Skeleton
+
+Added on 2026-06-02 as a fail-closed implementation placeholder. No HTTP
+communication, request library import, API key lookup, token lookup, cookie
+read, `.env` read, or posting is performed.
+
+Implementation point:
+
+- `x_auto_ops/live_recent_search_transport.py`
+- `LiveRecentSearchTransport`
+- `send_recent_search(query)`
+
+Current behavior:
+
+```text
+raise RuntimeError("LiveRecentSearchTransport disabled")
+```
+
+The skeleton satisfies the same transport method shape as
+`MockRecentSearchTransport`, so `XApiBuzzReadClient` can accept either transport
+through dependency injection. `MockRecentSearchTransport` remains the only
+successful dry-run transport. `LiveRecentSearchTransport` always fails closed.
+
+Integrated live-order policy:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> Transport
+```
+
+Current gate behavior means live mode should stop at `LiveModeGate` before
+reaching the disabled transport. If a caller reaches `LiveRecentSearchTransport`
+anyway, the disabled transport still raises.
+
+Related document:
+
+- `docs/live_recent_search_transport_disabled.md`

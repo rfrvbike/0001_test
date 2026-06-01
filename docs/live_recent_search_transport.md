@@ -119,6 +119,16 @@ assert_live_mode_allowed(config)
 Dry-run mode is allowed. Live mode is always rejected with
 `RuntimeError("live mode disabled")`, even when fake credentials are present.
 
+Current disabled live transport skeleton:
+
+- `x_auto_ops/live_recent_search_transport.py`
+- `LiveRecentSearchTransport`
+- `send_recent_search(query)`
+
+The skeleton implements the transport method shape but performs no HTTP. Any
+call raises `RuntimeError("LiveRecentSearchTransport disabled")`. This fixes the
+future implementation point while keeping live reads fail-closed.
+
 ## Logging Policy
 
 Allowed logs:
@@ -179,3 +189,5 @@ Review conclusions:
   reports, CSV, exceptions, fixtures, or debug output.
 - Live mode must pass `assert_live_mode_allowed(...)` in addition to the
   existing `XApiBuzzReadClient` dry-run gate.
+- `LiveRecentSearchTransport` currently exists only as a disabled skeleton; it
+  must not be changed to perform HTTP until the live-mode checklist is approved.
