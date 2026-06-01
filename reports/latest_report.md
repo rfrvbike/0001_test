@@ -3387,3 +3387,129 @@ Result:
 - Cache provider is not implemented yet.
 - Differential update logic is not implemented yet.
 - Backend API route for master sync is not implemented yet.
+
+## 2026-06-01 Master Sync Mock Backend Endpoints
+
+### Summary
+
+Added mock-only backend endpoints for the stock master sync foundation. The new
+flow moves the UI toward:
+
+```text
+frontend
+-> backend endpoint
+-> MasterSyncManager
+-> Mock / future Cache / future J-Quants provider
+```
+
+No real J-Quants API access was added.
+
+### Added Endpoint
+
+- `GET /api/master-sync/dry-run?source=JQUANTS_MOCK`
+- `POST /api/master-sync/sync`
+
+### Behavior
+
+`GET /api/master-sync/dry-run?source=JQUANTS_MOCK`:
+
+- does not save
+- returns dry-run counts and sample rows
+- returns `didNetworkRequest: false`
+
+`POST /api/master-sync/sync` with `{ "source": "JQUANTS_MOCK" }`:
+
+- returns `records`, `count`, `source`, `importedAt`, `warnings`
+- returns `didNetworkRequest: false`
+- uses `MasterSyncManager.syncMaster()`
+
+`source=JQUANTS_REAL`:
+
+- returns status `501`
+- returns an explicit `JQUANTS_REAL is not implemented` error
+- performs no network request
+
+### Changed Files
+
+- `server/index.js`
+- `server/routes/masterSync.js`
+- `src/components/StockAnalyzer.js`
+- `src/services/backendStockDataService.js`
+- `tests/stock-analyzer.test.js`
+- `reports/latest_report.md`
+
+### Frontend
+
+The existing J-Quants mock master UI now tries the backend endpoint first:
+
+- dry-run uses `GET /api/master-sync/dry-run`
+- sync uses `POST /api/master-sync/sync`
+- if the local backend is unavailable, the existing local mock provider remains
+  as fallback so the UI does not break
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe tests\stock-analyzer.test.js
+```
+
+Result:
+
+```text
+stock-analyzer backend foundation tests passed
+```
+
+Covered:
+
+- `GET /api/master-sync/dry-run?source=JQUANTS_MOCK`
+- `POST /api/master-sync/sync`
+- `didNetworkRequest=false`
+- `count=9`
+- `records` returned
+- `source=JQUANTS_MOCK`
+- `source=JQUANTS_REAL` returns explicit `501`
+- route source does not contain `fetch(`, `api.jquants.com`, or API key usage
+
+### Manual Endpoint Check
+
+Confirmed with a temporary local backend job:
+
+- dry-run returned `ok: true`, `source: JQUANTS_MOCK`, `count: 9`
+- sync returned `records` for 9 mock rows
+- `JQUANTS_REAL` returned status `501`
+
+### Manual Browser Check
+
+URL:
+
+```text
+http://127.0.0.1:4173/stock-analyzer.html
+```
+
+Result:
+
+- page title loaded
+- console error count: 0
+- the in-app Browser session showed an empty app root during this check, so
+  button-level UI confirmation could not be completed in that browser session
+- frontend unit/smoke tests and backend endpoint checks passed
+
+### Safety
+
+- no real J-Quants API connection
+- no API key reference added
+- no token reference added
+- no `.env` change
+- no OpenAI / Claude / Gemini connection
+- no news API connection
+- `JQUANTS_REAL` remains disabled with explicit error
+
+### Unresolved
+
+- Live J-Quants master sync is not implemented.
+- Cache provider is not implemented.
+- Differential update provider is not implemented.
+- The in-app Browser blank-root issue should be rechecked separately before a
+  visual UI release.

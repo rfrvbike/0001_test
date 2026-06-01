@@ -55,9 +55,11 @@ import {
   searchStockCandidates
 } from "../services/stockSearchService.js";
 import {
+  getBackendMasterSyncDryRun,
   getBackendHealth,
   getBackendJQuantsConnectionCheck,
-  getBackendJQuantsStatus
+  getBackendJQuantsStatus,
+  postBackendMasterSync
 } from "../services/backendStockDataService.js";
 import { BulkAnalysisFilters } from "./BulkAnalysisFilters.js";
 import { BulkAnalysisSummary } from "./BulkAnalysisSummary.js";
@@ -467,7 +469,14 @@ export function mountStockAnalyzer(root) {
   };
 
   const fetchJQuantsMasterMock = async () => {
-    const syncResult = await syncMaster(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+    const backendResult = await postBackendMasterSync(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+    const syncResult = backendResult.ok
+      ? {
+        ...backendResult,
+        fetchedCount: backendResult.count,
+        csvCount: backendResult.count
+      }
+      : await syncMaster(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
     const saved = saveStoredStockMaster(syncResult.records, undefined, {
       source: syncResult.source,
       lastSyncSource: syncResult.source,
@@ -509,7 +518,10 @@ export function mountStockAnalyzer(root) {
   };
 
   const runJQuantsMasterDryRun = async () => {
-    const result = await buildMasterSyncDryRun(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+    const backendResult = await getBackendMasterSyncDryRun(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
+    const result = backendResult.ok
+      ? backendResult
+      : await buildMasterSyncDryRun(MASTER_SYNC_SOURCES.JQUANTS_MOCK);
     state.stockMasterDryRunResult = result;
     state.stockMasterCsvError = "";
     state.stockMasterCsvMessage = `J-Quants取得 Dry-run: 取得${result.fetchedCount}件 / CSV${result.csvCount}件。保存・実API接続は行っていません。`;

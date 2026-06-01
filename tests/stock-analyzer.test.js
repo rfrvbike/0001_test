@@ -89,12 +89,14 @@ import {
   searchStockCandidates
 } from "../src/services/stockSearchService.js";
 import {
+  getBackendMasterSyncDryRun,
   getBackendHealth,
   getBackendJQuantsConnectionCheck,
   getBackendJQuantsFinancialSummary,
   getBackendJQuantsMappedStockData,
   getBackendJQuantsStatus,
-  getBackendStockData
+  getBackendStockData,
+  postBackendMasterSync
 } from "../src/services/backendStockDataService.js";
 import { getSafeEnvStatus, loadEnv } from "../server/config/env.js";
 import { createServer } from "../server/index.js";
@@ -1844,6 +1846,32 @@ try {
   assert.equal(masterStatusApi.count >= 4, true);
   assert.equal(masterStatusApi.codes.includes("7203"), true);
 
+  const masterSyncDryRunApi = await fetch(`${backendBaseUrl}/api/master-sync/dry-run?source=JQUANTS_MOCK`).then((response) => response.json());
+  assert.equal(masterSyncDryRunApi.ok, true);
+  assert.equal(masterSyncDryRunApi.source, "JQUANTS_MOCK");
+  assert.equal(masterSyncDryRunApi.didNetworkRequest, false);
+  assert.equal(masterSyncDryRunApi.count, 9);
+  assert.equal(masterSyncDryRunApi.sampleRows.length > 0, true);
+  const masterSyncApiResponse = await fetch(`${backendBaseUrl}/api/master-sync/sync`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ source: "JQUANTS_MOCK" })
+  });
+  const masterSyncApi = await masterSyncApiResponse.json();
+  assert.equal(masterSyncApiResponse.status, 200);
+  assert.equal(masterSyncApi.ok, true);
+  assert.equal(masterSyncApi.source, "JQUANTS_MOCK");
+  assert.equal(masterSyncApi.didNetworkRequest, false);
+  assert.equal(masterSyncApi.count, 9);
+  assert.equal(Array.isArray(masterSyncApi.records), true);
+  assert.equal(masterSyncApi.records.some((row) => row.code === "7203"), true);
+  const masterSyncRealResponse = await fetch(`${backendBaseUrl}/api/master-sync/dry-run?source=JQUANTS_REAL`);
+  const masterSyncReal = await masterSyncRealResponse.json();
+  assert.equal(masterSyncRealResponse.status, 501);
+  assert.equal(masterSyncReal.ok, false);
+  assert.equal(masterSyncReal.error.includes("JQUANTS_REAL is not implemented"), true);
+  assert.equal(masterSyncReal.didNetworkRequest, false);
+
   const stockResponse = await fetch(`${backendBaseUrl}/api/stocks/7203`).then((response) => response.json());
   assert.equal(stockResponse.ok, true);
   assert.equal(stockResponse.dataSource, "J_QUANTS_MOCK");
@@ -1885,6 +1913,16 @@ try {
   assert.equal(frontendStatus.mode, "mock");
   assert.equal(frontendStatus.apiVersion, "v2");
   assert.equal(frontendStatus.didNetworkRequest, false);
+
+  const frontendMasterSyncDryRun = await getBackendMasterSyncDryRun("JQUANTS_MOCK", backendBaseUrl);
+  assert.equal(frontendMasterSyncDryRun.ok, true);
+  assert.equal(frontendMasterSyncDryRun.source, "JQUANTS_MOCK");
+  assert.equal(frontendMasterSyncDryRun.didNetworkRequest, false);
+  const frontendMasterSync = await postBackendMasterSync("JQUANTS_MOCK", backendBaseUrl);
+  assert.equal(frontendMasterSync.ok, true);
+  assert.equal(frontendMasterSync.source, "JQUANTS_MOCK");
+  assert.equal(frontendMasterSync.count, 9);
+  assert.equal(frontendMasterSync.didNetworkRequest, false);
 
   const frontendConnectionCheck = await getBackendJQuantsConnectionCheck(backendBaseUrl);
   assert.equal(frontendConnectionCheck.ok, true);
@@ -2227,6 +2265,11 @@ assert.equal(masterSyncServiceSource.includes("fetch("), false);
 assert.equal(masterSyncServiceSource.includes("localStorage"), false);
 assert.equal(masterSyncServiceSource.includes("JQUANTS_API_KEY"), false);
 assert.equal(masterSyncServiceSource.includes("api.jquants"), false);
+const masterSyncRouteSource = readFileSync("server/routes/masterSync.js", "utf8");
+assert.equal(masterSyncRouteSource.includes("api.jquants.com"), false);
+assert.equal(masterSyncRouteSource.includes("JQUANTS_API_KEY"), false);
+assert.equal(masterSyncRouteSource.includes("x-api-key"), false);
+assert.equal(masterSyncRouteSource.includes("fetch("), false);
 assert.equal(stockAnalyzerSource.includes("searchStockCandidates"), true);
 
 console.log("stock-analyzer backend foundation tests passed");

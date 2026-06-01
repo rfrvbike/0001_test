@@ -46,6 +46,26 @@ export async function getBackendStockMasterStatus(baseUrl = DEFAULT_BACKEND_BASE
   );
 }
 
+export async function getBackendMasterSyncDryRun(source = "JQUANTS_MOCK", baseUrl = DEFAULT_BACKEND_BASE_URL) {
+  const params = new URLSearchParams({ source });
+  return backendJson(
+    `${baseUrl}/api/master-sync/dry-run?${params.toString()}`,
+    "Master Sync Dry-run を取得できませんでした。ローカルバックエンドの起動状態を確認してください。"
+  );
+}
+
+export async function postBackendMasterSync(source = "JQUANTS_MOCK", baseUrl = DEFAULT_BACKEND_BASE_URL) {
+  return backendJson(
+    `${baseUrl}/api/master-sync/sync`,
+    "Master Sync を実行できませんでした。ローカルバックエンドの起動状態を確認してください。",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ source })
+    }
+  );
+}
+
 export async function getBackendJQuantsRawStockData(code, from, to, baseUrl = DEFAULT_BACKEND_BASE_URL) {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
@@ -103,10 +123,14 @@ export async function getBackendStocks(codes = [], baseUrl = DEFAULT_BACKEND_BAS
   );
 }
 
-async function backendJson(url, offlineMessage) {
+async function backendJson(url, offlineMessage, options = {}) {
   try {
     assertLocalBackendUrl(url);
-    const response = await fetch(url, { headers: { accept: "application/json" } });
+    const response = await fetch(url, {
+      method: options.method || "GET",
+      headers: { accept: "application/json", ...(options.headers || {}) },
+      body: options.body
+    });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       return {
