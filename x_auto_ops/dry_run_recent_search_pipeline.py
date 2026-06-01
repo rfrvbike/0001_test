@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from x_auto_ops.buzz_read_client import BuzzFetchResult, XApiBuzzReadClient
+from x_auto_ops.credential_loader import CredentialLoader, FakeCredentialLoader
+from x_auto_ops.live_mode_gate import assert_live_mode_allowed
 from x_auto_ops.mock_buzz_collector import (
     DEFAULT_CONFIG_PATH,
     filter_posts,
@@ -37,6 +39,7 @@ class DryRunRecentSearchPipelineResult:
     report_path: Path
     debug_log: str
     retry_queue: RetryQueue
+    credential_source: str
 
 
 def run_dry_run_recent_search_pipeline(
@@ -48,12 +51,21 @@ def run_dry_run_recent_search_pipeline(
     source_genre: str | None = None,
     dry_run: bool = True,
     retry_queue: RetryQueue | None = None,
+    credential_loader: CredentialLoader | None = None,
 ) -> DryRunRecentSearchPipelineResult:
     """Run the full mock read -> classify -> rank -> CSV -> report path."""
 
     if not dry_run:
         raise RuntimeError("dry-run recent search pipeline blocks dry_run=False")
 
+    credentials = (credential_loader or FakeCredentialLoader()).load()
+    assert_live_mode_allowed(
+        {
+            "dry_run": dry_run,
+            "live_mode": False,
+            "credential_source": credentials.source,
+        }
+    )
     config = load_buzz_collection_config(config_path)
     genre = _select_genre(config.genres, source_genre)
     query = build_recent_search_query(genre)
@@ -79,6 +91,7 @@ def run_dry_run_recent_search_pipeline(
         rows=ranked_rows,
         retry_queue_size=queue.size(),
         retry_tasks=retry_tasks,
+        credential_source=credentials.source,
     )
     debug_log = _safe_pipeline_debug(
         {
@@ -92,6 +105,8 @@ def run_dry_run_recent_search_pipeline(
             "next_cursor_present": bool(fetch_result.next_token),
             "retry_queue_size": queue.size(),
             "redaction_status": "ok",
+            "credential_source": credentials.source,
+            "live_mode_gate": "dry_run_allowed",
         }
     )
     return DryRunRecentSearchPipelineResult(
@@ -101,6 +116,7 @@ def run_dry_run_recent_search_pipeline(
         report_path=report,
         debug_log=debug_log,
         retry_queue=queue,
+        credential_source=credentials.source,
     )
 
 
@@ -118,6 +134,7 @@ def write_pipeline_report(
     rows: list[Mapping[str, Any]],
     retry_queue_size: int = 0,
     retry_tasks: list[RetryTask] | None = None,
+    credential_source: str = "FAKE",
 ) -> Path:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -146,6 +163,8 @@ def write_pipeline_report(
         f"- retry_queue_size: {retry_queue_size}",
         f"- rate_limited_count: {1 if fetch_result.rate_limited else 0}",
         f"- redaction_status: ok",
+        f"- credential_loader: {redact_sensitive_text(credential_source)}",
+        f"- live_mode_gate: dry_run_allowed",
         "",
         "## Top Posts",
     ]

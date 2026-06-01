@@ -99,6 +99,26 @@ only from an approved backend/server configuration path. Frontend storage,
 localStorage, CSV, reports, fixtures, and debug logs must never hold keys,
 tokens, cookies, authorization headers, or secrets.
 
+Current pre-live credential boundary:
+
+- `x_auto_ops/credential_loader.py`
+- `CredentialLoader`
+- `FakeCredentialLoader`
+- `CredentialBundle`
+
+Only `FakeCredentialLoader` is implemented. It returns fake credential-shaped
+values and does not read files, `.env`, environment variables, tokens, cookies,
+or network resources.
+
+Live mode remains blocked by `x_auto_ops/live_mode_gate.py`:
+
+```text
+assert_live_mode_allowed(config)
+```
+
+Dry-run mode is allowed. Live mode is always rejected with
+`RuntimeError("live mode disabled")`, even when fake credentials are present.
+
 ## Logging Policy
 
 Allowed logs:
@@ -157,3 +177,5 @@ Review conclusions:
   must not sleep or loop.
 - Credentials are backend-only and must never appear in frontend code, logs,
   reports, CSV, exceptions, fixtures, or debug output.
+- Live mode must pass `assert_live_mode_allowed(...)` in addition to the
+  existing `XApiBuzzReadClient` dry-run gate.

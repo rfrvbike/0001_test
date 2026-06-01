@@ -16,6 +16,8 @@ Mock-only dry-run report. No X API call, credential lookup, `.env` read, or post
 - retry_queue_size: 0
 - rate_limited_count: 0
 - redaction_status: ok
+- credential_loader: FAKE
+- live_mode_gate: dry_run_allowed
 
 ## Top Posts
 - 4001 / ai_side_business / buzz_score 1574 / rank 1

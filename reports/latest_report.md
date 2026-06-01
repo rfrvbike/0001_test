@@ -1,5 +1,134 @@
 # latest_report.md
 
+## 2026-06-02 Credential Loader Mock and Live Mode Gate
+
+Added mock-only credential loader scaffolding and a fail-closed live mode gate
+for the future X recent-search read path. No X API call, HTTP request, API key
+lookup, token lookup, cookie access, `.env` read, environment variable read, or
+posting was performed.
+
+### Added Files
+
+- `x_auto_ops/credential_loader.py`
+- `x_auto_ops/live_mode_gate.py`
+- `docs/live_mode_policy.md`
+- `tests/test_credential_loader_live_mode_gate.py`
+
+### Changed Files
+
+- `x_auto_ops/dry_run_recent_search_pipeline.py`
+- `docs/live_recent_search_transport.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### CredentialLoader Spec
+
+`x_auto_ops/credential_loader.py` defines:
+
+- `CredentialBundle`
+- `CredentialLoader`
+- `FakeCredentialLoader`
+
+`CredentialBundle` has credential-shaped fields:
+
+- `bearer_token`
+- `api_key`
+- `api_secret`
+- `source`
+
+Only fake values are returned:
+
+- `FAKE_BEARER_TOKEN`
+- `FAKE_API_KEY`
+- `FAKE_SECRET`
+
+The fake loader does not read files, `.env`, environment variables, cookies,
+tokens, or network resources.
+
+### LiveModeGate Spec
+
+`x_auto_ops/live_mode_gate.py` defines:
+
+```text
+assert_live_mode_allowed(config)
+```
+
+Current behavior:
+
+- `dry_run=True` and `live_mode=False` is allowed
+- live mode is always rejected
+- fake credentials do not unlock live mode
+- the rejection message is `live mode disabled`
+
+### Dry-run Pipeline Integration
+
+The dry-run pipeline now follows this pre-live order:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> Mock Transport
+```
+
+The report/debug output may include the safe credential source `FAKE`, but fake
+credential values are not written to report, CSV, debug log, or exceptions.
+
+### Tests
+
+Added coverage for:
+
+- `FakeCredentialLoader` returns fake values
+- no file, `.env`, or environment variable lookup in fake loader
+- dry-run gate is allowed
+- live mode is rejected
+- fake credentials still do not unlock live mode
+- `FAKE_API_KEY`, `FAKE_SECRET`, and `FAKE_TOKEN`-shaped values do not leak into
+  report, CSV, debug log, or exception surfaces
+
+### Verification
+
+Commands:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_recent_search_pipeline.py --dry-run
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Results:
+
+```text
+DRY-RUN recent search pipeline complete.
+Fetched posts: 2
+Ranked posts: 2
+Rate limited: False
+Retry after seconds: None
+Partial result: False
+CSV: data\mock_recent_search_pipeline_posts.csv
+Report: reports\mock_recent_search_pipeline_report.md
+No X API call, credential lookup, .env edit, or posting was performed.
+
+Ran 196 tests
+OK
+```
+
+### Safety
+
+- No real X API call was added.
+- No HTTP client was added.
+- No real credential lookup was added.
+- No `.env` change was made.
+- No posting behavior was added.
+- Generated CSV and local config files remain excluded from the commit.
+
+### Remaining Before Real API
+
+- Live transport remains intentionally unimplemented.
+- Real backend-only credential loader remains intentionally unimplemented.
+- HTTP timeout/error mapping remains missing.
+- Pagination controller remains missing.
+- Controller-level `max_retry_count` remains missing.
+- X API plan and field availability still need confirmation.
+
 ## 2026-06-02 LiveRecentSearchTransport Implementation Review
 
 Completed a design-only pre-implementation review for the future X recent-search

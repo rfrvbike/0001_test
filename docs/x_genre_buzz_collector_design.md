@@ -1091,3 +1091,51 @@ Current gaps before live transport:
   plan
 - pagination controller must be implemented outside the transport
 - `max_retry_count` policy must be added to the controller layer
+
+## Credential Loader and Live Mode Gate
+
+Added on 2026-06-02 as mock-only safety scaffolding. No X API call, HTTP
+request, API key lookup, token lookup, cookie read, `.env` read, environment
+variable read, or posting is performed.
+
+Credential loader boundary:
+
+- `x_auto_ops/credential_loader.py`
+- `CredentialLoader`
+- `FakeCredentialLoader`
+- `CredentialBundle`
+
+Only `FakeCredentialLoader` is implemented. It returns fake credential-shaped
+values for interface tests and does not read files, `.env`, environment
+variables, cookies, tokens, or network resources. The dry-run pipeline loads the
+fake bundle only to verify the future execution order:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> Mock Transport
+```
+
+Live mode gate:
+
+- `x_auto_ops/live_mode_gate.py`
+- `assert_live_mode_allowed(config)`
+
+Current behavior:
+
+- `dry_run=True` and `live_mode=False` is allowed
+- `dry_run=False` or `live_mode=True` is rejected
+- fake credentials do not unlock live mode
+- the error message is fixed as `live mode disabled`
+
+Report/debug behavior:
+
+- report and debug output may show the safe credential source, such as `FAKE`
+- fake credential values are not written to report, CSV, debug log, or
+  exception text
+- redaction regression tests cover fake marker-shaped values before real
+  credentials exist
+
+Related policy:
+
+- `docs/live_mode_policy.md`
