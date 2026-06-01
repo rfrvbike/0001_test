@@ -973,3 +973,90 @@ Current tests:
 
 Next live-read phase should add a separate injected read client boundary instead
 of modifying the mock collector to call X directly.
+
+## Redaction Policy, Retry Queue, and Live Transport Plan
+
+Added on 2026-06-02 as mock-only pre-live hardening. No X API call, credential
+lookup, `.env` read, cookie read, token read, or posting is performed.
+
+### Redaction Policy
+
+`x_auto_ops/redaction.py` provides the shared redaction boundary:
+
+- `redact_sensitive_text(text)`
+- `contains_sensitive_marker(text)`
+- `assert_redacted(text, context=...)`
+
+The redaction policy covers these markers:
+
+- `API_KEY`
+- `TOKEN`
+- `BEARER`
+- `SECRET`
+- `COOKIE`
+- `AUTHORIZATION`
+
+Pipeline reports, debug logs, CSV leak-test rendering, and exception surfaces
+must not contain those markers. Tests intentionally inject marker-shaped values
+and fail if they appear in report, CSV, debug output, or exceptions.
+
+### Retry Queue
+
+`x_auto_ops/retry_queue.py` defines a mock-only in-memory retry queue:
+
+```text
+RetryTask(
+  query,
+  retry_after_seconds,
+  enqueue_time,
+  retry_count,
+)
+
+RetryQueue.enqueue(...)
+RetryQueue.dequeue_ready(now)
+RetryQueue.size()
+```
+
+The queue never sleeps, opens sockets, or performs a retry by itself. It only
+records tasks that a future controller could retry after the parsed delay.
+
+Dry-run pipeline behavior:
+
+- if `BuzzFetchResult.rate_limited` is true, enqueue the built query
+- set `retry_queue_size`
+- report `rate_limited_count`
+- list mock `retry_tasks`
+- emit `redaction_status: ok`
+
+### Live Transport Plan
+
+`docs/live_recent_search_transport.md` specifies the future
+`LiveRecentSearchTransport` boundary. The planned transport will implement the
+same interface as `MockRecentSearchTransport`:
+
+```text
+send_recent_search(query: str) -> TransportResponse
+```
+
+The future live transport must remain behind both:
+
+- `XApiBuzzReadClient` dry-run gate
+- its own explicit live-mode configuration
+
+Allowed future responsibility:
+
+- perform approved read-only recent-search HTTP calls
+- return status code, headers, and parsed JSON body
+- expose rate-limit headers to the parser
+
+Disallowed responsibility:
+
+- genre classification
+- scoring
+- CSV writing
+- report writing
+- logging credentials
+- retry sleeping/looping inside `send_recent_search`
+
+Before live connection, tests must continue to prove that credentials cannot
+appear in report, CSV, debug log, or exception output.

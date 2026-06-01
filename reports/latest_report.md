@@ -1,5 +1,119 @@
 # latest_report.md
 
+## 2026-06-02 Live Transport Spec, Redaction, and Retry Queue
+
+Added the mock-only safety layer for the future X recent-search read path. No
+real X API call, API key lookup, token lookup, cookie access, `.env` edit, or
+posting was performed.
+
+### Added Files
+
+- `docs/live_recent_search_transport.md`
+- `x_auto_ops/redaction.py`
+- `x_auto_ops/retry_queue.py`
+- `tests/test_redaction_and_retry_queue.py`
+
+### Changed Files
+
+- `x_auto_ops/dry_run_recent_search_pipeline.py`
+- `x_auto_ops/mock_transport.py`
+- `tests/test_dry_run_recent_search_pipeline.py`
+- `tests/test_mock_transport_pipeline.py`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/mock_recent_search_pipeline_report.md`
+- `reports/latest_report.md`
+
+### LiveRecentSearchTransport Spec
+
+`docs/live_recent_search_transport.md` documents the future live transport
+boundary only. It defines responsibilities, expected input/output, Query
+Builder, Header Parser, Response Normalizer, Retry Queue, Dry-run Gate,
+credential management, logging, and redaction policy. No live transport
+implementation was added.
+
+### Redaction
+
+`x_auto_ops/redaction.py` centralizes redaction for report/debug/exception-style
+output. It redacts sensitive markers such as API key, token, bearer, secret,
+cookie, and authorization wording, plus compact secret-like sample values used
+in tests. Pipeline reports and debug output are checked before being returned.
+
+### Retry Queue
+
+`x_auto_ops/retry_queue.py` adds a mock-only `RetryTask` and `RetryQueue`:
+
+- `enqueue()`
+- `dequeue_ready()`
+- `size()`
+- `snapshot()`
+
+The queue does not sleep, schedule jobs, or perform I/O. It only records retry
+intent for rate-limited mock responses.
+
+### Dry-run Pipeline
+
+When the dry-run recent-search pipeline receives `rate_limited=True`, it now
+adds the query to the retry queue and reports:
+
+- `retry_queue_size`
+- `rate_limited_count`
+- `retry_tasks`
+- `redaction_status`
+
+The generated pipeline report remains mock-only.
+
+### CLI Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_recent_search_pipeline.py --dry-run
+```
+
+Result:
+
+```text
+DRY-RUN recent search pipeline complete.
+Fetched posts: 2
+Ranked posts: 2
+Rate limited: False
+Retry after seconds: None
+Partial result: False
+CSV: data\mock_recent_search_pipeline_posts.csv
+Report: reports\mock_recent_search_pipeline_report.md
+No X API call, credential lookup, .env edit, or posting was performed.
+```
+
+### Test Result
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 190 tests
+OK
+```
+
+### Safety
+
+- No real X API call was added.
+- No credential lookup was added.
+- No `.env` change was made.
+- No real post path was added.
+- Generated CSV files remain gitignored.
+
+### Unresolved
+
+- Live HTTP transport is still intentionally unimplemented.
+- Retry Queue is mock-only and does not schedule delayed execution.
+- Future live implementation should keep transport injection and dry-run gate as
+  the boundary before any credentialed request is introduced.
+
 ## 2026-05-24 10:21 Codex Report
 
 Added Windows AC sleep setting support files and documentation for daily

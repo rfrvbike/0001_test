@@ -15,10 +15,9 @@ from typing import Any, Mapping, Protocol
 from x_auto_ops.buzz_read_client import BuzzFetchResult
 from x_auto_ops.query_builder import RecentSearchQuery, build_recent_search_query
 from x_auto_ops.rate_limit_parser import RateLimitInfo, parse_rate_limit_headers
+from x_auto_ops.redaction import contains_sensitive_marker as _contains_sensitive_marker
+from x_auto_ops.redaction import redact_sensitive_text
 from x_auto_ops.x_response_normalizer import normalize_recent_search_response
-
-
-SENSITIVE_MARKERS = ("API_KEY", "TOKEN", "BEARER", "SECRET", "COOKIE")
 
 
 @dataclass(frozen=True)
@@ -124,8 +123,7 @@ def render_posts_csv_for_leak_test(posts: list[dict[str, Any]]) -> str:
 
 
 def contains_sensitive_marker(value: str) -> bool:
-    upper = value.upper()
-    return any(marker in upper for marker in SENSITIVE_MARKERS)
+    return _contains_sensitive_marker(value)
 
 
 def _safe_debug_log(values: Mapping[str, Any]) -> str:
@@ -133,11 +131,7 @@ def _safe_debug_log(values: Mapping[str, Any]) -> str:
 
 
 def redact_sensitive(value: Any) -> str:
-    text = str(value)
-    for marker in SENSITIVE_MARKERS:
-        text = text.replace(marker, "[REDACTED]")
-        text = text.replace(marker.lower(), "[REDACTED]")
-    return text
+    return redact_sensitive_text(value)
 
 
 def _dict(value: Any) -> Mapping[str, Any]:

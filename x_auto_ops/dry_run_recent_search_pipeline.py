@@ -18,10 +18,10 @@ from x_auto_ops.mock_buzz_collector import (
 from x_auto_ops.mock_transport import (
     MockRecentSearchTransport,
     RecentSearchTransport,
-    contains_sensitive_marker,
-    redact_sensitive,
 )
 from x_auto_ops.query_builder import build_recent_search_query
+from x_auto_ops.redaction import assert_redacted, redact_sensitive_text
+from x_auto_ops.retry_queue import RetryQueue, RetryTask
 
 
 DEFAULT_PIPELINE_OUTPUT_PATH = Path("data/mock_recent_search_pipeline_posts.csv")
@@ -36,6 +36,7 @@ class DryRunRecentSearchPipelineResult:
     output_path: Path
     report_path: Path
     debug_log: str
+    retry_queue: RetryQueue
 
 
 def run_dry_run_recent_search_pipeline(
@@ -46,6 +47,7 @@ def run_dry_run_recent_search_pipeline(
     transport: RecentSearchTransport,
     source_genre: str | None = None,
     dry_run: bool = True,
+    retry_queue: RetryQueue | None = None,
 ) -> DryRunRecentSearchPipelineResult:
     """Run the full mock read -> classify -> rank -> CSV -> report path."""
 
@@ -57,6 +59,16 @@ def run_dry_run_recent_search_pipeline(
     query = build_recent_search_query(genre)
     client = XApiBuzzReadClient(transport=transport, dry_run=True)
     fetch_result = client.fetch_posts(genre)
+    queue = retry_queue or RetryQueue()
+    retry_tasks: list[RetryTask] = []
+    if fetch_result.rate_limited:
+        retry_tasks.append(
+            queue.enqueue(
+                query.query,
+                fetch_result.retry_after_seconds,
+                retry_count=0,
+            )
+        )
     ranked_rows = filter_posts(fetch_result.posts, config.genres)
     output = write_posts_csv(output_path, ranked_rows)
     report = write_pipeline_report(
@@ -65,6 +77,8 @@ def run_dry_run_recent_search_pipeline(
         source_genre=query.source_genre,
         fetch_result=fetch_result,
         rows=ranked_rows,
+        retry_queue_size=queue.size(),
+        retry_tasks=retry_tasks,
     )
     debug_log = _safe_pipeline_debug(
         {
@@ -76,6 +90,8 @@ def run_dry_run_recent_search_pipeline(
             "retry_after_seconds": fetch_result.retry_after_seconds,
             "partial_result": fetch_result.partial_result,
             "next_cursor_present": bool(fetch_result.next_token),
+            "retry_queue_size": queue.size(),
+            "redaction_status": "ok",
         }
     )
     return DryRunRecentSearchPipelineResult(
@@ -84,6 +100,7 @@ def run_dry_run_recent_search_pipeline(
         output_path=output,
         report_path=report,
         debug_log=debug_log,
+        retry_queue=queue,
     )
 
 
@@ -99,6 +116,8 @@ def write_pipeline_report(
     source_genre: str,
     fetch_result: BuzzFetchResult,
     rows: list[Mapping[str, Any]],
+    retry_queue_size: int = 0,
+    retry_tasks: list[RetryTask] | None = None,
 ) -> Path:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -114,8 +133,8 @@ def write_pipeline_report(
         "Mock-only dry-run report. No X API call, credential lookup, `.env` read, or posting was performed.",
         "",
         "## Query",
-        f"- query: {redact_sensitive(query)}",
-        f"- source_genre: {redact_sensitive(source_genre)}",
+        f"- query: {redact_sensitive_text(query)}",
+        f"- source_genre: {redact_sensitive_text(source_genre)}",
         "",
         "## Fetch Summary",
         f"- post_count: {len(fetch_result.posts)}",
@@ -124,6 +143,9 @@ def write_pipeline_report(
         f"- retry_after_seconds: {fetch_result.retry_after_seconds}",
         f"- partial_result: {fetch_result.partial_result}",
         f"- next_cursor_present: {bool(fetch_result.next_token)}",
+        f"- retry_queue_size: {retry_queue_size}",
+        f"- rate_limited_count: {1 if fetch_result.rate_limited else 0}",
+        f"- redaction_status: ok",
         "",
         "## Top Posts",
     ]
@@ -133,8 +155,8 @@ def write_pipeline_report(
     for row in top_rows:
         lines.append(
             "- "
-            f"{redact_sensitive(row.get('post_id'))} / "
-            f"{redact_sensitive(row.get('detected_genre'))} / "
+            f"{redact_sensitive_text(row.get('post_id'))} / "
+            f"{redact_sensitive_text(row.get('detected_genre'))} / "
             f"buzz_score {row.get('buzz_score')} / "
             f"rank {row.get('rank_in_genre')}"
         )
@@ -143,11 +165,22 @@ def write_pipeline_report(
     if not missing_counts:
         lines.append("- none: 0")
     for key, count in sorted(missing_counts.items()):
-        lines.append(f"- {redact_sensitive(key)}: {count}")
+        lines.append(f"- {redact_sensitive_text(key)}: {count}")
+
+    lines.extend(["", "## Retry Tasks"])
+    tasks = retry_tasks or []
+    if not tasks:
+        lines.append("- none: 0")
+    for task in tasks:
+        lines.append(
+            "- "
+            f"query={redact_sensitive_text(task.query)} / "
+            f"retry_after_seconds={task.retry_after_seconds} / "
+            f"retry_count={task.retry_count}"
+        )
 
     text = "\n".join(lines) + "\n"
-    if contains_sensitive_marker(text):
-        raise RuntimeError("credential marker detected in pipeline report")
+    assert_redacted(text, context="pipeline report")
     output.write_text(text, encoding="utf-8")
     return output
 
@@ -164,7 +197,6 @@ def _select_genre(genres: list[Any], source_genre: str | None) -> Any:
 
 
 def _safe_pipeline_debug(values: Mapping[str, Any]) -> str:
-    text = " ".join(f"{key}={redact_sensitive(value)}" for key, value in values.items())
-    if contains_sensitive_marker(text):
-        raise RuntimeError("credential marker detected in pipeline debug log")
+    text = " ".join(f"{key}={redact_sensitive_text(value)}" for key, value in values.items())
+    assert_redacted(text, context="pipeline debug log")
     return text

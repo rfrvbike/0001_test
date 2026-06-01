@@ -86,6 +86,8 @@ class MockTransportPipelineTests(unittest.TestCase):
             "token": "TOKEN_SHOULD_NOT_APPEAR",
             "bearer": "BEARER_SHOULD_NOT_APPEAR",
             "client_secret": "SECRET_SHOULD_NOT_APPEAR",
+            "cookie": "COOKIE_SHOULD_NOT_APPEAR",
+            "authorization": "AUTHORIZATION_SHOULD_NOT_APPEAR",
         }
         transport = MockRecentSearchTransport(load_fixture("transport_success.json"))
 

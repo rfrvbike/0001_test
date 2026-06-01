@@ -17,6 +17,7 @@ from x_auto_ops.mock_transport import (
     MockRecentSearchTransport,
     contains_sensitive_marker,
 )
+from x_auto_ops.redaction import redact_sensitive_text
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -92,18 +93,25 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
 
     def test_rate_limited_pipeline_preserves_retry_after(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "pipeline.md"
             result = run_dry_run_recent_search_pipeline(
                 output_path=Path(tmp) / "pipeline.csv",
-                report_path=Path(tmp) / "pipeline.md",
+                report_path=report,
                 transport=load_mock_transport_fixture(FIXTURE_DIR / "pipeline_rate_limited.json"),
                 source_genre="ai_side_business",
                 dry_run=True,
             )
+            report_text = report.read_text(encoding="utf-8")
 
         self.assertTrue(result.fetch_result.rate_limited)
         self.assertEqual(result.fetch_result.retry_after_seconds, 240)
         self.assertTrue(result.fetch_result.partial_result)
         self.assertEqual(result.ranked_rows, [])
+        self.assertEqual(result.retry_queue.size(), 1)
+        self.assertIn("retry_queue_size: 1", report_text)
+        self.assertIn("rate_limited_count: 1", report_text)
+        self.assertIn("Retry Tasks", report_text)
+        self.assertIn("redaction_status: ok", report_text)
 
     def test_credential_leak_regression_for_debug_report_csv_and_exception(self) -> None:
         secret_config = {
@@ -114,6 +122,7 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
             "bearer": "BEARER_SHOULD_NOT_APPEAR",
             "secret": "SECRET_SHOULD_NOT_APPEAR",
             "cookie": "COOKIE_SHOULD_NOT_APPEAR",
+            "authorization": "AUTHORIZATION_SHOULD_NOT_APPEAR",
         }
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "pipeline.csv"
@@ -133,6 +142,7 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
         self.assertFalse(contains_sensitive_marker(result.debug_log), result.debug_log)
         self.assertFalse(contains_sensitive_marker(report_text), report_text)
         self.assertFalse(contains_sensitive_marker(csv_text), csv_text)
+        self.assertFalse(contains_sensitive_marker(redact_sensitive_text("AUTHORIZATION=Bearer TOKEN_SHOULD_NOT_APPEAR")))
 
         with self.assertRaises(RuntimeError) as ctx:
             XApiBuzzReadClient(dry_run=False).fetch_posts(secret_config)

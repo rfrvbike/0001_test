@@ -13,6 +13,9 @@ Mock-only dry-run report. No X API call, credential lookup, `.env` read, or post
 - retry_after_seconds: None
 - partial_result: False
 - next_cursor_present: False
+- retry_queue_size: 0
+- rate_limited_count: 0
+- redaction_status: ok
 
 ## Top Posts
 - 4001 / ai_side_business / buzz_score 1574 / rank 1
@@ -21,3 +24,6 @@ Mock-only dry-run report. No X API call, credential lookup, `.env` read, or post
 ## Metrics Missing Summary
 - missing_impression_count: 1
 - missing_quote_count: 1
+
+## Retry Tasks
+- none: 0
