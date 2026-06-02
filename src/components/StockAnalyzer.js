@@ -1079,9 +1079,26 @@ function bulkAnalysisPanel(state) {
   `;
 }
 
+function safeString(value, fallback = "") {
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+}
+
+function safeLower(value, fallback = "") {
+  return safeString(value, fallback).toLowerCase();
+}
+
+function safeClassToken(value, fallback = "unknown") {
+  const token = safeLower(value, fallback)
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return token || fallback;
+}
+
 function dashboardV2({ stock, indicators, scoreResult, summary, structuredSummary, aiSummary, aiSummaryStatus }, state) {
   const effectiveStructuredSummary = structuredSummary || stock.structuredSummary;
   const preTradeCheck = stock.preTradeCheck || state.analysis?.preTradeCheck;
+  const dataSourceClass = safeClassToken(stock.dataSource);
   return `
     <section class="hero-card compact-hero">
       <div>
@@ -1091,7 +1108,7 @@ function dashboardV2({ stock, indicators, scoreResult, summary, structuredSummar
           ${stock.sector ? `<span>業種：${escapeHtml(stock.sector)}</span>` : ""}
         </div>
         <div class="source-badges">
-          <span class="data-badge ${stock.dataSource.toLowerCase()}">${stock.dataSource}</span>
+          <span class="data-badge ${dataSourceClass}">${escapeHtml(safeString(stock.dataSource, "UNKNOWN"))}</span>
           <span class="data-badge">${escapeHtml(stock.dataSourceLabel)}</span>
           <span class="data-badge danger">${escapeHtml(tradableLabel(stock))}</span>
         </div>
@@ -1135,12 +1152,13 @@ function compactThemeInput(state) {
 }
 
 function dashboard({ stock, indicators, scoreResult, summary, structuredSummary, aiSummary, aiSummaryStatus, preTradeCheck }) {
+  const dataSourceClass = safeClassToken(stock.dataSource);
   return `
     <section class="hero-card">
       <div>
         <div class="stock-id">${stock.code} ${escapeHtml(stock.name)}</div>
         <div class="source-badges">
-          <span class="data-badge ${stock.dataSource.toLowerCase()}">${stock.dataSource}</span>
+          <span class="data-badge ${dataSourceClass}">${escapeHtml(safeString(stock.dataSource, "UNKNOWN"))}</span>
           <span class="data-badge">${escapeHtml(stock.dataSourceLabel)}</span>
           ${stock.storageSourceLabel ? `<span class="data-badge">${escapeHtml(stock.storageSourceLabel)}</span>` : ""}
           <span class="data-badge danger">${escapeHtml(tradableLabel(stock))}</span>
