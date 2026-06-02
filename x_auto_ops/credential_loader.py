@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Mapping, Protocol
 
 
 FAKE_BEARER_TOKEN = "FAKE_BEARER_TOKEN"
@@ -46,3 +46,30 @@ class FakeCredentialLoader:
             api_key=FAKE_API_KEY,
             api_secret=FAKE_API_SECRET,
         )
+
+
+def select_credential_loader(config: Mapping[str, Any] | None = None) -> CredentialLoader:
+    """Select the credential loader without reading real credentials.
+
+    Accepted values:
+
+    - `fake`: returns `FakeCredentialLoader`
+    - `real`: returns disabled `RealCredentialLoader`
+
+    The real loader is fail-closed and raises when used.
+    """
+
+    values = dict(config or {})
+    selected = str(
+        values.get("credential_loader")
+        or values.get("loader")
+        or values.get("credential_source")
+        or "fake"
+    ).strip().lower()
+    if selected == "fake":
+        return FakeCredentialLoader()
+    if selected == "real":
+        from x_auto_ops.real_credential_loader import RealCredentialLoader
+
+        return RealCredentialLoader()
+    raise ValueError(f"unknown credential loader: {selected}")

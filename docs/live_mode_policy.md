@@ -35,10 +35,26 @@ Current implementation:
 - does not read `.env`
 - does not read environment variables
 - does not perform HTTP
+- `RealCredentialLoader` exists as a disabled skeleton only
+- `select_credential_loader({"credential_loader": "real"})` returns the
+  disabled skeleton without reading credentials
 
 Future live implementation must remain backend-only. Credentials must never be
 available to frontend code, browser storage, CSV, reports, fixtures, logs, debug
 output, or exception messages.
+
+## Backend-Only Policy
+
+The detailed backend credential policy is documented in
+`docs/backend_credential_policy.md`.
+
+Current frontend guardrails:
+
+- no X credential loader fields in frontend files
+- no X bearer token fields in frontend files
+- no X API key/secret loader fields in frontend files
+- existing stock-analysis J-Quants redaction strings remain separate and are not
+  an X credential path
 
 ## Redaction Policy
 

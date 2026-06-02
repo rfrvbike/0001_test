@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from x_auto_ops.buzz_read_client import BuzzFetchResult, XApiBuzzReadClient
-from x_auto_ops.credential_loader import CredentialLoader, FakeCredentialLoader
+from x_auto_ops.credential_loader import CredentialLoader, select_credential_loader
 from x_auto_ops.live_mode_gate import assert_live_mode_allowed
 from x_auto_ops.mock_buzz_collector import (
     DEFAULT_CONFIG_PATH,
@@ -58,7 +58,7 @@ def run_dry_run_recent_search_pipeline(
     if not dry_run:
         raise RuntimeError("dry-run recent search pipeline blocks dry_run=False")
 
-    credentials = (credential_loader or FakeCredentialLoader()).load()
+    credentials = (credential_loader or select_credential_loader({"credential_loader": "fake"})).load()
     assert_live_mode_allowed(
         {
             "dry_run": dry_run,

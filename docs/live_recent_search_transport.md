@@ -105,10 +105,34 @@ Current pre-live credential boundary:
 - `CredentialLoader`
 - `FakeCredentialLoader`
 - `CredentialBundle`
+- `select_credential_loader(config)`
+- `x_auto_ops/real_credential_loader.py`
+- `RealCredentialLoader`
+- `RealCredentialLoaderDisabledError`
 
 Only `FakeCredentialLoader` is implemented. It returns fake credential-shaped
 values and does not read files, `.env`, environment variables, tokens, cookies,
 or network resources.
+
+`RealCredentialLoader` is a backend-only disabled skeleton. It fixes the future
+implementation point, but `load()` always raises
+`RealCredentialLoaderDisabledError("Real credential loader disabled")`.
+
+Loader selection:
+
+- `fake` -> `FakeCredentialLoader`
+- `real` -> disabled `RealCredentialLoader`
+
+Selecting the real loader does not read credentials. Any attempt to load through
+it fails closed.
+
+Backend-only policy:
+
+- frontend credential access is prohibited
+- browser storage is prohibited
+- credential values are prohibited in CSV, reports, fixtures, debug logs, and
+  exceptions
+- see `docs/backend_credential_policy.md`
 
 Live mode remains blocked by `x_auto_ops/live_mode_gate.py`:
 

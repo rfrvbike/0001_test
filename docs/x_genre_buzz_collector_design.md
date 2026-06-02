@@ -1408,3 +1408,60 @@ Redaction:
 Related document:
 
 - `docs/pagination_controller.md`
+
+## Backend-Only Real Credential Loader Skeleton
+
+Added on 2026-06-03 as a disabled skeleton for future real X credential loading.
+No real credential is read. No X API call, HTTP request, API key lookup, token
+lookup, cookie lookup, `.env` read, environment variable read, or posting is
+performed.
+
+Implementation points:
+
+- `x_auto_ops/real_credential_loader.py`
+- `RealCredentialLoader`
+- `RealCredentialLoaderDisabledError`
+- `select_credential_loader(config)`
+- `docs/backend_credential_policy.md`
+
+Current behavior:
+
+```text
+RealCredentialLoader.load()
+-> RealCredentialLoaderDisabledError("Real credential loader disabled")
+```
+
+Loader selection:
+
+```text
+credential_loader=fake -> FakeCredentialLoader
+credential_loader=real -> RealCredentialLoader disabled skeleton
+```
+
+The real selection path does not read credentials. It only returns the disabled
+loader object; loading credentials fails closed.
+
+Backend-only policy:
+
+- frontend credential access is prohibited
+- `localStorage` and `sessionStorage` are prohibited for X credentials
+- CSV/report/fixture/debug_log/exception output must not contain credentials
+- frontend files must not contain X credential loader fields such as
+  `bearer_token`, `api_key`, `api_secret`, or `authorization`
+- existing stock-analysis J-Quants redaction strings are separate and must not
+  become an X credential path
+
+Tests verify:
+
+- fake loader still works
+- real loader raises the disabled error
+- loader selection routes fake and real correctly
+- unknown loader selection is rejected
+- dry-run pipeline succeeds with fake loader
+- dry-run pipeline fails closed with real loader
+- frontend X credential loader fields are absent
+- fake credential values do not leak to report, CSV, debug log, or exception
+
+Related document:
+
+- `docs/backend_credential_policy.md`
