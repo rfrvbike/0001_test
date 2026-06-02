@@ -1465,3 +1465,70 @@ Tests verify:
 Related document:
 
 - `docs/backend_credential_policy.md`
+
+## Live Mode Release Policy
+
+Added on 2026-06-03 as the release policy for future real X recent-search
+reads. This is documentation only. It does not enable live mode, perform HTTP,
+read API keys, read tokens, read cookies, modify `.env`, or post anything.
+
+Policy document:
+
+- `docs/live_mode_release_policy.md`
+
+Live mode remains blocked until all release gates pass.
+
+Required test gates:
+
+- full unittest suite
+- redaction tests
+- credential leak tests
+- pagination tests
+- retry policy and retry queue tests
+- request builder tests
+- rate limit header parser tests
+- HTTP error mapping tests
+- response normalizer tests
+- transport integration tests
+- dry-run gate tests
+- frontend credential leak tests
+
+Live unlock requires multiple affirmative settings. `live_mode=true` alone is
+not enough.
+
+Minimum future release shape:
+
+```text
+dry_run=false
+live_mode=true
+credential_loader=real
+transport=live
+http_client=live
+explicit_approval=true
+read_only_recent_search=true
+write_actions=false
+```
+
+Rollback shape:
+
+```text
+live_mode=false
+transport=mock
+credential_loader=fake
+http_client=disabled
+dry_run=true
+```
+
+Accident prevention:
+
+- write APIs remain prohibited
+- post APIs remain prohibited
+- follow APIs remain prohibited
+- like APIs remain prohibited
+- repost APIs remain prohibited
+- only read-only recent search can be considered
+
+Operational preflight must confirm X API plan, recent-search availability,
+`max_results`, pagination limits, public metrics availability,
+`impression_count` availability, rate-limit windows, and `Retry-After`
+behavior before any live read.

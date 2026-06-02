@@ -25,6 +25,11 @@ is allowed:
 - rate-limit retry queue tests
 - pagination tests using mock transport
 
+The full release checklist is defined in
+`docs/live_mode_release_policy.md`. `live_mode=true` alone is never sufficient.
+Live access also requires real credential loading, live transport, live HTTP
+client selection, explicit approval, and read-only recent-search enforcement.
+
 ## Credential Loader Policy
 
 Current implementation:
@@ -80,3 +85,17 @@ The future live transport must stay behind:
 
 The transport must only perform read-only recent-search requests. Posting,
 liking, reposting, following, and any write action remain prohibited.
+
+## Rollback Policy
+
+Any live anomaly must return runtime configuration to:
+
+```text
+live_mode=false
+transport=mock
+credential_loader=fake
+http_client=disabled
+dry_run=true
+```
+
+Rollback details are maintained in `docs/live_mode_release_policy.md`.

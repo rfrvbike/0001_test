@@ -91,6 +91,12 @@ That gate remains required until live access is explicitly approved. A future
 live transport must also have its own explicit live-mode constructor flag so
 accidental invocation fails closed.
 
+Live release approval is governed by `docs/live_mode_release_policy.md`.
+`live_mode=true` alone must not activate this transport. Release requires the
+combined approval of dry-run disablement, real credential loader selection, live
+transport selection, live HTTP client selection, explicit approval, and
+read-only recent-search scope enforcement.
+
 ## Credential Management Policy
 
 Credentials must not be read by query builder, normalizer, scorer, CSV writer,
@@ -271,3 +277,6 @@ Review conclusions:
   existing `XApiBuzzReadClient` dry-run gate.
 - `LiveRecentSearchTransport` currently exists only as a disabled skeleton; it
   must not be changed to perform HTTP until the live-mode checklist is approved.
+
+The approval and rollback checklist is maintained in
+`docs/live_mode_release_policy.md`.

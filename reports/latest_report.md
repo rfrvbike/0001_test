@@ -1,5 +1,138 @@
 # latest_report.md
 
+## 2026-06-03 Live Mode Release Policy
+
+Added the live mode release policy for future real X recent-search reads. This
+is documentation-only work. No real X API call, HTTP request, API key lookup,
+token lookup, cookie access, `.env` change, or posting was performed.
+
+### Added Files
+
+- `docs/live_mode_release_policy.md`
+
+### Changed Files
+
+- `docs/live_mode_policy.md`
+- `docs/live_recent_search_transport.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Policy Summary
+
+Live mode remains disabled. `live_mode=true` alone is not enough to unlock live
+access.
+
+Future live release requires multiple affirmative conditions:
+
+```text
+dry_run=false
+live_mode=true
+credential_loader=real
+transport=live
+http_client=live
+explicit_approval=true
+read_only_recent_search=true
+write_actions=false
+```
+
+### Release Gates
+
+The policy requires all of the following before approval:
+
+- full unittest suite
+- redaction tests
+- credential leak tests
+- pagination tests
+- retry policy tests
+- retry queue tests
+- request builder tests
+- rate limit header parser tests
+- HTTP error mapping tests
+- response normalizer tests
+- transport integration tests
+- dry-run gate tests
+- frontend credential leak tests
+
+### Required Before Live Implementation
+
+Incomplete items are explicitly listed:
+
+- `RealCredentialLoader`
+- live backend credential storage integration
+- credential storage and rotation policy
+- `LiveHttpClient`
+- `LiveRecentSearchTransport`
+- HTTP timeout handling
+- HTTP error mapping integration
+- request/header mapping integration
+- pagination integration
+- retry policy and retry queue integration
+- redacted live transport diagnostics
+- read-only recent search scope enforcement
+
+### Operational Preflight
+
+Before live reads, confirm:
+
+- X API plan
+- recent search availability
+- allowed `max_results`
+- pagination limits
+- public metrics availability
+- `impression_count` availability or nullable fallback
+- rate limit window
+- `Retry-After`, `x-rate-limit-reset`, and `x-rate-limit-remaining`
+
+### Rollback Policy
+
+Any anomaly must return config to:
+
+```text
+live_mode=false
+transport=mock
+credential_loader=fake
+http_client=disabled
+dry_run=true
+```
+
+### Accident Prevention
+
+Only read-only recent search may be considered. The policy keeps these actions
+prohibited:
+
+- post API
+- write API
+- follow API
+- like API
+- repost API
+- delete API
+- DM API
+- profile update API
+- media upload API
+
+### Verification
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 236 tests
+OK
+```
+
+### Remaining
+
+- Live mode is still disabled.
+- Real credential loading is still disabled.
+- Live HTTP transport is still disabled.
+- Actual X API plan constraints still need confirmation immediately before any
+  future live-read review.
+
 ## 2026-06-03 Backend-Only Real Credential Loader Skeleton
 
 Added a disabled real credential loader skeleton for the future X recent-search
