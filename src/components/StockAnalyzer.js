@@ -37,6 +37,20 @@ import {
   removeRecentStock
 } from "../services/recentStocksService.js";
 import {
+  addSimulationRecord,
+  buildSimulationRecordFiltersDefault,
+  buildSimulationRecordFromAnalysis,
+  clearSimulationRecords,
+  downloadSimulationRecordsCsv,
+  filterSimulationRecords,
+  getSimulationRecords,
+  getSimulationDecisionLabels,
+  removeSimulationRecord,
+  summarizeSimulationRecords,
+  updateSimulationRecordCheckResult,
+  updateSimulationRecord
+} from "../services/simulationRecordsService.js";
+import {
   clearStoredStockMaster,
   downloadStockMasterCsvTemplate,
   getStoredStockMaster,
@@ -81,6 +95,8 @@ import { ReasonPanel } from "./ReasonPanel.js";
 import { RiskBadge } from "./RiskBadge.js";
 import { ScoreGauge } from "./ScoreGauge.js";
 import { SignalBadge } from "./SignalBadge.js";
+import { SimulationRecordPanel } from "./SimulationRecordPanel.js";
+import { SimulationSummaryPanel } from "./SimulationSummaryPanel.js";
 import { StockSearchSuggestions } from "./StockSearchSuggestions.js";
 import { StockMasterCsvPanel } from "./StockMasterCsvPanel.js";
 import { StructuredSummaryPanel } from "./StructuredSummaryPanel.js";
@@ -105,6 +121,12 @@ export function mountStockAnalyzer(root) {
     favoriteMessage: "",
     recentStocks: getRecentStocks(),
     recentMessage: "",
+    simulationRecords: getSimulationRecords(),
+    simulationFilters: buildSimulationRecordFiltersDefault(),
+    simulationSummaryMode: "month",
+    simulationSummaryScope: "filtered",
+    simulationMessage: "",
+    simulationError: "",
     preTradeChecklist: getStoredPreTradeChecklist(),
     stockMasterRows: getStoredStockMaster(),
     stockMasterCsvMeta: getStoredStockMasterMeta(),
@@ -205,6 +227,133 @@ export function mountStockAnalyzer(root) {
       }
     };
     saveStoredPreTradeChecklist(state.preTradeChecklist);
+  };
+
+  const addCurrentSimulationRecord = () => {
+    if (!state.analysis?.stock) {
+      state.simulationError = "分析結果がないため、シミュレーション記録を作成できません。";
+      render();
+      return;
+    }
+    const memo = root.querySelector("#simulationMemoInput")?.value || "";
+    const record = buildSimulationRecordFromAnalysis(state.analysis, {
+      scoreResult: state.analysis.scoreResult,
+      structuredSummary: state.analysis.structuredSummary,
+      preTradeCheck: state.analysis.preTradeCheck,
+      memo
+    });
+    const result = addSimulationRecord(record);
+    state.simulationRecords = result.records || getSimulationRecords();
+    state.simulationMessage = result.ok ? "シミュレーション記録を追加しました。" : "";
+    state.simulationError = result.ok ? "" : (result.error || "シミュレーション記録を保存できませんでした。");
+    render();
+  };
+
+  const analyzeSimulationRecord = (code) => {
+    if (!code) return;
+    state.query = code;
+    analyze(code);
+  };
+
+  const checkSimulationRecordPrice = async (id, code) => {
+    if (!id || !code) return;
+    try {
+      state.query = code;
+      state.simulationMessage = "現在価格を確認しています。";
+      state.simulationError = "";
+      render();
+      const stock = await fetchStockData(code);
+      setAnalysisFromStock(stock);
+      syncBackendStatusFromStock(stock);
+      const result = updateSimulationRecordCheckResult(id, stock);
+      state.simulationRecords = result.records || getSimulationRecords();
+      state.simulationMessage = result.ok
+        ? "現在価格を確認し、仮記録の参考差分を更新しました。"
+        : "";
+      state.simulationError = result.ok ? "" : (result.error || "現在価格の確認結果を保存できませんでした。");
+    } catch (error) {
+      state.simulationMessage = "";
+      state.simulationError = error.message || "現在価格を確認できませんでした。";
+    }
+    render();
+  };
+
+  const updateSimulationRecordFromPanel = (id) => {
+    const memo = root.querySelector(`[data-simulation-memo="${cssEscape(id)}"]`)?.value || "";
+    const resultMemo = root.querySelector(`[data-simulation-result-memo="${cssEscape(id)}"]`)?.value || "";
+    const status = root.querySelector(`[data-simulation-status="${cssEscape(id)}"]`)?.value || "watching";
+    const result = updateSimulationRecord(id, { memo, resultMemo, status });
+    state.simulationRecords = result.records || getSimulationRecords();
+    state.simulationMessage = result.ok ? "シミュレーション記録を更新しました。" : "";
+    state.simulationError = result.ok ? "" : (result.error || "シミュレーション記録を更新できませんでした。");
+    render();
+  };
+
+  const removeSimulationRecordFromPanel = (id) => {
+    if (!id) return;
+    const ok = globalThis.confirm ? globalThis.confirm("このシミュレーション記録を削除しますか？実売買や元データには影響しません。") : true;
+    if (!ok) return;
+    const result = removeSimulationRecord(id);
+    state.simulationRecords = result.records || getSimulationRecords();
+    state.simulationMessage = result.ok ? "シミュレーション記録を削除しました。" : "";
+    state.simulationError = result.ok ? "" : (result.error || "シミュレーション記録を削除できませんでした。");
+    render();
+  };
+
+  const clearAllSimulationRecords = () => {
+    const ok = globalThis.confirm ? globalThis.confirm("保存済みシミュレーション記録をすべて削除しますか？実売買やCSV/J-Quantsデータには影響しません。") : true;
+    if (!ok) return;
+    const result = clearSimulationRecords();
+    state.simulationRecords = [];
+    state.simulationMessage = result.ok ? "シミュレーション記録を全削除しました。" : "";
+    state.simulationError = result.ok ? "" : (result.error || "シミュレーション記録を削除できませんでした。");
+    render();
+  };
+
+  const exportSimulationRecordsCsv = () => {
+    const result = downloadSimulationRecordsCsv(state.simulationRecords);
+    state.simulationMessage = result.ok
+      ? `シミュレーション記録CSVを出力しました。${result.count}件 / ${result.filename}`
+      : "";
+    state.simulationError = result.ok ? "" : (result.error || "CSV出力に失敗しました。");
+    render();
+  };
+
+  const exportFilteredSimulationRecordsCsv = () => {
+    const filteredRecords = filterSimulationRecords(state.simulationRecords, state.simulationFilters);
+    const result = downloadSimulationRecordsCsv(filteredRecords, {
+      filename: `simulation-records-filtered-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}.csv`
+    });
+    state.simulationMessage = result.ok
+      ? `表示中のシミュレーション記録CSVを出力しました。${result.count}件 / ${result.filename}`
+      : "";
+    state.simulationError = result.ok ? "" : (result.error || "表示中CSV出力に失敗しました。");
+    render();
+  };
+
+  const updateSimulationFilters = () => {
+    state.simulationFilters = {
+      datePreset: root.querySelector("#simulationDatePreset")?.value || "all",
+      dateFrom: root.querySelector("#simulationDateFrom")?.value || "",
+      dateTo: root.querySelector("#simulationDateTo")?.value || "",
+      keyword: root.querySelector("#simulationKeyword")?.value || "",
+      decisionLabel: root.querySelector("#simulationDecisionLabel")?.value || "all",
+      diffStatus: root.querySelector("#simulationDiffStatus")?.value || "all"
+    };
+    render();
+  };
+
+  const resetSimulationFilters = () => {
+    state.simulationFilters = buildSimulationRecordFiltersDefault();
+    state.simulationMessage = "";
+    state.simulationError = "";
+    render();
+  };
+
+  const updateSimulationSummarySettings = () => {
+    state.simulationSummaryScope = root.querySelector("#simulationSummaryScope")?.value || "filtered";
+    state.simulationSummaryMode = root.querySelector("#simulationSummaryMode")?.value || "month";
+    render();
   };
 
   const syncBackendStatusFromStock = (stock) => {
@@ -816,6 +965,36 @@ export function mountStockAnalyzer(root) {
     });
     root.querySelector("#applyThemeBtn")?.addEventListener("click", applyManualThemeInput);
     root.querySelectorAll("[data-pretrade-check]").forEach((input) => input.addEventListener("change", togglePreTradeChecklist));
+    root.querySelector("#addSimulationRecordBtn")?.addEventListener("click", addCurrentSimulationRecord);
+    root.querySelector("#exportSimulationRecordsCsvBtn")?.addEventListener("click", exportSimulationRecordsCsv);
+    root.querySelector("#exportFilteredSimulationRecordsCsvBtn")?.addEventListener("click", exportFilteredSimulationRecordsCsv);
+    root.querySelector("#clearSimulationRecordsBtn")?.addEventListener("click", clearAllSimulationRecords);
+    root.querySelector("#resetSimulationFiltersBtn")?.addEventListener("click", resetSimulationFilters);
+    [
+      "#simulationDatePreset",
+      "#simulationDateFrom",
+      "#simulationDateTo",
+      "#simulationKeyword",
+      "#simulationDecisionLabel",
+      "#simulationDiffStatus"
+    ].forEach((selector) => {
+      const eventName = selector === "#simulationKeyword" ? "input" : "change";
+      root.querySelector(selector)?.addEventListener(eventName, updateSimulationFilters);
+    });
+    root.querySelector("#simulationSummaryScope")?.addEventListener("change", updateSimulationSummarySettings);
+    root.querySelector("#simulationSummaryMode")?.addEventListener("change", updateSimulationSummarySettings);
+    root.querySelectorAll("[data-simulation-analyze]").forEach((button) => {
+      button.addEventListener("click", () => analyzeSimulationRecord(button.dataset.simulationAnalyze));
+    });
+    root.querySelectorAll("[data-simulation-check]").forEach((button) => {
+      button.addEventListener("click", () => checkSimulationRecordPrice(button.dataset.simulationCheck, button.dataset.simulationCheckCode));
+    });
+    root.querySelectorAll("[data-simulation-update]").forEach((button) => {
+      button.addEventListener("click", () => updateSimulationRecordFromPanel(button.dataset.simulationUpdate));
+    });
+    root.querySelectorAll("[data-simulation-remove]").forEach((button) => {
+      button.addEventListener("click", () => removeSimulationRecordFromPanel(button.dataset.simulationRemove));
+    });
     ["#bulkSearch", "#bulkSort", "#bulkSignal", "#bulkRisk", "#bulkMaterial"].forEach((selector) => {
       const element = root.querySelector(selector);
       element?.addEventListener(selector === "#bulkSearch" ? "input" : "change", updateBulkFilters);
@@ -872,6 +1051,9 @@ export function mountStockAnalyzer(root) {
 }
 
 function template(state) {
+  const simulationFilteredRecords = filterSimulationRecords(state.simulationRecords, state.simulationFilters);
+  const simulationSummary = summarizeSimulationRecords(simulationFilteredRecords);
+  const simulationDecisionLabels = getSimulationDecisionLabels(state.simulationRecords);
   return `
     <main class="app-shell">
       <header class="topbar">
@@ -902,6 +1084,21 @@ function template(state) {
       <div class="page-section-title">管理・データ入力</div>
       ${CollapsibleSection({ title: "接続詳細", children: backendPanel(state) })}
       ${CollapsibleSection({ title: "CSV読み込み・保存データ", children: `${stockMasterCsvPanel(state)}${csvImportPanel(state)}${savedCsvPanel(state)}` })}
+      ${CollapsibleSection({ title: "シミュレーション記録一覧", children: SimulationRecordPanel({
+        records: state.simulationRecords,
+        filteredRecords: simulationFilteredRecords,
+        filters: state.simulationFilters,
+        summary: simulationSummary,
+        decisionLabels: simulationDecisionLabels,
+        message: state.simulationMessage,
+        error: state.simulationError,
+        variant: "list"
+      }) + SimulationSummaryPanel({
+        records: state.simulationRecords,
+        filteredRecords: simulationFilteredRecords,
+        summaryMode: state.simulationSummaryMode,
+        summaryScope: state.simulationSummaryScope
+      }) })}
       ${watchPanel(state)}
     </main>
   `;
@@ -1125,6 +1322,13 @@ function dashboardV2({ stock, indicators, scoreResult, summary, structuredSummar
         code: stock.code,
         checkedItemIds: state.preTradeChecklist?.[stock.code]?.checkedItemIds || [],
         compact: true
+      })}
+      ${SimulationRecordPanel({
+        analysis: { stock, scoreResult, structuredSummary: effectiveStructuredSummary, preTradeCheck },
+        records: state.simulationRecords,
+        message: state.simulationMessage,
+        error: state.simulationError,
+        variant: "add"
       })}
       ${StructuredSummaryPanel(effectiveStructuredSummary)}
       ${KeyMetricsGrid({ stock, indicators, scoreResult })}
@@ -1397,6 +1601,11 @@ function formatMs(value) {
   if (ms % 60000 === 0) return `${ms / 60000}分`;
   if (ms % 1000 === 0) return `${ms / 1000}秒`;
   return `${ms}ms`;
+}
+
+function cssEscape(value) {
+  if (globalThis.CSS?.escape) return globalThis.CSS.escape(String(value));
+  return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
 
 function formatSavedAt(value) {

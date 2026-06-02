@@ -52,6 +52,42 @@ import {
   removeRecentStock
 } from "../src/services/recentStocksService.js";
 import {
+  SIMULATION_RECORDS_KEY,
+  SIMULATION_RECORDS_MAX,
+  addSimulationRecord,
+  buildSimulationRecordFiltersDefault,
+  buildSimulationRecordFromAnalysis,
+  buildSimulationCheckResult,
+  buildSimulationRecordsCsv,
+  buildSimulationRecordsCsvFilename,
+  calculateSimulationPriceDiff,
+  clearSimulationRecords,
+  escapeCsvValue,
+  filterSimulationRecords,
+  formatSimulationDiff,
+  formatSimulationRecordCsvRow,
+  getSimulationDecisionLabels,
+  getSimulationRecordDiffStatus,
+  getSimulationRecordDecisionKey,
+  getSimulationRecordMonth,
+  getSimulationRecordStockKey,
+  getSimulationRecords,
+  isValidRecordedPrice,
+  matchesSimulationRecordDateRange,
+  matchesSimulationRecordKeyword,
+  removeSimulationRecord,
+  sanitizeSimulationRecordForCsv,
+  buildSimulationGroupSummary,
+  calculateSimulationSummaryStats,
+  formatSimulationSummaryPercent,
+  summarizeSimulationRecordsByDecision,
+  summarizeSimulationRecordsByMonth,
+  summarizeSimulationRecordsByStock,
+  summarizeSimulationRecords,
+  updateSimulationRecordCheckResult,
+  updateSimulationRecord
+} from "../src/services/simulationRecordsService.js";
+import {
   STOCK_MASTER_CSV_KEY,
   STOCK_MASTER_CSV_META_KEY,
   buildStockMasterCsvTemplate,
@@ -161,6 +197,8 @@ import { CompactStatusBar } from "../src/components/CompactStatusBar.js";
 import { PrimaryDecisionCard } from "../src/components/PrimaryDecisionCard.js";
 import { KeyMetricsGrid } from "../src/components/KeyMetricsGrid.js";
 import { PreTradeCheckPanel } from "../src/components/PreTradeCheckPanel.js";
+import { SimulationRecordPanel } from "../src/components/SimulationRecordPanel.js";
+import { SimulationSummaryPanel } from "../src/components/SimulationSummaryPanel.js";
 import { StockSearchSuggestions } from "../src/components/StockSearchSuggestions.js";
 import { StockMasterCsvPanel } from "../src/components/StockMasterCsvPanel.js";
 import { formatLargeYen, formatPerShareYen } from "../src/components/formatters.js";
@@ -416,6 +454,289 @@ assert.deepEqual(getRecentStocks(recentStorage), []);
 const brokenRecentStorage = createMockStorage();
 brokenRecentStorage.setItem(RECENT_STOCKS_KEY, "{bad json");
 assert.deepEqual(getRecentStocks(brokenRecentStorage), []);
+
+const simulationStorage = createMockStorage();
+assert.deepEqual(getSimulationRecords(simulationStorage), []);
+const toyotaIndicatorsForSimulation = calculateIndicators(toyota, today);
+const toyotaScoreForSimulation = calculateScore(toyota, toyotaIndicatorsForSimulation);
+const toyotaStructuredForSimulation = buildStructuredSummary(toyota, toyotaScoreForSimulation, {
+  indicators: toyotaIndicatorsForSimulation,
+  summary: buildReasonSummary(toyota, toyotaIndicatorsForSimulation, toyotaScoreForSimulation)
+});
+const toyotaPreTradeForSimulation = buildPreTradeCheck(toyota, {
+  indicators: toyotaIndicatorsForSimulation,
+  scoreResult: toyotaScoreForSimulation,
+  structuredSummary: toyotaStructuredForSimulation
+});
+const simulationRecord = buildSimulationRecordFromAnalysis({
+  stock: {
+    ...toyota,
+    headers: { "x-api-key": "test-api-key-value" },
+    rawRows: [{ secret: true }],
+    debugInfo: { hidden: true },
+    financialSummary: { available: true },
+    structuredSummary: { raw: true },
+    aiSummary: { raw: true },
+    themeSummary: { themes: ["自動車", "EV"] }
+  },
+  scoreResult: toyotaScoreForSimulation,
+  structuredSummary: toyotaStructuredForSimulation,
+  preTradeCheck: toyotaPreTradeForSimulation
+}, {
+  id: "sim_test_1",
+  memo: "押し目を待つ",
+  now: "2026-06-01T09:00:00.000Z"
+});
+assert.equal(simulationRecord.code, "7203");
+assert.equal(simulationRecord.memo, "押し目を待つ");
+assert.equal(simulationRecord.themeCount, 2);
+assert.equal(addSimulationRecord(simulationRecord, simulationStorage).ok, true);
+assert.equal(addSimulationRecord({ ...simulationRecord, id: "sim_test_2", memo: "2回目" }, simulationStorage).ok, true);
+assert.equal(getSimulationRecords(simulationStorage).length, 2);
+assert.notEqual(getSimulationRecords(simulationStorage)[0].id, getSimulationRecords(simulationStorage)[1].id);
+assert.equal(updateSimulationRecord("sim_test_1", {
+  memo: "更新メモ",
+  resultMemo: "翌日も確認",
+  status: "review_later"
+}, simulationStorage).ok, true);
+const updatedSimulationRecord = getSimulationRecords(simulationStorage).find((record) => record.id === "sim_test_1");
+assert.equal(updatedSimulationRecord.memo, "更新メモ");
+assert.equal(updatedSimulationRecord.resultMemo, "翌日も確認");
+assert.equal(updatedSimulationRecord.status, "review_later");
+assert.equal(removeSimulationRecord("sim_test_2", simulationStorage).ok, true);
+assert.equal(getSimulationRecords(simulationStorage).length, 1);
+const simulationRaw = simulationStorage.getItem(SIMULATION_RECORDS_KEY);
+assert.equal(simulationRaw.includes("test-api-key-value"), false);
+assert.equal(simulationRaw.includes("x-api-key"), false);
+assert.equal(simulationRaw.includes("rawRows"), false);
+assert.equal(simulationRaw.includes("debugInfo"), false);
+assert.equal(simulationRaw.includes("financialSummary"), false);
+assert.equal(simulationRaw.includes("structuredSummary"), false);
+assert.equal(simulationRaw.includes("aiSummary"), false);
+assert.equal(clearSimulationRecords(simulationStorage).ok, true);
+assert.deepEqual(getSimulationRecords(simulationStorage), []);
+const brokenSimulationStorage = createMockStorage();
+brokenSimulationStorage.setItem(SIMULATION_RECORDS_KEY, "{bad json");
+assert.deepEqual(getSimulationRecords(brokenSimulationStorage), []);
+const manySimulationRecords = Array.from({ length: SIMULATION_RECORDS_MAX + 5 }, (_, index) => ({
+  ...simulationRecord,
+  id: `sim_many_${index}`,
+  recordedAt: new Date(Date.UTC(2026, 5, 1, 0, index)).toISOString()
+}));
+assert.equal(addSimulationRecord(manySimulationRecords[0], simulationStorage).ok, true);
+for (const record of manySimulationRecords.slice(1)) addSimulationRecord(record, simulationStorage);
+assert.equal(getSimulationRecords(simulationStorage).length, SIMULATION_RECORDS_MAX);
+assert.deepEqual(buildSimulationRecordFiltersDefault(), {
+  datePreset: "all",
+  dateFrom: "",
+  dateTo: "",
+  keyword: "",
+  decisionLabel: "all",
+  diffStatus: "all"
+});
+const simulationFilterRecords = [
+  {
+    ...simulationRecord,
+    id: "sim_filter_plus",
+    code: "7203",
+    name: "トヨタ自動車",
+    recordedAt: "2026-05-31T09:00:00.000Z",
+    analysisDate: "2026-05-31",
+    decisionLabel: "押し目待ち",
+    lastCheckedChange: 100,
+    lastCheckedChangePercent: 2.5
+  },
+  {
+    ...simulationRecord,
+    id: "sim_filter_minus",
+    code: "6758",
+    name: "ソニーグループ",
+    recordedAt: "2026-05-20T09:00:00.000Z",
+    analysisDate: "2026-05-20",
+    decisionLabel: "様子見",
+    lastCheckedChange: -50,
+    lastCheckedChangePercent: -1.25
+  },
+  {
+    ...simulationRecord,
+    id: "sim_filter_unknown",
+    code: "8035",
+    name: "東京エレクトロン",
+    recordedAt: "2026-04-01T09:00:00.000Z",
+    analysisDate: "2026-04-01",
+    decisionLabel: "高値掴み注意",
+    lastCheckedChange: null,
+    lastCheckedChangePercent: null
+  }
+];
+assert.equal(typeof filterSimulationRecords, "function");
+assert.equal(filterSimulationRecords(simulationFilterRecords, { keyword: "トヨタ" }).length, 1);
+assert.equal(filterSimulationRecords(simulationFilterRecords, { keyword: "6758" }).length, 1);
+assert.equal(filterSimulationRecords(simulationFilterRecords, { decisionLabel: "様子見" }).length, 1);
+assert.equal(filterSimulationRecords(simulationFilterRecords, { diffStatus: "positive" }).length, 1);
+assert.equal(filterSimulationRecords(simulationFilterRecords, { diffStatus: "negative" }).length, 1);
+assert.equal(filterSimulationRecords(simulationFilterRecords, { diffStatus: "unknown" }).length, 1);
+assert.equal(filterSimulationRecords(simulationFilterRecords, {
+  datePreset: "custom",
+  dateFrom: "2026-05-01",
+  dateTo: "2026-05-31"
+}).length, 2);
+assert.equal(matchesSimulationRecordDateRange(simulationFilterRecords[0], {
+  datePreset: "custom",
+  dateFrom: "2026-05-31",
+  dateTo: "2026-05-31"
+}), true);
+assert.equal(matchesSimulationRecordKeyword(simulationFilterRecords[2], "東京"), true);
+assert.equal(getSimulationRecordDiffStatus(simulationFilterRecords[0]), "positive");
+assert.equal(getSimulationRecordDiffStatus(simulationFilterRecords[1]), "negative");
+assert.equal(getSimulationRecordDiffStatus(simulationFilterRecords[2]), "unknown");
+assert.deepEqual(getSimulationDecisionLabels(simulationFilterRecords), ["押し目待ち", "高値掴み注意", "様子見"]);
+const simulationSummary = summarizeSimulationRecords(simulationFilterRecords);
+assert.equal(simulationSummary.totalRecords, 3);
+assert.equal(simulationSummary.positiveCount, 1);
+assert.equal(simulationSummary.negativeCount, 1);
+assert.equal(simulationSummary.unknownCount, 1);
+assert.equal(simulationSummary.averageChangePercent, 0.63);
+assert.equal(simulationSummary.maxPositiveChangePercent, 2.5);
+assert.equal(simulationSummary.maxNegativeChangePercent, -1.25);
+assert.equal(typeof summarizeSimulationRecordsByMonth, "function");
+assert.equal(typeof summarizeSimulationRecordsByStock, "function");
+assert.equal(typeof summarizeSimulationRecordsByDecision, "function");
+assert.equal(getSimulationRecordMonth(simulationFilterRecords[0]).key, "2026-05");
+assert.equal(getSimulationRecordStockKey(simulationFilterRecords[0]).key, "7203");
+assert.equal(getSimulationRecordDecisionKey(simulationFilterRecords[0]).key, "押し目待ち");
+const monthSummary = summarizeSimulationRecordsByMonth(simulationFilterRecords);
+assert.equal(monthSummary[0].key, "2026-05");
+assert.equal(monthSummary[0].count, 2);
+assert.equal(monthSummary[0].positiveCount, 1);
+assert.equal(monthSummary[0].negativeCount, 1);
+assert.equal(monthSummary[0].uncheckedCount, 0);
+assert.equal(monthSummary[0].averageChangePercent, 0.63);
+const stockSummary = summarizeSimulationRecordsByStock(simulationFilterRecords);
+assert.equal(stockSummary.some((row) => row.key === "7203" && row.label.includes("トヨタ") && row.positiveCount === 1), true);
+const decisionSummary = summarizeSimulationRecordsByDecision(simulationFilterRecords);
+assert.equal(decisionSummary.some((row) => row.key === "様子見" && row.negativeCount === 1), true);
+const groupedSummary = buildSimulationGroupSummary(simulationFilterRecords, () => ({ key: "all", label: "すべて" }));
+assert.equal(groupedSummary[0].count, 3);
+assert.equal(groupedSummary[0].flatCount, 0);
+assert.equal(groupedSummary[0].checkedCount, 2);
+assert.deepEqual(calculateSimulationSummaryStats([{ code: "bad", lastCheckedChangePercent: "x" }]).averageChangePercent, null);
+assert.equal(formatSimulationSummaryPercent(1.234), "+1.23%");
+assert.equal(formatSimulationSummaryPercent(null), "未計算");
+assert.equal(SimulationRecordPanel({ records: undefined }).includes("シミュレーション記録"), true);
+assert.equal(SimulationRecordPanel({ records: [simulationRecord], variant: "list" }).includes('data-simulation-analyze="7203"'), true);
+assert.equal(SimulationRecordPanel({ records: [simulationRecord], variant: "list" }).includes('data-simulation-check="sim_test_1"'), true);
+assert.equal(SimulationRecordPanel({
+  records: simulationFilterRecords,
+  filteredRecords: filterSimulationRecords(simulationFilterRecords, { keyword: "トヨタ" }),
+  filters: { ...buildSimulationRecordFiltersDefault(), keyword: "トヨタ" },
+  summary: summarizeSimulationRecords(filterSimulationRecords(simulationFilterRecords, { keyword: "トヨタ" })),
+  decisionLabels: getSimulationDecisionLabels(simulationFilterRecords),
+  variant: "list"
+}).includes("表示中のみCSV出力"), true);
+assert.equal(SimulationSummaryPanel({
+  records: simulationFilterRecords,
+  filteredRecords: filterSimulationRecords(simulationFilterRecords, { keyword: "トヨタ" }),
+  summaryMode: "stock",
+  summaryScope: "filtered"
+}).includes("検証サマリー"), true);
+assert.equal(SimulationSummaryPanel({ records: undefined, filteredRecords: undefined }).includes("集計できる"), true);
+assert.equal(SimulationRecordPanel({ analysis: { stock: toyota }, variant: "add" }).includes("シミュレーション記録に追加"), true);
+const scoreBeforeSimulationBuild = toyotaScoreForSimulation.totalScore;
+buildSimulationRecordFromAnalysis({ stock: toyota, scoreResult: toyotaScoreForSimulation });
+assert.equal(toyotaScoreForSimulation.totalScore, scoreBeforeSimulationBuild);
+const priceDiff = calculateSimulationPriceDiff({ price: 3504 }, 3620);
+assert.equal(priceDiff.calculable, true);
+assert.equal(priceDiff.priceDiff, 116);
+assert.equal(priceDiff.priceDiffPercent, 3.31);
+assert.equal(formatSimulationDiff(priceDiff), "+116円（+3.31%）");
+assert.equal(calculateSimulationPriceDiff({ price: 0 }, 3620).calculable, false);
+assert.equal(calculateSimulationPriceDiff({ price: null }, 3620).reason, "recorded_price_unavailable");
+assert.equal(isValidRecordedPrice(3504), true);
+assert.equal(isValidRecordedPrice(0), false);
+const simulationPriceRecord = { ...simulationRecord, id: "sim_price_check", price: 3504 };
+const simulationCheckResult = buildSimulationCheckResult(simulationPriceRecord, {
+  code: "7203",
+  price: 3620,
+  dataSource: "J_QUANTS_MAPPED",
+  isMock: false,
+  headers: { "x-api-key": "test-api-key-value" },
+  rawRows: [{ secret: true }],
+  debugInfo: { hidden: true },
+  financialSummary: { available: true },
+  structuredSummary: { raw: true },
+  aiSummary: { raw: true }
+}, { now: "2026-06-03T10:00:00.000Z" });
+assert.equal(simulationCheckResult.currentPrice, 3620);
+assert.equal(simulationCheckResult.priceDiff, 116);
+assert.equal(simulationCheckResult.priceDiffPercent, 3.31);
+assert.equal(simulationCheckResult.dataSource, "J_QUANTS_MAPPED");
+assert.equal(addSimulationRecord(simulationPriceRecord, simulationStorage).ok, true);
+assert.equal(updateSimulationRecordCheckResult("sim_price_check", {
+  price: 3620,
+  dataSource: "J_QUANTS_MAPPED",
+  isMock: false,
+  headers: { "x-api-key": "test-api-key-value" },
+  rawRows: [{ secret: true }],
+  debugInfo: { hidden: true }
+}, simulationStorage).ok, true);
+const checkedSimulationRecord = getSimulationRecords(simulationStorage).find((record) => record.id === "sim_price_check");
+assert.equal(checkedSimulationRecord.lastCheckedPrice, 3620);
+assert.equal(checkedSimulationRecord.lastCheckedChange, 116);
+assert.equal(checkedSimulationRecord.lastCheckedChangePercent, 3.31);
+const checkedSimulationRaw = simulationStorage.getItem(SIMULATION_RECORDS_KEY);
+assert.equal(checkedSimulationRaw.includes("test-api-key-value"), false);
+assert.equal(checkedSimulationRaw.includes("rawRows"), false);
+assert.equal(checkedSimulationRaw.includes("debugInfo"), false);
+assert.equal(checkedSimulationRaw.includes("financialSummary"), false);
+assert.equal(SimulationRecordPanel({ records: [checkedSimulationRecord], variant: "list" }).includes("+116"), true);
+const csvSimulationRecord = {
+  ...checkedSimulationRecord,
+  memo: "押し目,確認\n引用\"あり\"",
+  resultMemo: "検証メモ"
+};
+const sanitizedCsvRecord = sanitizeSimulationRecordForCsv({
+  ...csvSimulationRecord,
+  headers: { "x-api-key": "test-api-key-value" },
+  rawRows: [{ hidden: true }],
+  debugInfo: { hidden: true },
+  financialSummary: { available: true },
+  structuredSummary: { raw: true },
+  aiSummary: { raw: true },
+  themeSummary: { raw: true }
+});
+assert.equal(typeof buildSimulationRecordsCsv, "function");
+assert.equal(sanitizedCsvRecord.code, "7203");
+assert.equal(sanitizedCsvRecord.recordedPrice, 3504);
+assert.equal(sanitizedCsvRecord.lastCheckedPrice, 3620);
+assert.equal(sanitizedCsvRecord.referenceChange, 116);
+assert.equal(sanitizedCsvRecord.referenceChangePercent, 3.31);
+assert.equal(sanitizedCsvRecord.notice.includes("実売買ではなく"), true);
+assert.equal(escapeCsvValue('a,b\n"c"'), '"a,b\n""c"""');
+assert.equal(escapeCsvValue(null), "");
+assert.equal(formatSimulationRecordCsvRow({ code: "7203", name: undefined }).includes("7203"), true);
+const simulationCsv = buildSimulationRecordsCsv([csvSimulationRecord]);
+assert.equal(simulationCsv.charCodeAt(0), 0xfeff);
+assert.equal(simulationCsv.includes("recordedAt,analysisDate,code,name"), true);
+assert.equal(simulationCsv.includes("7203"), true);
+assert.equal(simulationCsv.includes("3620"), true);
+assert.equal(simulationCsv.includes("116"), true);
+assert.equal(simulationCsv.includes("3.31"), true);
+assert.equal(simulationCsv.includes("検証用データ"), true);
+assert.equal(simulationCsv.includes('"押し目,確認\n引用""あり"""'), true);
+assert.equal(simulationCsv.includes("test-api-key-value"), false);
+assert.equal(simulationCsv.includes("x-api-key"), false);
+assert.equal(simulationCsv.includes("rawRows"), false);
+assert.equal(simulationCsv.includes("debugInfo"), false);
+assert.equal(simulationCsv.includes("financialSummary"), false);
+assert.equal(simulationCsv.includes("structuredSummary"), false);
+assert.equal(simulationCsv.includes("aiSummary"), false);
+assert.equal(simulationCsv.includes("themeSummary"), false);
+assert.equal(buildSimulationRecordsCsv([]).includes("recordedAt,analysisDate,code,name"), true);
+assert.equal(buildSimulationRecordsCsvFilename(new Date("2026-06-01T00:00:00Z")), "simulation-records-20260601.csv");
+assert.equal(SimulationRecordPanel({ records: [checkedSimulationRecord], variant: "list" }).includes("全件CSV出力"), true);
+assert.equal(SimulationRecordPanel({ records: [], variant: "list" }).includes("exportSimulationRecordsCsvBtn\" disabled"), true);
+clearSimulationRecords(simulationStorage);
 
 const masterCsv = `code,name,market,sector
 9434,ソフトバンク,プライム,情報・通信業
@@ -2209,6 +2530,9 @@ assert.equal(stockAnalyzerSource.includes("フォールバック"), true);
 assert.equal(stockAnalyzerSource.includes("バックエンド / J-Quants"), true);
 assert.equal(stockAnalyzerSource.includes("ThemeSummaryPanel"), true);
 assert.equal(stockAnalyzerSource.includes("manualThemeInput"), true);
+assert.equal(stockAnalyzerSource.includes("SimulationRecordPanel"), true);
+assert.equal(readFileSync("src/services/simulationRecordsService.js", "utf8").includes("stockAnalyzer.simulationRecords"), true);
+assert.equal(readFileSync("src/services/simulationRecordsService.js", "utf8").includes("fetch("), false);
 
 assert.equal(normalizeSearchText(" ト ヨ タ "), "とよた");
 assert.equal(isStockCodeQuery("7203"), true);
