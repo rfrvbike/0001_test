@@ -1,5 +1,143 @@
 # latest_report.md
 
+## 2026-06-02 HTTP Timeout and Error Mapping Skeleton
+
+Added a mock-only HTTP timeout/error mapping skeleton for future X recent-search
+reads. No X API call, HTTP request execution, request library use, API key
+lookup, token lookup, cookie access, `.env` edit, or posting was performed.
+
+### Added Files
+
+- `x_auto_ops/http_error_mapping.py`
+- `tests/test_http_error_mapping.py`
+- `docs/http_error_mapping.md`
+
+### Changed Files
+
+- `docs/http_client_interface.md`
+- `docs/live_recent_search_transport.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### HTTP Error Mapping Spec
+
+`x_auto_ops/http_error_mapping.py` defines:
+
+- `HttpErrorInfo`
+- `map_http_error(...)`
+
+`HttpErrorInfo` fields:
+
+- `error_type`
+- `status_code`
+- `retryable`
+- `retry_after_seconds`
+- `message`
+- `redacted_message`
+- `partial_result`
+
+Mapped error types:
+
+- `timeout`
+- `network_error`
+- `auth_error`
+- `rate_limited`
+- `server_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+### Retryable Policy
+
+Retryable:
+
+- `timeout`
+- `network_error`
+- `rate_limited`
+- `server_error`
+
+Not retryable:
+
+- `auth_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+Rate-limit mapping:
+
+- `status_code=429` maps to `rate_limited`
+- `Retry-After` is preserved as `retry_after_seconds`
+- `parse_rate_limit_headers(...)` remains the source for retry-after parsing
+
+### Redaction
+
+Error messages are redacted before being returned. Credential-shaped marker text
+such as API key, token, secret, cookie, and authorization wording is not allowed
+to appear in `message` or `redacted_message`.
+
+### Tests
+
+Added coverage for:
+
+- timeout
+- network error
+- 401/403 auth error
+- 429 rate limited
+- Retry-After header without 429
+- 500 server error
+- 400 client error
+- JSON parse error
+- schema error
+- disabled HTTP client
+- credential-shaped marker redaction in error messages
+
+### Verification
+
+Commands:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_recent_search_pipeline.py --dry-run
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Results:
+
+```text
+DRY-RUN recent search pipeline complete.
+Fetched posts: 2
+Ranked posts: 2
+Rate limited: False
+Retry after seconds: None
+Partial result: False
+CSV: data\mock_recent_search_pipeline_posts.csv
+Report: reports/mock_recent_search_pipeline_report.md
+No X API call, credential lookup, .env edit, or posting was performed.
+
+Ran 218 tests
+OK
+```
+
+### Safety
+
+- No real X API call was added.
+- No HTTP request execution was added.
+- No `requests`, `urllib`, or `httpx` use was added.
+- No real credential lookup was added.
+- No `.env` change was made.
+- No posting behavior was added.
+- Generated CSV and local config files remain excluded from the commit.
+
+### Remaining Before Real API
+
+- Live transport remains disabled.
+- Real HTTP client remains unimplemented.
+- Backend-only real credential loader remains unimplemented.
+- Pagination controller remains missing.
+- Controller-level `max_retry_count` remains missing.
+- X API plan and field availability still need confirmation.
+
 ## 2026-06-02 HTTP Client Interface Skeleton
 
 Added a mock-only HTTP client interface skeleton for future X recent-search

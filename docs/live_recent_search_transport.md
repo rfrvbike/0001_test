@@ -151,6 +151,16 @@ CredentialLoader
 -> HttpClient
 ```
 
+HTTP timeout/error mapping boundary:
+
+- `x_auto_ops/http_error_mapping.py`
+- `HttpErrorInfo`
+- `map_http_error(...)`
+
+The future live transport should map timeout, network, auth, rate-limit,
+server, client, JSON parse, schema, and disabled-client failures through this
+boundary. The mapping layer redacts messages and does not perform retries.
+
 ## Logging Policy
 
 Allowed logs:

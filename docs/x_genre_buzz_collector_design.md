@@ -1234,3 +1234,68 @@ insertion point.
 Related document:
 
 - `docs/http_client_interface.md`
+
+## HTTP Timeout and Error Mapping Skeleton
+
+Added on 2026-06-02 as a mock-only error classification layer. No HTTP
+communication, request execution, API key lookup, token lookup, cookie read,
+`.env` read, or posting is performed.
+
+Implementation point:
+
+- `x_auto_ops/http_error_mapping.py`
+- `HttpErrorInfo`
+- `map_http_error(...)`
+
+Mapped error types:
+
+- `timeout`
+- `network_error`
+- `auth_error`
+- `rate_limited`
+- `server_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+Retryable:
+
+- `timeout`
+- `network_error`
+- `rate_limited`
+- `server_error`
+
+Not retryable:
+
+- `auth_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+Rate-limit handling:
+
+- `status_code=429` maps to `rate_limited`
+- `Retry-After` maps to `retry_after_seconds`
+- reset/remaining headers are parsed by `parse_rate_limit_headers(...)`
+
+Redaction:
+
+- error messages are passed through `redact_sensitive_text(...)`
+- credential-shaped markers must not appear in mapped message fields
+
+RetryQueue relationship:
+
+```text
+map_http_error(...)
+-> HttpErrorInfo(retryable, retry_after_seconds)
+-> future controller
+-> RetryQueue.enqueue(...)
+```
+
+The mapping layer does not enqueue, sleep, read files, or call the network.
+
+Related document:
+
+- `docs/http_error_mapping.md`

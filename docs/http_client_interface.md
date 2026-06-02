@@ -109,3 +109,31 @@ Until explicit live approval:
 - no credential source may be read by the HTTP layer
 - no request headers may be logged
 - the dry-run pipeline must continue to use `MockRecentSearchTransport`
+
+## Error Mapping Relationship
+
+HTTP timeout and error classification is defined separately in:
+
+```text
+x_auto_ops/http_error_mapping.py
+```
+
+The future flow should keep concerns separated:
+
+```text
+HttpClient
+-> HttpResponse or exception
+-> map_http_error(...)
+-> HttpErrorInfo
+```
+
+`DisabledHttpClient.send(...)` currently raises
+`RuntimeError("HTTP client disabled")`, which maps to:
+
+```text
+error_type=disabled_http_client
+retryable=False
+partial_result=False
+```
+
+The error mapping layer performs no HTTP and does not enqueue retries directly.
