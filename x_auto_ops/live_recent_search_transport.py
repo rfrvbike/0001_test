@@ -7,6 +7,7 @@ fail-closed.
 
 from __future__ import annotations
 
+from x_auto_ops.http_client import DisabledHttpClient, HttpClient
 from x_auto_ops.mock_transport import TransportResponse
 
 
@@ -16,6 +17,9 @@ class LiveRecentSearchTransport:
     The class satisfies the same transport shape as `MockRecentSearchTransport`,
     but every call is blocked until live X API access is explicitly approved.
     """
+
+    def __init__(self, http_client: HttpClient | None = None) -> None:
+        self.http_client = http_client or DisabledHttpClient()
 
     def send_recent_search(self, query: str) -> TransportResponse:
         raise RuntimeError("LiveRecentSearchTransport disabled")

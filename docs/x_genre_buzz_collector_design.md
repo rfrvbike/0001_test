@@ -1178,3 +1178,59 @@ anyway, the disabled transport still raises.
 Related document:
 
 - `docs/live_recent_search_transport_disabled.md`
+
+## HTTP Client Interface Skeleton
+
+Added on 2026-06-02 as a mock-only interface layer. No HTTP communication,
+request execution, API key lookup, token lookup, cookie read, `.env` read, or
+posting is performed.
+
+Implementation point:
+
+- `x_auto_ops/http_client.py`
+- `HttpRequest`
+- `HttpResponse`
+- `HttpClient`
+- `DisabledHttpClient`
+
+Request shape:
+
+- `method`
+- `url`
+- `headers`
+- `query_params`
+- `timeout_seconds`
+
+Response shape:
+
+- `status_code`
+- `headers`
+- `body_text`
+- `json_body`
+
+Current behavior:
+
+```text
+DisabledHttpClient.send(request)
+-> RuntimeError("HTTP client disabled")
+```
+
+`LiveRecentSearchTransport` now accepts an injected HTTP client, but still
+raises `RuntimeError("LiveRecentSearchTransport disabled")` before using it.
+
+Dependency injection order:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> LiveRecentSearchTransport
+-> HttpClient
+```
+
+`MockRecentSearchTransport` remains the only successful dry-run pipeline
+transport. The HTTP client interface is only a future live implementation
+insertion point.
+
+Related document:
+
+- `docs/http_client_interface.md`

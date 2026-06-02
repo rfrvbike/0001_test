@@ -129,6 +129,28 @@ The skeleton implements the transport method shape but performs no HTTP. Any
 call raises `RuntimeError("LiveRecentSearchTransport disabled")`. This fixes the
 future implementation point while keeping live reads fail-closed.
 
+Current HTTP client boundary:
+
+- `x_auto_ops/http_client.py`
+- `HttpRequest`
+- `HttpResponse`
+- `HttpClient`
+- `DisabledHttpClient`
+
+`LiveRecentSearchTransport` accepts an injected HTTP client, defaulting to
+`DisabledHttpClient`. The transport still raises before using the client. This
+keeps the future HTTP implementation swappable while preserving fail-closed
+behavior.
+
+Dependency injection shape:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> LiveRecentSearchTransport
+-> HttpClient
+```
+
 ## Logging Policy
 
 Allowed logs:
