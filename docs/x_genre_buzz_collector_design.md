@@ -1351,3 +1351,60 @@ Authorization protection:
 Related document:
 
 - `docs/request_builder.md`
+
+## Pagination Controller and Max Retry Policy Skeleton
+
+Added on 2026-06-02 as a mock-only pagination and retry-decision layer. No HTTP
+communication, request execution, API key lookup, token lookup, cookie read,
+`.env` read, or posting is performed.
+
+Implementation points:
+
+- `x_auto_ops/pagination_controller.py`
+- `PaginationController`
+- `PaginationState`
+- `PaginationResult`
+- `x_auto_ops/retry_policy.py`
+- `RetryPolicy`
+- `RetryDecision`
+
+Pagination flow:
+
+```text
+fetch_page(query, next_token)
+-> BuzzFetchResult(posts, next_token, partial_result, rate_limited)
+-> PaginationController
+-> PaginationResult
+```
+
+Stop reasons:
+
+- `completed`
+- `max_results_reached`
+- `max_pages_reached`
+- `no_next_token`
+- `rate_limited`
+- `transport_error`
+- `retry_limit_reached`
+
+Retry policy:
+
+- default `max_retry_count=3`
+- retryable decisions can be enqueued to `RetryQueue`
+- no sleeping or actual retry execution is performed
+
+Partial result policy:
+
+- max result/page stops can mark partial
+- rate limit marks partial
+- transport error marks partial
+- retry limit reached marks partial
+
+Redaction:
+
+- `PaginationResult.safe_debug_summary()` redacts sensitive-looking next tokens
+- retry/error metadata must not expose credential-shaped markers
+
+Related document:
+
+- `docs/pagination_controller.md`

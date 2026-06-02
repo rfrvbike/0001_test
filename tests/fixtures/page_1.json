@@ -1,0 +1,35 @@
+{
+  "status_code": 200,
+  "headers": {
+    "x-rate-limit-remaining": "10",
+    "x-rate-limit-reset": "1780186200"
+  },
+  "json_body": {
+    "data": [
+      {
+        "id": "5001",
+        "text": "AI workflow page one for non-engineer side business automation.",
+        "created_at": "2026-05-31T01:00:00Z",
+        "author_id": "901",
+        "public_metrics": {
+          "like_count": 200,
+          "retweet_count": 20,
+          "reply_count": 5,
+          "quote_count": 2
+        }
+      }
+    ],
+    "includes": {
+      "users": [
+        {
+          "id": "901",
+          "username": "page_one_author"
+        }
+      ]
+    },
+    "meta": {
+      "result_count": 1,
+      "next_token": "page-two-token"
+    }
+  }
+}

@@ -119,3 +119,20 @@ and never includes header values.
 
 Tests verify that authorization, bearer, API key, token, and secret marker text
 do not leak to report, CSV, debug log, or exception surfaces.
+
+## Pagination Relationship
+
+The request builder prepares a single page request. It does not own pagination.
+
+Future page flow:
+
+```text
+Request Builder
+-> Transport page fetch
+-> Response Normalizer
+-> PaginationController
+```
+
+`next_token` from a normalized page should be managed by the pagination
+controller and then passed back into a future request-building call. The current
+request builder does not send requests and does not fetch additional pages.

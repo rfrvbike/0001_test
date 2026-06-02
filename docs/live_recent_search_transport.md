@@ -171,6 +171,20 @@ The future live transport should map timeout, network, auth, rate-limit,
 server, client, JSON parse, schema, and disabled-client failures through this
 boundary. The mapping layer redacts messages and does not perform retries.
 
+Pagination and retry policy boundary:
+
+- `x_auto_ops/pagination_controller.py`
+- `PaginationController`
+- `PaginationState`
+- `PaginationResult`
+- `x_auto_ops/retry_policy.py`
+- `RetryPolicy`
+- `RetryDecision`
+
+The future live transport should fetch one page at a time. Pagination,
+`next_token` management, max result/page limits, retry decisions, and retry
+queue scheduling remain outside the transport.
+
 ## Logging Policy
 
 Allowed logs:
