@@ -137,3 +137,26 @@ partial_result=False
 ```
 
 The error mapping layer performs no HTTP and does not enqueue retries directly.
+
+## Request Builder Relationship
+
+HTTP request construction is defined separately in:
+
+```text
+x_auto_ops/request_builder.py
+```
+
+The future flow should keep construction and sending separate:
+
+```text
+Query Builder
+-> Credential Loader
+-> Request Builder
+-> HttpRequest
+-> HttpClient
+```
+
+`RequestBuildResult` exposes safe diagnostics such as endpoint name, query
+parameter names, header names, and timeout. Header values are kept inside the
+internal `HttpRequest` only and must not be copied into reports, CSV, debug
+logs, or exceptions.

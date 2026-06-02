@@ -151,6 +151,16 @@ CredentialLoader
 -> HttpClient
 ```
 
+HTTP request builder boundary:
+
+- `x_auto_ops/request_builder.py`
+- `build_recent_search_request(...)`
+- `RequestBuildResult`
+
+The request builder prepares `HttpRequest` objects from a query and credential
+bundle without sending them. It maps authorization, user-agent, and accept
+headers internally while exposing only redacted diagnostics.
+
 HTTP timeout/error mapping boundary:
 
 - `x_auto_ops/http_error_mapping.py`

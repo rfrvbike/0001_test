@@ -1299,3 +1299,55 @@ The mapping layer does not enqueue, sleep, read files, or call the network.
 Related document:
 
 - `docs/http_error_mapping.md`
+
+## HTTP Request Builder and Header Mapping Skeleton
+
+Added on 2026-06-02 as a mock-only request construction layer. No HTTP
+communication, request execution, API key lookup, token lookup, cookie read,
+`.env` read, or posting is performed.
+
+Implementation point:
+
+- `x_auto_ops/request_builder.py`
+- `build_recent_search_request(...)`
+- `RequestBuildResult`
+
+Build flow:
+
+```text
+Query Builder
+-> Credential Loader
+-> Request Builder
+-> HttpRequest
+```
+
+Generated request:
+
+- method: `GET`
+- endpoint: recent search endpoint
+- query params: `query`, `tweet.fields`, `expansions`, `user.fields`
+- headers: authorization, user-agent, accept
+- timeout: validated positive number
+
+Header handling:
+
+- header values are kept inside the internal `HttpRequest`
+- `RequestBuildResult.header_names` records names only
+- `safe_debug_summary()` redacts credential-shaped names and never prints
+  header values
+
+Validation:
+
+- empty query is rejected
+- empty endpoint is rejected
+- invalid timeout is rejected
+
+Authorization protection:
+
+- fake bearer token may be used only to build a local `HttpRequest`
+- fake bearer token must not appear in report, CSV, debug log, or exception
+- authorization/bearer/API key/token/secret marker text is checked by tests
+
+Related document:
+
+- `docs/request_builder.md`

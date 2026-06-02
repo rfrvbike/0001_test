@@ -1,5 +1,130 @@
 # latest_report.md
 
+## 2026-06-02 HTTP Request Builder and Header Mapping Skeleton
+
+Added a mock-only HTTP request builder and header mapping skeleton for future X
+recent-search reads. No X API call, HTTP request execution, request library use,
+API key lookup, token lookup, cookie access, `.env` edit, or posting was
+performed.
+
+### Added Files
+
+- `x_auto_ops/request_builder.py`
+- `tests/test_request_builder.py`
+- `docs/request_builder.md`
+
+### Changed Files
+
+- `docs/http_client_interface.md`
+- `docs/live_recent_search_transport.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Request Builder Spec
+
+`x_auto_ops/request_builder.py` defines:
+
+- `RequestBuildResult`
+- `RequestBuildError`
+- `build_recent_search_request(...)`
+
+`RequestBuildResult` fields:
+
+- `endpoint_name`
+- `request`
+- `query`
+- `query_params`
+- `header_names`
+- `timeout_seconds`
+
+The internal `HttpRequest` includes the prepared headers needed for a future
+live call. Diagnostics expose header names only and redact credential-shaped
+names before rendering.
+
+### Header Mapping
+
+Generated headers:
+
+- authorization
+- user-agent
+- accept
+
+Generated query parameters:
+
+- `query`
+- `tweet.fields`
+- `expansions`
+- `user.fields`
+
+Validation:
+
+- empty query is rejected
+- empty endpoint is rejected
+- invalid timeout is rejected
+
+### Authorization Protection
+
+`FakeCredentialLoader` can provide the fake bearer token to build a local
+`HttpRequest`, but the fake token value is not written to report, CSV, debug
+log, or exception surfaces.
+
+### Tests
+
+Added coverage for:
+
+- recent-search `HttpRequest` construction
+- `Query Builder -> Credential Loader -> Request Builder -> HttpRequest`
+- query params and default recent-search fields
+- authorization/user-agent/accept header mapping
+- empty query, empty endpoint, and invalid timeout validation
+- safe debug summary without header values
+- fake authorization value not leaking to report, CSV, debug log, or exception
+
+### Verification
+
+Commands:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_recent_search_pipeline.py --dry-run
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Results:
+
+```text
+DRY-RUN recent search pipeline complete.
+Fetched posts: 2
+Ranked posts: 2
+Rate limited: False
+Retry after seconds: None
+Partial result: False
+CSV: data\mock_recent_search_pipeline_posts.csv
+Report: reports/mock_recent_search_pipeline_report.md
+No X API call, credential lookup, .env edit, or posting was performed.
+
+Ran 223 tests
+OK
+```
+
+### Safety
+
+- No real X API call was added.
+- No HTTP request execution was added.
+- No `requests`, `urllib`, or `httpx` use was added.
+- No real credential lookup was added.
+- No `.env` change was made.
+- No posting behavior was added.
+- Generated CSV and local config files remain excluded from the commit.
+
+### Remaining Before Real API
+
+- Live transport remains disabled.
+- Real HTTP client remains unimplemented.
+- Backend-only real credential loader remains unimplemented.
+- Pagination controller remains missing.
+- Controller-level `max_retry_count` remains missing.
+- X API plan and field availability still need confirmation.
+
 ## 2026-06-02 HTTP Timeout and Error Mapping Skeleton
 
 Added a mock-only HTTP timeout/error mapping skeleton for future X recent-search
