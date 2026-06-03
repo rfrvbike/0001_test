@@ -1665,3 +1665,73 @@ Fail-closed checks:
 - no `HTTPConnection`
 - no `urlopen`
 - no credential-shaped values in disabled exceptions or leak-test surfaces
+
+## LiveRecentSearchTransport Final Implementation Review
+
+Added on 2026-06-03 as a documentation-only final review. No HTTP
+communication, X API call, credential lookup, token lookup, cookie lookup,
+`.env` read, environment variable read, real data fetch, or posting was
+performed.
+
+Review document:
+
+- `docs/live_recent_search_transport_final_review.md`
+
+Final implementation responsibility:
+
+- receive a query that has already been built by `QueryBuilder`
+- call `RequestBuilder` to create a `HttpRequest`
+- pass one `HttpRequest` to an injected `LiveHttpClient`
+- convert `HttpResponse` into `TransportResponse`
+- preserve `status_code`, `headers`, and `json_body`
+- expose failures to `map_http_error(...)`
+- keep `RateLimitParser` and `ResponseNormalizer` downstream
+
+Out of scope for the transport:
+
+- credential loading
+- live mode decision
+- pagination control
+- retry loop
+- retry queue enqueue
+- score calculation
+- genre detection
+- CSV output
+- report output
+
+Reviewed connection order:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> QueryBuilder
+-> RequestBuilder
+-> LiveRecentSearchTransport
+-> LiveHttpClient
+-> TransportResponse
+-> RateLimitParser
+-> ResponseNormalizer
+-> PaginationController
+-> RetryPolicy / RetryQueue
+```
+
+Fail-closed conditions:
+
+- `live_mode=false`
+- `dry_run=true` with live transport
+- `credential_loader=fake` with live transport
+- `http_client=disabled`
+- `explicit_approval=false`
+- `write_actions=true`
+- non-recent-search endpoint
+- non-`GET` method
+- redaction preflight failure
+
+Implementation gap:
+
+- `TransportResponse.body_text` remains optional and should be added only if it
+  is redacted and never written to report/CSV by default.
+- Live transport implementation tests still need request-builder integration,
+  one-request HTTP client injection, disabled gate ordering, redaction, 429,
+  timeout, 401/403, 500, JSON parse, schema, and write-endpoint rejection
+  coverage.

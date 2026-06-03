@@ -63,6 +63,7 @@ Implementation review references:
 
 - `docs/live_http_client_review.md`
 - `docs/live_http_client_disabled.md`
+- `docs/live_recent_search_transport_final_review.md`
 
 Current incomplete items:
 
@@ -70,6 +71,8 @@ Current incomplete items:
 - live HTTP client is not implemented.
 - `LiveHttpClient` exists only as a disabled skeleton.
 - `LiveRecentSearchTransport` is disabled.
+- final transport implementation responsibility is reviewed, but not live
+  implemented.
 - credential storage policy is not operational.
 - pagination is mock-tested but not live-integrated.
 - retry queue is mock-tested but not live-integrated.
@@ -219,6 +222,10 @@ Before live mode can be approved, reviewers must confirm:
 - real credential loader does not expose values through debug summaries
 - request builder does not expose header values
 - live transport returns `TransportResponse`
+- live transport receives a built query and does not mutate query rules
+- live transport uses `RequestBuilder` rather than constructing headers ad hoc
+- live transport passes exactly one `HttpRequest` to the injected HTTP client
+- live transport rejects non-`GET` and non-recent-search endpoints
 - header parser handles rate limit fields
 - normalizer tolerates missing metrics
 - pagination respects `next_token`, `max_results`, and max page limits

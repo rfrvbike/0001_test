@@ -314,3 +314,52 @@ Review conclusions:
 
 The approval and rollback checklist is maintained in
 `docs/live_mode_release_policy.md`.
+
+## Final Implementation Review
+
+The final pre-implementation review is recorded in
+`docs/live_recent_search_transport_final_review.md`.
+
+The final reviewed transport responsibility is narrow:
+
+- receive a query built by `QueryBuilder`
+- use `RequestBuilder` to create a `HttpRequest`
+- pass one `HttpRequest` to an injected `LiveHttpClient`
+- convert `HttpResponse` to `TransportResponse`
+- preserve `status_code`, `headers`, and `json_body`
+- expose failures in a shape compatible with `map_http_error(...)`
+- keep `RateLimitParser` and `ResponseNormalizer` downstream
+
+The transport must still not own credential loading, live-mode approval,
+pagination, retry loops, retry queue enqueue, scoring, genre detection, CSV
+output, or report output.
+
+Final reviewed connection order:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> QueryBuilder
+-> RequestBuilder
+-> LiveRecentSearchTransport
+-> LiveHttpClient
+-> TransportResponse
+-> RateLimitParser
+-> ResponseNormalizer
+-> PaginationController
+-> RetryPolicy / RetryQueue
+```
+
+Final fail-closed conditions include:
+
+- `live_mode=false`
+- `dry_run=true` while live transport is requested
+- `credential_loader=fake` while live transport is requested
+- `http_client=disabled`
+- `explicit_approval=false`
+- `write_actions=true`
+- non-recent-search endpoint
+- non-`GET` method
+- redaction preflight failure
+
+Live implementation remains blocked until the release policy is complete.
