@@ -1,5 +1,141 @@
 # latest_report.md
 
+## 2026-06-03 Recent Search Endpoint Allowlist and Preflight Validation Skeleton
+
+Added a fail-closed preflight validation layer for future live recent-search
+reads. No HTTP communication, X API call, API key lookup, token lookup, cookie
+access, `.env` read, environment variable read, real data fetch, or posting was
+performed.
+
+### Added Files
+
+- `x_auto_ops/preflight_validation.py`
+- `tests/test_preflight_validation.py`
+- `docs/preflight_validation.md`
+
+### Changed Files
+
+- `docs/live_recent_search_transport.md`
+- `docs/live_mode_release_policy.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Validation Spec
+
+`validate_recent_search_request(...)` validates a prepared `HttpRequest` before
+it can reach a future live HTTP client.
+
+Definitions:
+
+- `PreflightValidationError`
+- `RecentSearchAllowlistPolicy`
+- `ValidationResult`
+- `validate_recent_search_request(...)`
+
+`ValidationResult` records:
+
+- `allowed`
+- `method`
+- `endpoint`
+- `query_length`
+- `endpoint_name`
+- `validation_reason`
+
+`safe_debug_summary()` exposes safe metadata only and does not include query
+text or header values.
+
+### Allowlist
+
+Allowed method:
+
+- `GET`
+
+Allowed endpoints:
+
+- `https://api.x.com/2/tweets/search/recent`
+- `/2/tweets/search/recent`
+
+### Denylist
+
+Rejected endpoint families include:
+
+- `/2/tweets`
+- `/2/users`
+- `/2/dm`
+- `/2/media`
+- `/2/users/:id/following`
+- `/2/users/:id/likes`
+- `/2/tweets/:id/liking`
+- `/2/tweets/:id/retweeted_by`
+
+### Query and Request Validation
+
+Rejected conditions:
+
+- method other than `GET`
+- empty endpoint
+- endpoint outside the recent-search allowlist
+- write endpoint families
+- empty query
+- query length greater than 512
+- `timeout_seconds <= 0`
+
+### Redaction Verification
+
+Tests inject fake credential-shaped values into headers, query, and error
+paths. Debug, report, CSV, exception, and validation summary surfaces do not
+contain:
+
+- `Authorization`
+- `Bearer`
+- `API_KEY`
+- `TOKEN`
+- `SECRET`
+- `COOKIE`
+
+### Connection Order Update
+
+Reviewed live-read path now includes preflight:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> QueryBuilder
+-> RequestBuilder
+-> PreflightValidation
+-> LiveRecentSearchTransport
+-> LiveHttpClient
+-> TransportResponse
+-> RateLimitParser
+-> ResponseNormalizer
+-> PaginationController
+-> RetryPolicy / RetryQueue
+```
+
+### Verification
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 251 tests
+OK
+```
+
+### Remaining
+
+- Preflight is not yet wired into a live transport implementation because live
+  transport remains disabled.
+- `LiveRecentSearchTransport` remains disabled.
+- `LiveHttpClient` remains disabled.
+- Real credential loading remains disabled.
+- Live API release remains blocked by the release policy gates.
+
 ## 2026-06-03 LiveRecentSearchTransport Final Implementation Review
 
 Completed a documentation-only final pre-implementation review for

@@ -31,6 +31,7 @@ implementation:
 - retry policy tests
 - retry queue tests
 - request builder tests
+- preflight validation tests
 - rate limit header parser tests
 - HTTP error mapping tests
 - response normalizer tests
@@ -52,6 +53,7 @@ These items must be implemented and reviewed before live mode can be enabled:
 - HTTP timeout handling
 - HTTP error mapping integration
 - request builder integration
+- preflight validation integration
 - header mapping integration
 - pagination integration
 - retry policy integration
@@ -64,6 +66,7 @@ Implementation review references:
 - `docs/live_http_client_review.md`
 - `docs/live_http_client_disabled.md`
 - `docs/live_recent_search_transport_final_review.md`
+- `docs/preflight_validation.md`
 
 Current incomplete items:
 
@@ -76,6 +79,8 @@ Current incomplete items:
 - credential storage policy is not operational.
 - pagination is mock-tested but not live-integrated.
 - retry queue is mock-tested but not live-integrated.
+- preflight validation is implemented as a skeleton and must be integrated into
+  the future live transport path before live release.
 
 ## Operational Preflight
 
@@ -226,6 +231,8 @@ Before live mode can be approved, reviewers must confirm:
 - live transport uses `RequestBuilder` rather than constructing headers ad hoc
 - live transport passes exactly one `HttpRequest` to the injected HTTP client
 - live transport rejects non-`GET` and non-recent-search endpoints
+- preflight validation runs before `LiveHttpClient.send(...)`
+- write endpoint attempts fail preflight
 - header parser handles rate limit fields
 - normalizer tolerates missing metrics
 - pagination respects `next_token`, `max_results`, and max page limits
@@ -245,6 +252,7 @@ Live mode must remain blocked if any of the following is true:
 - live HTTP client is missing
 - live transport is missing or disabled
 - live transport can reach write endpoints
+- preflight validation is missing or bypassable
 - frontend can access credentials
 - `.env` or local secret handling is unreviewed
 - X API plan constraints are unknown

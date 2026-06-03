@@ -1706,6 +1706,7 @@ CredentialLoader
 -> LiveModeGate
 -> QueryBuilder
 -> RequestBuilder
+-> PreflightValidation
 -> LiveRecentSearchTransport
 -> LiveHttpClient
 -> TransportResponse
@@ -1725,6 +1726,7 @@ Fail-closed conditions:
 - `write_actions=true`
 - non-recent-search endpoint
 - non-`GET` method
+- preflight validation failure
 - redaction preflight failure
 
 Implementation gap:
@@ -1735,3 +1737,59 @@ Implementation gap:
   one-request HTTP client injection, disabled gate ordering, redaction, 429,
   timeout, 401/403, 500, JSON parse, schema, and write-endpoint rejection
   coverage.
+
+## Recent Search Endpoint Allowlist and Preflight Validation Skeleton
+
+Added on 2026-06-03 as a fail-closed preflight layer. No HTTP communication,
+X API call, credential lookup, token lookup, cookie lookup, `.env` read,
+environment variable read, real data fetch, or posting was performed.
+
+Implementation points:
+
+- `x_auto_ops/preflight_validation.py`
+- `PreflightValidationError`
+- `RecentSearchAllowlistPolicy`
+- `ValidationResult`
+- `validate_recent_search_request(...)`
+- `docs/preflight_validation.md`
+
+Allowed method:
+
+- `GET`
+
+Allowed endpoints:
+
+- `https://api.x.com/2/tweets/search/recent`
+- `/2/tweets/search/recent`
+
+Denied endpoint families:
+
+- `/2/tweets`
+- `/2/users`
+- `/2/dm`
+- `/2/media`
+- `/2/users/:id/following`
+- `/2/users/:id/likes`
+- `/2/tweets/:id/liking`
+- `/2/tweets/:id/retweeted_by`
+
+Query validation:
+
+- empty query is rejected
+- query length greater than 512 is rejected
+- empty endpoint is rejected
+- non-positive timeout is rejected
+
+Safe validation output:
+
+- `allowed`
+- `method`
+- `endpoint`
+- `query_length`
+- `endpoint_name`
+- `validation_reason`
+- redacted header names only
+
+Validation summaries do not expose query text or header values. Tests confirm
+fake credential-shaped values do not leak to debug, report, CSV, exception, or
+validation summary surfaces.

@@ -211,6 +211,22 @@ The request builder prepares `HttpRequest` objects from a query and credential
 bundle without sending them. It maps authorization, user-agent, and accept
 headers internally while exposing only redacted diagnostics.
 
+Preflight validation boundary:
+
+- `x_auto_ops/preflight_validation.py`
+- `PreflightValidationError`
+- `RecentSearchAllowlistPolicy`
+- `ValidationResult`
+- `validate_recent_search_request(...)`
+- `docs/preflight_validation.md`
+
+The future live transport path must validate the prepared `HttpRequest` before
+it reaches `LiveHttpClient`. Preflight allows only `GET` requests to
+`https://api.x.com/2/tweets/search/recent` or `/2/tweets/search/recent`,
+rejects write endpoint families, rejects empty or over-512-character queries,
+and rejects non-positive timeouts. Safe validation summaries expose query length
+and header names only, never query text or header values.
+
 HTTP timeout/error mapping boundary:
 
 - `x_auto_ops/http_error_mapping.py`
@@ -341,6 +357,7 @@ CredentialLoader
 -> LiveModeGate
 -> QueryBuilder
 -> RequestBuilder
+-> PreflightValidation
 -> LiveRecentSearchTransport
 -> LiveHttpClient
 -> TransportResponse
@@ -360,6 +377,7 @@ Final fail-closed conditions include:
 - `write_actions=true`
 - non-recent-search endpoint
 - non-`GET` method
+- preflight validation failure
 - redaction preflight failure
 
 Live implementation remains blocked until the release policy is complete.
