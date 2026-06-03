@@ -227,6 +227,21 @@ rejects write endpoint families, rejects empty or over-512-character queries,
 and rejects non-positive timeouts. Safe validation summaries expose query length
 and header names only, never query text or header values.
 
+Current integration:
+
+- `LiveRecentSearchTransport.send_recent_search(query)` builds a `HttpRequest`
+  with `build_recent_search_request(...)`.
+- It then calls `validate_recent_search_request(...)`.
+- Valid preflight stores `last_preflight_summary`.
+- The transport still raises `RuntimeError("LiveRecentSearchTransport disabled")`.
+- Invalid preflight raises `PreflightValidationError` before the disabled
+  transport error.
+- `LiveHttpClient.send(...)` is not called.
+
+Integration reference:
+
+- `docs/preflight_transport_integration.md`
+
 HTTP timeout/error mapping boundary:
 
 - `x_auto_ops/http_error_mapping.py`

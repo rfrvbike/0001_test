@@ -135,3 +135,21 @@ Preflight validation is a release blocker. Live mode must remain disabled if:
 Preflight does not replace `LiveModeGate`, credential loading policy, request
 builder validation, redaction tests, or the live release checklist. It is one
 additional fail-closed layer.
+
+## Transport Integration
+
+Integration with the disabled live transport is documented in
+`docs/preflight_transport_integration.md`.
+
+`LiveRecentSearchTransport.send_recent_search(query)` now runs:
+
+```text
+build_recent_search_request(...)
+-> validate_recent_search_request(...)
+-> RuntimeError("LiveRecentSearchTransport disabled")
+```
+
+If preflight fails, `PreflightValidationError` is raised before the disabled
+transport error. This means invalid methods, write endpoints, overlong queries,
+bad timeouts, and allowlist violations never reach the disabled transport or the
+HTTP client.

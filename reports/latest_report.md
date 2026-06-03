@@ -1,5 +1,96 @@
 # latest_report.md
 
+## 2026-06-03 PreflightValidation Integration and Fail-Closed Enforcement
+
+Integrated `PreflightValidation` into the disabled
+`LiveRecentSearchTransport` path. No HTTP communication, X API call, API key
+lookup, token lookup, cookie access, `.env` read, environment variable read,
+real data fetch, or posting was performed.
+
+### Added Files
+
+- `tests/test_preflight_transport_integration.py`
+- `docs/preflight_transport_integration.md`
+
+### Changed Files
+
+- `x_auto_ops/live_recent_search_transport.py`
+- `docs/preflight_validation.md`
+- `docs/live_recent_search_transport.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Integration Spec
+
+`LiveRecentSearchTransport.send_recent_search(query)` now runs:
+
+```text
+build_recent_search_request(...)
+-> validate_recent_search_request(...)
+-> RuntimeError("LiveRecentSearchTransport disabled")
+```
+
+The valid path still stops before HTTP:
+
+```text
+GET + recent search endpoint + valid query
+-> preflight allowed
+-> LiveRecentSearchTransport disabled
+-> LiveHttpClient.send(...) is not called
+```
+
+### Fail-Closed Verification
+
+Tests confirm these cases stop before the disabled transport error with
+`PreflightValidationError`:
+
+- `POST`
+- write endpoint
+- query length greater than 512
+- `timeout_seconds <= 0`
+- endpoint allowlist violation
+
+Tests also confirm a tracking HTTP client receives zero calls for valid and
+invalid cases.
+
+### Redaction Verification
+
+Tests confirm debug, report, CSV, exception, and validation summary surfaces do
+not contain:
+
+- `Authorization`
+- `Bearer`
+- `API_KEY`
+- `TOKEN`
+- `SECRET`
+- `COOKIE`
+
+`last_preflight_summary` stores safe metadata only and does not include query
+text or header values.
+
+### Verification
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 258 tests
+OK
+```
+
+### Remaining
+
+- `LiveRecentSearchTransport` remains disabled.
+- `LiveHttpClient` remains disabled.
+- Real credential loading remains disabled.
+- The integration is not live API access.
+- Live API release remains blocked by the release policy gates.
+
 ## 2026-06-03 Recent Search Endpoint Allowlist and Preflight Validation Skeleton
 
 Added a fail-closed preflight validation layer for future live recent-search

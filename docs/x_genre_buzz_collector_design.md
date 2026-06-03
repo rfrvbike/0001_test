@@ -1793,3 +1793,40 @@ Safe validation output:
 Validation summaries do not expose query text or header values. Tests confirm
 fake credential-shaped values do not leak to debug, report, CSV, exception, or
 validation summary surfaces.
+
+## PreflightValidation Integration and Fail-Closed Enforcement
+
+Added on 2026-06-03 as a no-network integration between the preflight layer and
+the disabled live transport. No HTTP communication, X API call, credential
+lookup, token lookup, cookie lookup, `.env` read, environment variable read,
+real data fetch, or posting was performed.
+
+Current integrated order inside `LiveRecentSearchTransport.send_recent_search`:
+
+```text
+build_recent_search_request(...)
+-> validate_recent_search_request(...)
+-> RuntimeError("LiveRecentSearchTransport disabled")
+```
+
+Integration points:
+
+- `x_auto_ops/live_recent_search_transport.py`
+- `x_auto_ops/preflight_validation.py`
+- `tests/test_preflight_transport_integration.py`
+- `docs/preflight_transport_integration.md`
+
+Fail-closed behavior:
+
+- valid `GET` recent-search request passes preflight and then stops with
+  `LiveRecentSearchTransport disabled`
+- `POST`, `PUT`, `PATCH`, and `DELETE` fail with `PreflightValidationError`
+- write endpoints fail with `PreflightValidationError`
+- over-512-character queries fail with `PreflightValidationError`
+- non-positive timeouts fail with `PreflightValidationError`
+- endpoint allowlist violations fail with `PreflightValidationError`
+- injected HTTP clients are not called in either valid or invalid cases
+
+Redaction remains enforced for debug, report, CSV, exception, and validation
+summary surfaces. Query text and header values are not emitted by the safe
+preflight summary.
