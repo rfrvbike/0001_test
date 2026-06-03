@@ -1578,3 +1578,50 @@ Recommended first-live defaults:
   `tweet.fields=created_at,author_id,public_metrics`
 - request expansion: `expansions=author_id`
 - request user fields: `user.fields=username`
+
+## Live HTTP Client Implementation Review
+
+Added on 2026-06-03 as documentation-only implementation review. No live HTTP
+client was implemented. No HTTP communication, X API call, credential lookup,
+token lookup, cookie lookup, `.env` change, real data fetch, or posting was
+performed.
+
+Review document:
+
+- `docs/live_http_client_review.md`
+
+Responsibility boundary:
+
+- receive one prepared `HttpRequest`
+- send one request
+- apply timeout values
+- return one `HttpResponse`
+- preserve status code, headers, body text, and parsed JSON
+
+Out of scope:
+
+- query generation
+- credential loading
+- pagination
+- retry loops
+- score calculation
+- CSV output
+- report output
+
+Policies:
+
+- read-only recent search only
+- write/post/like/repost/follow/DM/media upload APIs remain prohibited
+- timeout errors map through `HttpErrorInfo`
+- `HttpClient` must not retry
+- `HttpClient` must not handle `next_token`
+- header values and credential-shaped values must not appear in logs, reports,
+  CSV, or exceptions
+
+Gap analysis:
+
+- implementation prep exists: `HttpRequest`, `HttpResponse`, `HttpClient`,
+  `DisabledHttpClient`, `map_http_error`, `RetryPolicy`, `RetryQueue`,
+  `PaginationController`, `RequestBuilder`
+- still missing: `LiveHttpClient`, no-leak live client tests, write-endpoint
+  prevention tests, timeout/network/json parse mapping tests

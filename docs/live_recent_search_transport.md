@@ -166,11 +166,22 @@ Current HTTP client boundary:
 - `HttpResponse`
 - `HttpClient`
 - `DisabledHttpClient`
+- `docs/live_http_client_review.md`
 
 `LiveRecentSearchTransport` accepts an injected HTTP client, defaulting to
 `DisabledHttpClient`. The transport still raises before using the client. This
 keeps the future HTTP implementation swappable while preserving fail-closed
 behavior.
+
+The live HTTP client implementation review fixes this boundary:
+
+- HttpClient sends one prepared request only.
+- HttpClient does not generate queries.
+- HttpClient does not load credentials.
+- HttpClient does not retry.
+- HttpClient does not paginate.
+- HttpClient does not score, write CSV, or write reports.
+- HttpClient must not expose header values in diagnostics.
 
 Dependency injection shape:
 

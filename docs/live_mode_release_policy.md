@@ -59,6 +59,10 @@ These items must be implemented and reviewed before live mode can be enabled:
 - redacted diagnostics for live transport
 - read-only recent search scope enforcement
 
+Implementation review references:
+
+- `docs/live_http_client_review.md`
+
 Current incomplete items:
 
 - `RealCredentialLoader` is disabled.
