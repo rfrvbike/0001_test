@@ -1532,3 +1532,49 @@ Operational preflight must confirm X API plan, recent-search availability,
 `max_results`, pagination limits, public metrics availability,
 `impression_count` availability, rate-limit windows, and `Retry-After`
 behavior before any live read.
+
+## X API Plan and Field Availability Research
+
+Added on 2026-06-03 as documentation-only research. No X API call, HTTP API
+request, credential lookup, token lookup, cookie lookup, `.env` change, real
+data fetch, or posting was performed.
+
+Research document:
+
+- `docs/x_api_plan_field_research.md`
+
+Key findings:
+
+- Current official docs describe pay-per-usage pricing rather than the old
+  Free / Basic / Pro table.
+- Recent Search is documented as available to all developers.
+- Recent Search retrieves posts from the last 7 days.
+- Recent Search supports up to 100 posts per request.
+- Recent Search supports pagination through `next_token`.
+- Self-serve recent-search query length should be treated as 512 characters.
+- Enterprise query length may be 4,096 characters, but must be confirmed.
+- `public_metrics` includes likes, retweets/reposts, replies, quotes, bookmarks,
+  and impressions in current metrics docs.
+- Recent Search examples do not consistently show `impression_count`, so the
+  field must remain optional.
+
+Gap analysis summary:
+
+- Existing nullable `impression_count` design is correct.
+- Existing `score_source=engagement_fallback` design should remain the safe
+  standard.
+- Existing `next_token` and pagination design aligns with Recent Search.
+- Query builder should continue using conservative length and operator checks.
+- `days_back` must be capped to 7 for Recent Search.
+
+Recommended first-live defaults:
+
+- `max_results_per_genre=10`
+- `max_pages=1`
+- `days_back <= 7`
+- `request_window=recent_7_days`
+- query length limit `512`
+- request fields:
+  `tweet.fields=created_at,author_id,public_metrics`
+- request expansion: `expansions=author_id`
+- request user fields: `user.fields=username`

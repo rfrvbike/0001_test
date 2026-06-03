@@ -92,6 +92,19 @@ Before live reads are approved, confirm current X API constraints:
 If any metric is unavailable, the collector must continue with nullable fields
 and the engagement-only fallback score.
 
+Current research is documented in `docs/x_api_plan_field_research.md`.
+
+Research conclusions to carry into release review:
+
+- Recent Search is documented as last-7-days and available to all developers.
+- Current pricing docs emphasize pay-per-usage, not the old Free / Basic / Pro
+  subscription comparison.
+- Treat old plan names as account/console-dependent until verified.
+- Use 512 characters as the conservative self-serve recent-search query limit.
+- Keep `impression_count` nullable even though current metrics docs list it
+  under `public_metrics`.
+- Default first live test to low result and page counts.
+
 ## Live Unlock Flags
 
 Live access requires multiple affirmative conditions. No single flag is enough.

@@ -215,6 +215,20 @@ The future live transport should fetch one page at a time. Pagination,
 `next_token` management, max result/page limits, retry decisions, and retry
 queue scheduling remain outside the transport.
 
+Plan and field research:
+
+- `docs/x_api_plan_field_research.md`
+
+Live transport implementation must account for the current research findings:
+
+- Recent Search is limited to the last 7 days.
+- self-serve recent-search query length should be treated as 512 characters.
+- `max_results` should stay within 10-100.
+- request `tweet.fields=created_at,author_id,public_metrics`
+- request `expansions=author_id`
+- request `user.fields=username`
+- keep `impression_count` optional and do not fail if absent.
+
 ## Logging Policy
 
 Allowed logs:

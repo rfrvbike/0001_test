@@ -1,5 +1,169 @@
 # latest_report.md
 
+## 2026-06-03 X API Plan and Field Availability Research
+
+Completed documentation-only research for the future X recent-search live path.
+No X API call, HTTP API request, API key lookup, token lookup, cookie access,
+`.env` change, real data fetch, or posting was performed.
+
+### Added Files
+
+- `docs/x_api_plan_field_research.md`
+
+### Changed Files
+
+- `docs/x_genre_buzz_collector_design.md`
+- `docs/live_mode_release_policy.md`
+- `docs/live_recent_search_transport.md`
+- `reports/latest_report.md`
+
+### Plan Comparison Result
+
+Current official X docs describe the API as pay-per-usage. They do not present
+the old Free / Basic / Pro table as the current primary access model.
+
+Research conclusion:
+
+- Recent Search is documented as available to all developers.
+- Recent Search covers the last 7 days.
+- Full-Archive Search is documented for pay-per-use and Enterprise customers.
+- Old Free / Basic / Pro labels should be treated as account/console-dependent
+  until verified in Developer Console.
+
+### Field Availability Result
+
+Required live request shape:
+
+```text
+tweet.fields=created_at,author_id,public_metrics
+expansions=author_id
+user.fields=username
+```
+
+Field mapping:
+
+- `post_id` -> `id`
+- `text` -> `text`
+- `created_at` -> `tweet.fields=created_at`
+- `author_id` -> `tweet.fields=author_id`
+- `author_username` -> `expansions=author_id&user.fields=username`
+- `like_count` -> `public_metrics.like_count`
+- `repost_count` -> `public_metrics.retweet_count`
+- `reply_count` -> `public_metrics.reply_count`
+- `quote_count` -> `public_metrics.quote_count`
+- `impression_count` -> `public_metrics.impression_count`, nullable
+
+### public_metrics / impression_count
+
+Current metrics docs list `public_metrics` as including likes, reposts,
+replies, quotes, bookmarks, and impressions. The Recent Search quickstart
+example does not consistently include `impression_count`, so the implementation
+should keep `impression_count` optional.
+
+Recommended scoring behavior:
+
+- `score_source=engagement_fallback` remains the safe default.
+- `score_source=impression_weighted` may be used only when
+  `impression_count` is present and numeric.
+
+### Query / Operator Constraints
+
+Confirmed supported concepts:
+
+- `lang:ja`
+- `from:`
+- `OR`
+- quoted phrases
+- `-keyword` exclusions
+- grouping with parentheses
+
+Important constraints:
+
+- use conservative 512-character query limit for self-serve recent search
+- Enterprise may allow 4,096 chars, but must be confirmed
+- conjunction-required operators cannot stand alone
+- negated grouped operators should be avoided
+- broad queries can quickly consume usage
+
+### Rate Limit Constraints
+
+Current rate-limit docs list:
+
+- `GET /2/tweets/search/recent`
+- per app: 450 / 15 min
+- per user: 300 / 15 min
+- default `max_results=10`
+- max `max_results=100`
+- query length note: 512 chars
+
+Headers to preserve:
+
+- `x-rate-limit-limit`
+- `x-rate-limit-remaining`
+- `x-rate-limit-reset`
+- `Retry-After` remains supported by local design for 429 handling
+
+### Gap Analysis
+
+Current design OK:
+
+- nullable `impression_count`
+- `metrics_missing`
+- `score_source`
+- `engagement_fallback`
+- `next_token` pagination
+- rate limit parser
+- query builder structure
+- disabled live transport
+
+Design changes recommended:
+
+- cap Recent Search `days_back` to 7
+- default first live `max_results_per_genre=10`
+- default first live `max_pages=1`
+- default query length limit 512
+- add/keep validation against conjunction-only queries
+- avoid negated grouped operators
+
+Plan dependent:
+
+- legacy Free / Basic / Pro access
+- Enterprise query length
+- spending limits
+- actual account caps
+- consistency of `impression_count` in recent search responses
+
+User confirmation required before live:
+
+- access model/account
+- budget or spending cap
+- desired max results per genre
+- whether impressions should affect score when available
+- whether broad keyword queries are acceptable
+
+### Verification
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 236 tests
+OK
+```
+
+### Remaining
+
+- No live implementation was added.
+- X API account plan still needs confirmation in Developer Console before live
+  work.
+- Query builder should keep conservative limits unless Enterprise is confirmed.
+- First live test should remain very small and read-only.
+
 ## 2026-06-03 Live Mode Release Policy
 
 Added the live mode release policy for future real X recent-search reads. This
