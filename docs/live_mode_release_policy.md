@@ -62,11 +62,13 @@ These items must be implemented and reviewed before live mode can be enabled:
 Implementation review references:
 
 - `docs/live_http_client_review.md`
+- `docs/live_http_client_disabled.md`
 
 Current incomplete items:
 
 - `RealCredentialLoader` is disabled.
 - live HTTP client is not implemented.
+- `LiveHttpClient` exists only as a disabled skeleton.
 - `LiveRecentSearchTransport` is disabled.
 - credential storage policy is not operational.
 - pagination is mock-tested but not live-integrated.

@@ -19,6 +19,20 @@ DisabledHttpClient
 
 Any future `LiveHttpClient` must be added behind the Live Mode Release Policy.
 
+Disabled implementation point added after this review:
+
+- `x_auto_ops/live_http_client.py`
+- `LiveHttpClient`
+- `LiveHttpClientDisabledError`
+- `docs/live_http_client_disabled.md`
+
+Current disabled behavior:
+
+```text
+LiveHttpClient.send(HttpRequest)
+-> LiveHttpClientDisabledError("Live HTTP client disabled")
+```
+
 ## Live HttpClient Responsibilities
 
 A future live HTTP client may own only the low-level send/receive boundary:

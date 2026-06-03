@@ -166,12 +166,21 @@ Current HTTP client boundary:
 - `HttpResponse`
 - `HttpClient`
 - `DisabledHttpClient`
+- `x_auto_ops/live_http_client.py`
+- `LiveHttpClient`
+- `LiveHttpClientDisabledError`
+- `docs/live_http_client_disabled.md`
 - `docs/live_http_client_review.md`
 
 `LiveRecentSearchTransport` accepts an injected HTTP client, defaulting to
 `DisabledHttpClient`. The transport still raises before using the client. This
 keeps the future HTTP implementation swappable while preserving fail-closed
 behavior.
+
+`LiveHttpClient` now exists as a disabled skeleton. It can be injected into the
+transport, but `LiveRecentSearchTransport` still stops before `send(...)`.
+Direct `LiveHttpClient.send(...)` calls raise
+`LiveHttpClientDisabledError("Live HTTP client disabled")`.
 
 The live HTTP client implementation review fixes this boundary:
 

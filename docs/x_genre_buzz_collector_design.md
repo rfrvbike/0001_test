@@ -1623,5 +1623,45 @@ Gap analysis:
 - implementation prep exists: `HttpRequest`, `HttpResponse`, `HttpClient`,
   `DisabledHttpClient`, `map_http_error`, `RetryPolicy`, `RetryQueue`,
   `PaginationController`, `RequestBuilder`
-- still missing: `LiveHttpClient`, no-leak live client tests, write-endpoint
-  prevention tests, timeout/network/json parse mapping tests
+- still missing: live-enabled HTTP implementation, no-leak live client tests,
+  write-endpoint prevention tests, timeout/network/json parse mapping tests
+
+## LiveHttpClient Disabled Skeleton
+
+Added on 2026-06-03 as a fail-closed implementation point. No HTTP
+communication, X API call, credential lookup, token lookup, cookie lookup,
+`.env` read, environment variable read, real data fetch, or posting was
+performed.
+
+Implementation points:
+
+- `x_auto_ops/live_http_client.py`
+- `LiveHttpClient`
+- `LiveHttpClientDisabledError`
+- `docs/live_http_client_disabled.md`
+
+Current behavior:
+
+```text
+LiveHttpClient.send(HttpRequest)
+-> LiveHttpClientDisabledError("Live HTTP client disabled")
+```
+
+Compatibility:
+
+- `LiveHttpClient` matches the `HttpClient` protocol shape.
+- `LiveRecentSearchTransport` accepts `LiveHttpClient` via constructor
+  injection.
+- `LiveRecentSearchTransport` still raises before `LiveHttpClient.send(...)`.
+- Direct `LiveHttpClient` errors map through `map_http_error(...)` as
+  `disabled_http_client`.
+
+Fail-closed checks:
+
+- no `requests`
+- no `httpx`
+- no `urllib`
+- no `socket`
+- no `HTTPConnection`
+- no `urlopen`
+- no credential-shaped values in disabled exceptions or leak-test surfaces
