@@ -117,7 +117,12 @@ class ProviderRoutingTests(unittest.TestCase):
             self.assertEqual(len(calls.gemini_text), 2)
 
     def test_account_specific_routing_has_no_gemini_fixed_path(self) -> None:
-        for account_id in ["yokaze_daily", "ai_pickup", "new_account_daily"]:
+        for account_id in [
+            "yokaze_daily",
+            "ai_side_business",
+            "ai_pickup",
+            "new_account_daily",
+        ]:
             calls = MockCalls()
             config = resolve_runtime_config(
                 settings(TEXT_LLM_PROVIDER="openai"),
@@ -206,4 +211,3 @@ class ProviderRoutingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -13,7 +13,7 @@ from typing import Any, Callable, Mapping
 
 
 SUPPORTED_ACCOUNTS = frozenset(
-    {"yokaze_daily", "ai_pickup", "new_account_daily"}
+    {"yokaze_daily", "ai_side_business", "ai_pickup", "new_account_daily"}
 )
 SUPPORTED_PROVIDERS = frozenset({"openai", "gemini"})
 
@@ -339,4 +339,3 @@ def _log_provider_call(
             "purpose": purpose,
         },
     )
-
