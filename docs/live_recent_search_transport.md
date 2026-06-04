@@ -427,3 +427,39 @@ Review outcome:
 - live release remains blocked until real credential storage, live HTTP,
   pagination, retry, redaction, and X API plan checks are reviewed under
   explicit approval
+
+## Implementation Delta Review
+
+The disabled-to-live transport delta review is recorded in
+`docs/live_recent_search_transport_delta_review.md`.
+
+Current reviewed behavior:
+
+```text
+LiveRecentSearchTransport.send_recent_search(query)
+-> RequestBuilder
+-> PreflightValidation
+-> RuntimeError("LiveRecentSearchTransport disabled")
+```
+
+Future reviewed behavior:
+
+```text
+LiveRecentSearchTransport.send_recent_search(query)
+-> RequestBuilder
+-> PreflightValidation
+-> LiveHttpClient.send(HttpRequest)
+-> TransportResponse
+```
+
+The live implementation delta is intentionally narrow. It may add only
+RequestBuilder connection, PreflightValidation connection, injected HttpClient
+execution, `HttpResponse` to `TransportResponse` conversion, and error-mapping
+handoff. It must not add pagination, retry loops, retry queue enqueue,
+credential loading, live-mode approval, scoring, genre detection, CSV output,
+or report output.
+
+`TransportResponse.body_text` remains a reviewed open point. The recommended
+default is to keep the normal success shape at `status_code`, `headers`, and
+`json_body`, adding optional redacted body text only if error mapping requires
+it and never emitting it to report or CSV surfaces.

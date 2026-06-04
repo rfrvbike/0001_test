@@ -155,6 +155,8 @@ Rationale:
 - implement `RealCredentialLoader` backend-only with no frontend path
 - implement `LiveHttpClient` with timeout/error mapping and no retry loop
 - implement `LiveRecentSearchTransport` using Request Builder and Preflight
+- complete the disabled-to-live implementation delta checklist in
+  `docs/live_recent_search_transport_delta_review.md`
 - add live transport tests for 401/403, 429, 500, timeout, JSON parse, schema
   errors
 - prove authorization header values never appear in logs, reports, CSV, or
@@ -182,3 +184,23 @@ scaffolding, but not ready for live API execution. The next implementation step
 should touch only `LiveHttpClient`, `RealCredentialLoader`, and
 `LiveRecentSearchTransport`, and must remain fail-closed until every release
 gate passes.
+
+## Delta Review Addendum
+
+The implementation delta review is recorded in
+`docs/live_recent_search_transport_delta_review.md`.
+
+Delta result:
+
+- `READY`: existing disabled-path boundaries, request building, preflight
+  validation, redaction rules, and downstream parser/normalizer interfaces
+- `NEEDS_REVIEW`: `TransportResponse.body_text`, live transport tests, live HTTP
+  tests, real credential adapter strategy, live diagnostics, pagination and
+  retry integration
+- `BLOCKED`: live mode, real HTTP, credential reads, process/env reads, write
+  endpoints, and any live release without explicit approval
+
+The reviewed live transport delta adds one-request HTTP client execution and
+response conversion only. Pagination, retry queue enqueue, credential loading,
+score calculation, genre detection, CSV output, and report output remain outside
+the transport.

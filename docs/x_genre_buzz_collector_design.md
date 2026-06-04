@@ -1991,3 +1991,71 @@ Gap result:
   rotation and rollback procedures, adapter-specific leak tests
 - `BLOCKED`: real credential reads, adapter implementations, live HTTP, live
   mode enablement
+
+## LiveRecentSearchTransport Implementation Delta Review
+
+Added on 2026-06-04 as a design review only. No implementation, HTTP
+communication, X API call, credential lookup, token lookup, cookie lookup,
+authorization lookup, `.env` read, environment variable read, real credential
+read, real data fetch, or posting was performed.
+
+Review document:
+
+- `docs/live_recent_search_transport_delta_review.md`
+
+Current disabled path:
+
+```text
+LiveRecentSearchTransport.send_recent_search(query)
+-> RequestBuilder
+-> PreflightValidation
+-> RuntimeError("LiveRecentSearchTransport disabled")
+```
+
+Future live path under review:
+
+```text
+LiveRecentSearchTransport.send_recent_search(query)
+-> RequestBuilder
+-> PreflightValidation
+-> LiveHttpClient.send(HttpRequest)
+-> TransportResponse
+```
+
+Allowed implementation delta:
+
+- connect RequestBuilder
+- enforce PreflightValidation
+- call injected `LiveHttpClient` exactly once
+- convert `HttpResponse` to `TransportResponse`
+- hand errors to HTTP Error Mapping
+- keep diagnostics redacted
+
+Responsibilities that must stay outside LiveTransport:
+
+- pagination
+- retry loop
+- retry queue enqueue
+- credential loading
+- live mode approval
+- score calculation
+- genre detection
+- CSV output
+- report output
+
+TransportResponse review:
+
+- current normal shape remains `status_code`, `headers`, and `json_body`
+- optional `body_text` should be added only if needed for error mapping
+- raw body text must never be written to reports, CSV, debug logs, retry
+  metadata, pagination metadata, or fixtures
+
+Gap result:
+
+- `READY`: request builder, preflight, disabled transport/client skeletons,
+  parser/normalizer boundaries, retry/pagination skeletons, redaction, fake and
+  disabled real credential loaders, live mode gate
+- `NEEDS_REVIEW`: `body_text` decision, live transport tests, live HTTP tests,
+  storage adapter strategy, live diagnostics, pagination/retry integration
+- `BLOCKED`: live mode, real HTTP, real credential reads, `.env` or process
+  value reads, write endpoints, posting/like/repost/follow/DM/media APIs
