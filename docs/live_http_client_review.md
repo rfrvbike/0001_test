@@ -300,3 +300,36 @@ Live HTTP client implementation must remain blocked if:
 - it writes raw responses to disk
 - it bypasses `LiveModeGate`
 - any redaction or credential leak test fails
+
+## Implementation Delta Review
+
+The disabled-to-live client delta review is recorded in
+`docs/live_http_client_delta_review.md`.
+
+Current reviewed behavior:
+
+```text
+LiveHttpClient.send(HttpRequest)
+-> LiveHttpClientDisabledError("Live HTTP client disabled")
+```
+
+Future reviewed behavior:
+
+```text
+LiveHttpClient.send(HttpRequest)
+-> one HTTP request
+-> one HttpResponse or one mapped failure
+```
+
+The reviewed delta adds only low-level one-request send behavior, timeout
+application, `HttpResponse` construction, status/header/body preservation, JSON
+parse attempt, and error surfacing for `map_http_error(...)`.
+
+The HTTP client must still not build queries, build requests, load credentials,
+approve live mode, retry, enqueue retry tasks, paginate, score posts, classify
+genres, write CSV, or write reports.
+
+HTTP library selection remains `NEEDS_REVIEW`. `requests`, `httpx`, and
+`urllib` were compared for timeout behavior, testability, dependency size, sync
+simplicity, redaction integration, and maintenance. No library is selected or
+imported by the review.

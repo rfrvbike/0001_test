@@ -2059,3 +2059,80 @@ Gap result:
   storage adapter strategy, live diagnostics, pagination/retry integration
 - `BLOCKED`: live mode, real HTTP, real credential reads, `.env` or process
   value reads, write endpoints, posting/like/repost/follow/DM/media APIs
+
+## LiveHttpClient Implementation Delta Review
+
+Added on 2026-06-04 as a design review only. No implementation, HTTP
+communication, X API call, HTTP library execution, socket communication,
+credential lookup, token lookup, cookie lookup, authorization lookup, `.env`
+read, environment variable read, real credential read, real data fetch, or
+posting was performed.
+
+Review document:
+
+- `docs/live_http_client_delta_review.md`
+
+Current disabled path:
+
+```text
+LiveHttpClient.send(HttpRequest)
+-> LiveHttpClientDisabledError("Live HTTP client disabled")
+```
+
+Future live path under review:
+
+```text
+LiveHttpClient.send(HttpRequest)
+-> HTTP request
+-> HttpResponse
+```
+
+One Request Rule:
+
+- allowed: one prepared request produces one response or one mapped failure
+- prohibited: retry loop, recursive retry, sleep, backoff, pagination, retry
+  queue enqueue, and next-token advancement inside the HTTP client
+
+Allowed implementation delta:
+
+- receive a prepared `HttpRequest`
+- apply timeout values
+- send exactly one request
+- build `HttpResponse`
+- preserve status code, headers, in-memory body text, and parsed JSON when
+  available
+- surface failures for HTTP Error Mapping
+
+Responsibilities that must stay outside LiveHttpClient:
+
+- query generation
+- RequestBuilder
+- credential loading
+- live mode approval
+- pagination
+- retry loop
+- retry queue enqueue
+- score calculation
+- genre detection
+- CSV output
+- report output
+
+HTTP library comparison:
+
+- `requests`: simplest sync candidate if dependency policy allows it
+- `httpx`: strongest transport injection and richer timeout model
+- `urllib`: standard library option but higher boilerplate and redaction risk
+
+No HTTP library is selected or imported by this review.
+
+Gap result:
+
+- `READY`: request/response/protocol shapes, disabled client skeleton, error
+  mapping, redaction, request/preflight boundaries, retry/pagination skeletons,
+  live mode gate
+- `NEEDS_REVIEW`: HTTP library choice, connect/read/total timeout shape,
+  diagnostics format, JSON parse failure behavior, raw body limits, live HTTP
+  tests, live integration tests
+- `BLOCKED`: live HTTP, X API calls, socket communication,
+  `requests`/`httpx`/`urllib` execution, credential reads, `.env` or process
+  value reads, live mode, write endpoints

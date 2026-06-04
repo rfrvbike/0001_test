@@ -130,6 +130,7 @@ Rationale:
 ### NEEDS_REVIEW
 
 - `LiveRecentSearchTransport` live implementation diff
+- `LiveHttpClient` live implementation diff and HTTP library choice
 - `RealCredentialLoader` backend-only implementation
 - live diagnostic logging format
 - live pagination integration
@@ -154,6 +155,8 @@ Rationale:
 
 - implement `RealCredentialLoader` backend-only with no frontend path
 - implement `LiveHttpClient` with timeout/error mapping and no retry loop
+- complete the disabled-to-live HTTP client delta checklist in
+  `docs/live_http_client_delta_review.md`
 - implement `LiveRecentSearchTransport` using Request Builder and Preflight
 - complete the disabled-to-live implementation delta checklist in
   `docs/live_recent_search_transport_delta_review.md`
@@ -204,3 +207,25 @@ The reviewed live transport delta adds one-request HTTP client execution and
 response conversion only. Pagination, retry queue enqueue, credential loading,
 score calculation, genre detection, CSV output, and report output remain outside
 the transport.
+
+## LiveHttpClient Delta Review Addendum
+
+The LiveHttpClient implementation delta review is recorded in
+`docs/live_http_client_delta_review.md`.
+
+Delta result:
+
+- `READY`: `HttpRequest`, `HttpResponse`, `HttpClient` protocol,
+  `DisabledHttpClient`, disabled `LiveHttpClient`, HTTP Error Mapping,
+  redaction utility, request/preflight boundaries, retry/pagination skeletons
+- `NEEDS_REVIEW`: HTTP library selection, connect/read/total timeout shape,
+  diagnostics format, JSON parse failure behavior, raw body limits, live HTTP
+  tests, live transport/client integration tests
+- `BLOCKED`: live HTTP execution, X API calls, socket communication,
+  `requests`/`httpx`/`urllib` execution, credential reads, `.env` or process
+  reads, live mode, write endpoints
+
+The reviewed HTTP client delta adds one-request send behavior only. Query
+generation, RequestBuilder behavior, credential loading, retry loops, retry
+queue enqueue, pagination, scoring, genre detection, CSV output, and report
+output remain outside the client.
