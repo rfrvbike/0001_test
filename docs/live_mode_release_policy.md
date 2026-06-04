@@ -272,3 +272,18 @@ Live mode must remain blocked if any of the following is true:
 - X API plan constraints are unknown
 - rate limit behavior is unknown
 - rollback path is untested
+
+## Minimal Live API Test Plan
+
+The proposed first-live connectivity test is documented in
+`docs/live_api_minimal_test_plan.md`.
+
+The initial test must be restricted to one read-only recent-search query for
+one genre, `max_results=10`, and `max_pages=1`. Pagination, retry, RetryQueue,
+scoring, CSV persistence, and full report output are prohibited. Only a
+redacted summary may be produced.
+
+Any auth, timeout, network, rate-limit, server, client, JSON parse, or schema
+failure ends the test immediately and triggers the existing rollback settings.
+The plan remains `BLOCKED` until live implementations and explicit approval are
+complete.

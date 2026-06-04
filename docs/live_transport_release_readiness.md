@@ -229,3 +229,22 @@ The reviewed HTTP client delta adds one-request send behavior only. Query
 generation, RequestBuilder behavior, credential loading, retry loops, retry
 queue enqueue, pagination, scoring, genre detection, CSV output, and report
 output remain outside the client.
+
+## Minimal Live API Test Plan Addendum
+
+The proposed first-live test plan is recorded in
+`docs/live_api_minimal_test_plan.md`.
+
+The reviewed minimum scope is one read-only recent-search query for one genre,
+`max_results=10`, `max_pages=1`, no pagination, no retry, no RetryQueue, no
+scoring, no CSV persistence, and a redacted summary only.
+
+Readiness result:
+
+- `READY`: minimum scope, One Request Rule, allowlist, normalizer tolerance,
+  rollback configuration
+- `NEEDS_REVIEW`: selected query/genre, empty-result success rule, redacted
+  summary schema, current API availability, operator/approval owner, timeout
+  values
+- `BLOCKED`: test execution, live mode, real credentials, live HTTP, live
+  transport, HTTP library use, retries, pagination, write endpoints

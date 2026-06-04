@@ -1,5 +1,123 @@
 # latest_report.md
 
+## 2026-06-05 Live API Minimal Test Plan Review
+
+Completed a design-only review defining the proposed conditions for the first
+future live X API connectivity test. No implementation, HTTP communication, X
+API call, HTTP library use, API key lookup, token lookup, cookie lookup,
+authorization lookup, `.env` creation/change, environment variable read, real
+credential read, real data fetch, posting, or LiveMode enablement was
+performed.
+
+### Added Files
+
+- `docs/live_api_minimal_test_plan.md`
+
+### Changed Files
+
+- `docs/live_mode_release_policy.md`
+- `docs/live_transport_release_readiness.md`
+- `reports/latest_report.md`
+
+### Minimal Test Plan Result
+
+Proposed first-live scope:
+
+- read-only recent search only
+- one genre
+- one query
+- `max_results=10`
+- `max_pages=1`
+- recent seven-day window
+- no pagination
+- no retry
+- no RetryQueue
+- no scoring
+- no CSV persistence
+- redacted summary only
+
+### Success Conditions
+
+- HTTP 200
+- status code captured
+- response headers captured without logging values
+- JSON body captured
+- ResponseNormalizer completes
+- returned posts provide `post_id` and `text`
+- `created_at` is captured when available
+- missing `public_metrics` and optional metrics do not crash normalization
+- one HTTP request only
+- no credential markers in redacted summary
+
+### Failure Conditions
+
+The test stops immediately and rolls back for:
+
+- auth error
+- timeout
+- network error
+- rate limited
+- server error
+- client error
+- JSON parse error
+- schema error
+- more than one request
+- retry, pagination, write endpoint, or credential leak attempt
+
+### Rollback
+
+```text
+live_mode=false
+transport=mock
+credential_loader=fake
+http_client=disabled
+dry_run=true
+```
+
+### Gap Analysis
+
+READY:
+
+- minimum one-query/one-page scope
+- read-only recent-search allowlist
+- QueryBuilder / RequestBuilder / PreflightValidation boundaries
+- TransportResponse shape
+- ResponseNormalizer missing-field tolerance
+- rollback configuration
+
+NEEDS_REVIEW:
+
+- selected query and genre
+- empty-result success rule
+- redacted summary schema
+- current X API availability
+- operator and explicit approval owner
+- first-live timeout values
+
+BLOCKED:
+
+- first-live test execution
+- LiveMode enablement
+- real credential loading
+- live HTTP and live transport implementations
+- HTTP library use
+- retry, pagination, RetryQueue, scoring, CSV persistence, write APIs
+
+### Verification
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 265 tests
+OK
+```
+
 ## 2026-06-04 LiveHttpClient Implementation Delta Review
 
 Completed a design-only delta review for moving `LiveHttpClient` from disabled
