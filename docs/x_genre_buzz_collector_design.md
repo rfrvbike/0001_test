@@ -1935,3 +1935,59 @@ Gap result:
   OS credential store portability, real loader failure-mode redaction tests
 - `BLOCKED`: real credential reads, live mode, live HTTP, `.env`
   creation/change, browser storage, credential output surfaces
+
+## RealCredentialLoader Implementation Review Skeleton
+
+Added on 2026-06-04 as a review and disabled skeleton update. No real
+credential read, local config read, process value read, file read, secret
+manager connection, operating-system credential store connection, HTTP
+communication, X API call, real data fetch, or posting was performed.
+
+Review document:
+
+- `docs/real_credential_loader_review.md`
+
+Skeleton additions:
+
+- `CredentialStorageAdapter`
+- `EnvCredentialAdapter`
+- `SecretManagerAdapter`
+- `FileCredentialAdapter`
+- `OsCredentialAdapter`
+- `CredentialNotFoundError`
+- `CredentialStorageError`
+- `CredentialValidationError`
+
+Current behavior remains:
+
+```text
+RealCredentialLoader.load()
+-> RealCredentialLoaderDisabledError("Real credential loader disabled")
+```
+
+Loader responsibility:
+
+- backend-only credential loading in the future
+- return `CredentialBundle` only after an approved storage adapter exists
+- preserve redaction boundaries
+- fail closed by default
+
+Out of scope:
+
+- live mode decision
+- HTTP communication
+- X API call
+- Request Builder behavior
+- Pagination
+- Retry
+- Report output
+- CSV output
+
+Gap result:
+
+- `READY`: interface shape, disabled adapter skeletons, error categories,
+  fail-closed loader behavior
+- `NEEDS_REVIEW`: storage backend, adapter selection policy, validation rules,
+  rotation and rollback procedures, adapter-specific leak tests
+- `BLOCKED`: real credential reads, adapter implementations, live HTTP, live
+  mode enablement

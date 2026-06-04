@@ -216,6 +216,19 @@ Before implementing real loading:
 - no exception includes credential values
 - no report/CSV/debug output includes credential values
 
+Implementation review skeleton:
+
+- `docs/real_credential_loader_review.md`
+- `CredentialStorageAdapter.load_credentials() -> CredentialBundle`
+- disabled skeletons for environment variable, secret manager, local file, and
+  operating-system credential adapters
+- future error categories for disabled loader, missing credential, storage
+  failure, and validation failure
+
+The adapter interface is now defined, but adapter implementations remain
+blocked. Every current real-loader path still raises
+`RealCredentialLoaderDisabledError("Real credential loader disabled")`.
+
 ## Gap Analysis
 
 ### READY

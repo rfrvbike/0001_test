@@ -69,6 +69,7 @@ Implementation review references:
 - `docs/preflight_validation.md`
 - `docs/live_transport_release_readiness.md`
 - `docs/backend_credential_storage_review.md`
+- `docs/real_credential_loader_review.md`
 
 Current incomplete items:
 
@@ -81,6 +82,8 @@ Current incomplete items:
 - credential storage policy is not operational.
 - backend credential storage review is complete, but exact storage backend and
   rotation policy still need approval before real loading.
+- `RealCredentialLoader` adapter interface and error skeleton are defined, but
+  all adapter paths remain disabled.
 - pagination is mock-tested but not live-integrated.
 - retry queue is mock-tested but not live-integrated.
 - preflight validation is implemented as a skeleton and must be integrated into
@@ -258,6 +261,7 @@ Live mode must remain blocked if any of the following is true:
 - any redaction test fails
 - any credential leak test fails
 - real credential loader is still disabled
+- real credential storage adapter is implemented without review
 - live HTTP client is missing
 - live transport is missing or disabled
 - live transport can reach write endpoints
