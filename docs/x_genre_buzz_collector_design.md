@@ -1830,3 +1830,53 @@ Fail-closed behavior:
 Redaction remains enforced for debug, report, CSV, exception, and validation
 summary surfaces. Query text and header values are not emitted by the safe
 preflight summary.
+
+## Live Transport Release Readiness Review
+
+Added on 2026-06-04 as a design review only. No implementation, HTTP
+communication, X API call, credential lookup, token lookup, cookie lookup,
+`.env` read, environment variable read, real data fetch, or posting was
+performed.
+
+Review document:
+
+- `docs/live_transport_release_readiness.md`
+
+Overall result:
+
+- `READY`: non-live support modules and disabled-path safety tests
+- `NEEDS_REVIEW`: live transport implementation readiness
+- `BLOCKED`: live API execution
+
+Reviewed connection order:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> QueryBuilder
+-> RequestBuilder
+-> PreflightValidation
+-> LiveRecentSearchTransport
+-> LiveHttpClient
+-> TransportResponse
+-> RateLimitParser
+-> ResponseNormalizer
+-> PaginationController
+-> RetryPolicy
+-> RetryQueue
+```
+
+Minimum live implementation scope:
+
+- `LiveHttpClient`
+- `RealCredentialLoader`
+- `LiveRecentSearchTransport`
+
+High-priority remaining tasks:
+
+- implement backend-only real credential loading
+- implement live HTTP send with timeout/error mapping and no retry loop
+- implement live transport using Request Builder and Preflight Validation
+- add live tests for auth, rate limit, server, timeout, JSON parse, schema, and
+  redaction paths
+- re-check current X API plan and recent-search limits before live release

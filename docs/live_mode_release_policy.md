@@ -67,6 +67,7 @@ Implementation review references:
 - `docs/live_http_client_disabled.md`
 - `docs/live_recent_search_transport_final_review.md`
 - `docs/preflight_validation.md`
+- `docs/live_transport_release_readiness.md`
 
 Current incomplete items:
 
@@ -81,6 +82,8 @@ Current incomplete items:
 - retry queue is mock-tested but not live-integrated.
 - preflight validation is implemented as a skeleton and must be integrated into
   the future live transport path before live release.
+- live transport release readiness is `NEEDS_REVIEW` for implementation and
+  `BLOCKED` for live API execution.
 
 ## Operational Preflight
 
