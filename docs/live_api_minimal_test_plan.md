@@ -193,6 +193,12 @@ The summary must not contain:
 - credentials
 - usernames or author identifiers
 
+Detailed schema and field classification are reviewed in
+`docs/redacted_live_summary_review.md`. The first-live summary must use only
+allowlisted count, boolean, enum, timing, and status fields. It must not contain
+raw response data, full query text, full post text, header values, usernames,
+author IDs, or post ID lists.
+
 ## Gap Analysis
 
 ### READY

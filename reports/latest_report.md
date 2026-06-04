@@ -1,5 +1,173 @@
 # latest_report.md
 
+## 2026-06-05 Redacted Live Summary Schema Review
+
+Completed a design-only review defining which fields may appear in the first
+future live connectivity summary and which fields are blocked. No
+implementation, HTTP communication, X API call, HTTP library use, API key
+lookup, token lookup, cookie lookup, authorization lookup, `.env`
+creation/change, environment variable read, real credential read, LiveMode
+enablement, real data fetch, or posting was performed.
+
+### Added Files
+
+- `docs/redacted_live_summary_review.md`
+
+### Changed Files
+
+- `docs/live_api_minimal_test_plan.md`
+- `docs/live_mode_release_policy.md`
+- `reports/latest_report.md`
+
+### Review Result
+
+The first-live summary may contain only redacted operational diagnostics:
+
+- status
+- endpoint name
+- method
+- status code
+- query length
+- result/fetched/normalized counts
+- partial result boolean
+- stop reason
+- rate-limited boolean
+- retryable boolean
+- retry-after seconds
+- pagination-used boolean
+- next-token-present boolean
+- missing metrics count
+- execution time
+- rollback completed boolean
+
+### SAFE
+
+- request_id
+- endpoint_name
+- method
+- status_code
+- query_length
+- result_count
+- fetched_count
+- partial_result
+- stop_reason
+- rate_limited
+- retryable
+- retry_after_seconds
+- pagination_used
+- next_token_present
+- metrics_missing_count
+- execution_time_ms
+- diagnostics_version
+- rollback_completed
+
+### NEEDS_REVIEW
+
+- score_source
+- header_names
+- missing_field_names
+- empty-result success handling
+- max safe_debug_summary length
+
+### BLOCKED
+
+- Authorization
+- Bearer
+- API_KEY
+- TOKEN
+- SECRET
+- COOKIE
+- CredentialBundle content
+- header values
+- raw request/response headers
+- raw response body
+- raw JSON
+- full query text
+- full post text
+- username
+- author_id
+- post_id lists
+- frontend-visible live diagnostics
+
+### Summary Schema
+
+Proposed schema:
+
+```text
+RedactedLiveSummary(
+  diagnostics_version,
+  status,
+  request_id,
+  endpoint_name,
+  method,
+  status_code,
+  query_length,
+  result_count,
+  fetched_count,
+  normalized_post_count,
+  partial_result,
+  stop_reason,
+  rate_limited,
+  retryable,
+  retry_after_seconds,
+  pagination_used,
+  next_token_present,
+  metrics_missing_count,
+  score_source,
+  execution_time_ms,
+  rollback_completed,
+)
+```
+
+### Error Summary Policy
+
+Errors may report only status/count/boolean/enum/timing values. Auth, timeout,
+network, rate-limit, server, client, JSON parse, and schema errors must never
+include raw headers, raw bodies, credentials, query text, post text, usernames,
+author IDs, or post ID lists.
+
+### Gap Analysis
+
+READY:
+
+- credential marker denylist
+- count/boolean/enum diagnostics
+- rollback settings
+- missing-field aggregate concept
+- retry/pagination metadata boundaries
+
+NEEDS_REVIEW:
+
+- final code location
+- serialization format
+- optional header/missing-field names
+- score_source need
+- empty-result handling
+
+BLOCKED:
+
+- live summary implementation
+- raw response output
+- post/user/ID output
+- CSV live data output
+- frontend/screenshot exposure
+- retry or pagination triggered by summary
+
+### Verification
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 265 tests
+OK
+```
+
 ## 2026-06-05 Live API Minimal Test Plan Review
 
 Completed a design-only review defining the proposed conditions for the first

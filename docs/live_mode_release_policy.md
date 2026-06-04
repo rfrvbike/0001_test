@@ -287,3 +287,8 @@ Any auth, timeout, network, rate-limit, server, client, JSON parse, or schema
 failure ends the test immediately and triggers the existing rollback settings.
 The plan remains `BLOCKED` until live implementations and explicit approval are
 complete.
+
+The redacted output boundary for that test is reviewed in
+`docs/redacted_live_summary_review.md`. Live release remains blocked if the
+summary can expose raw response data, query text, post text, user identifiers,
+post ID lists, header values, credentials, or frontend-visible diagnostics.
