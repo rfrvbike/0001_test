@@ -1,5 +1,141 @@
 # latest_report.md
 
+## 2026-06-04 Backend-Only Real Credential Storage Policy Review
+
+Completed a design-only review for backend-only real credential storage before
+`RealCredentialLoader` implementation. No implementation, HTTP communication,
+X API call, API key lookup, token lookup, cookie access, authorization lookup,
+`.env` creation/change, environment variable read, browser storage read, real
+credential storage, real data fetch, or posting was performed.
+
+### Added Files
+
+- `docs/backend_credential_storage_review.md`
+
+### Changed Files
+
+- `docs/live_mode_release_policy.md`
+- `docs/live_recent_search_transport.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Storage Comparison Result
+
+| Option | Result |
+| --- | --- |
+| backend local file | NEEDS_REVIEW; usable only outside repo and outside served paths |
+| `.env` | BLOCKED for current phase; not recommended as primary project storage |
+| environment variables | NEEDS_REVIEW; possible future backend adapter, tests must not read real process values |
+| secret manager | preferred for staging and required for production |
+| OS credential store | NEEDS_REVIEW; useful locally where portable and reviewed |
+
+### Recommended Storage
+
+Development:
+
+- recommended: `FakeCredentialLoader` default
+- optional after review: backend local file outside repo, or OS credential store
+- forbidden: frontend, browser storage, repo files, CSV, reports, fixtures,
+  project-level `.env` in current phase
+
+Staging:
+
+- recommended: secret manager or reviewed backend-only managed adapter
+- forbidden: frontend, browser storage, repo files, CSV, reports, fixtures,
+  `.env` as primary storage
+
+Production:
+
+- recommended: secret manager
+- forbidden: frontend, browser storage, repo files, CSV, reports, fixtures,
+  `.env` as primary storage, manual local files
+
+### Credential Boundary
+
+Allowed future flow:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> RequestBuilder
+-> LiveRecentSearchTransport
+-> LiveHttpClient
+```
+
+Credentials must not flow to:
+
+- Query Builder
+- Preflight Validation summaries
+- Response Normalizer
+- Rate Limit Parser
+- Pagination Controller
+- Retry Policy
+- Retry Queue
+- score calculation
+- genre detection
+- CSV writer
+- report writer
+- fixtures
+- frontend code
+
+### Gap Analysis
+
+READY:
+
+- backend-only rule exists
+- fake loader exists
+- real loader disabled skeleton exists
+- live mode gate blocks live mode
+- request builder hides header values in safe summaries
+- preflight summaries do not expose header values
+- redaction and leak tests exist for fake credential-shaped values
+
+NEEDS_REVIEW:
+
+- exact storage backend for development, staging, and production
+- rotation frequency and owner
+- secret manager provider or adapter shape
+- OS credential store portability
+- local manual test procedure
+- redaction coverage for real loader failure modes
+
+BLOCKED:
+
+- reading real credentials
+- enabling live mode
+- live HTTP calls
+- `.env` creation or modification
+- browser storage usage
+- writing credentials to CSV, reports, fixtures, logs, or exceptions
+- committing any local credential file
+
+### RealCredentialLoader Preconditions
+
+- storage method selected for each environment
+- rotation procedure documented
+- rollback procedure documented
+- backend-only path reviewed
+- frontend leak test updated
+- redaction tests updated
+- credential leak regression tests updated
+- fake adapter remains default
+- real adapter disabled unless explicit release flags are present
+
+### Verification
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 258 tests
+OK
+```
+
 ## 2026-06-04 Live Transport Release Readiness Review
 
 Completed a design-only readiness review for implementing

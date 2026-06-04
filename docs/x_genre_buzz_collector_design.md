@@ -1880,3 +1880,58 @@ High-priority remaining tasks:
 - add live tests for auth, rate limit, server, timeout, JSON parse, schema, and
   redaction paths
 - re-check current X API plan and recent-search limits before live release
+
+## Backend-Only Real Credential Storage Policy Review
+
+Added on 2026-06-04 as a design review only. No implementation, HTTP
+communication, X API call, credential lookup, token lookup, cookie lookup,
+authorization lookup, `.env` creation/change, environment variable read, browser
+storage read, real credential storage, real data fetch, or posting was
+performed.
+
+Review document:
+
+- `docs/backend_credential_storage_review.md`
+
+Credential boundary:
+
+```text
+CredentialLoader
+-> LiveModeGate
+-> RequestBuilder
+-> LiveRecentSearchTransport
+-> LiveHttpClient
+```
+
+Credentials must not flow to Query Builder, Preflight Validation summaries,
+Response Normalizer, Rate Limit Parser, Pagination Controller, Retry Policy,
+Retry Queue, score calculation, genre detection, CSV writer, report writer,
+fixtures, or frontend code.
+
+Storage recommendation:
+
+- development: keep `FakeCredentialLoader` as default; optional backend local
+  file outside the repo or OS credential store only after review
+- staging: secret manager or reviewed backend-only managed adapter
+- production: secret manager
+
+Blocked storage/outputs:
+
+- frontend
+- browser storage
+- repository-local credential files
+- CSV
+- reports
+- fixtures
+- debug logs
+- exceptions
+- project-level `.env` primary storage plan
+
+Gap result:
+
+- `READY`: backend-only rule, fake loader, disabled real loader skeleton,
+  live-mode gate, request builder redaction, preflight safe summaries
+- `NEEDS_REVIEW`: exact storage backend, rotation owner, secret manager adapter,
+  OS credential store portability, real loader failure-mode redaction tests
+- `BLOCKED`: real credential reads, live mode, live HTTP, `.env`
+  creation/change, browser storage, credential output surfaces

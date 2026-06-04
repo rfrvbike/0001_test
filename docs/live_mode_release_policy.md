@@ -68,6 +68,7 @@ Implementation review references:
 - `docs/live_recent_search_transport_final_review.md`
 - `docs/preflight_validation.md`
 - `docs/live_transport_release_readiness.md`
+- `docs/backend_credential_storage_review.md`
 
 Current incomplete items:
 
@@ -78,6 +79,8 @@ Current incomplete items:
 - final transport implementation responsibility is reviewed, but not live
   implemented.
 - credential storage policy is not operational.
+- backend credential storage review is complete, but exact storage backend and
+  rotation policy still need approval before real loading.
 - pagination is mock-tested but not live-integrated.
 - retry queue is mock-tested but not live-integrated.
 - preflight validation is implemented as a skeleton and must be integrated into
@@ -155,14 +158,15 @@ Additional constraints:
 3. Run targeted credential leak and redaction tests.
 4. Run mock dry-run pipeline.
 5. Review the backend credential storage plan.
-6. Review X API plan constraints and recent-search availability.
-7. Review live transport implementation diff.
-8. Confirm all live unlock flags are explicit.
-9. Confirm read-only recent search is the only allowed endpoint.
-10. Perform a dry-run with the live config shape but disabled HTTP.
-11. Approve a narrow live read-only test window.
-12. Capture redacted diagnostics only.
-13. Re-disable live flags after the test window unless explicitly approved for
+6. Confirm the selected storage backend, rotation owner, and rollback path.
+7. Review X API plan constraints and recent-search availability.
+8. Review live transport implementation diff.
+9. Confirm all live unlock flags are explicit.
+10. Confirm read-only recent search is the only allowed endpoint.
+11. Perform a dry-run with the live config shape but disabled HTTP.
+12. Approve a narrow live read-only test window.
+13. Capture redacted diagnostics only.
+14. Re-disable live flags after the test window unless explicitly approved for
     continued operation.
 
 ## Rollback Procedure
@@ -228,6 +232,8 @@ Before live mode can be approved, reviewers must confirm:
 - no credential values are written to reports
 - no credential values are included in exceptions
 - real credential loader does not expose values through debug summaries
+- selected credential storage is backend-only and approved for the target
+  environment
 - request builder does not expose header values
 - live transport returns `TransportResponse`
 - live transport receives a built query and does not mutate query rules
@@ -258,6 +264,7 @@ Live mode must remain blocked if any of the following is true:
 - preflight validation is missing or bypassable
 - frontend can access credentials
 - `.env` or local secret handling is unreviewed
+- credential storage backend or rotation policy is undecided
 - X API plan constraints are unknown
 - rate limit behavior is unknown
 - rollback path is untested

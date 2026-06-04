@@ -139,6 +139,18 @@ Backend-only policy:
 - credential values are prohibited in CSV, reports, fixtures, debug logs, and
   exceptions
 - see `docs/backend_credential_policy.md`
+- storage review is recorded in `docs/backend_credential_storage_review.md`
+
+Storage review summary:
+
+- development should keep `FakeCredentialLoader` as the default
+- staging should prefer a reviewed secret manager or backend-only managed
+  adapter
+- production should require a secret manager
+- `.env` is not recommended as the project-level primary storage plan
+- any repository-local credential file remains prohibited
+- credentials must flow only through `CredentialLoader`, `LiveModeGate`,
+  `RequestBuilder`, `LiveRecentSearchTransport`, and `LiveHttpClient`
 
 Live mode remains blocked by `x_auto_ops/live_mode_gate.py`:
 
