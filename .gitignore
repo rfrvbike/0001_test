@@ -26,6 +26,9 @@ dating_assistant/data/local/*
 !dating_assistant/data/local/partners/
 dating_assistant/data/local/partners/*
 !dating_assistant/data/local/partners/.gitkeep
+!dating_assistant/data/local/real_profiles/
+dating_assistant/data/local/real_profiles/*
+!dating_assistant/data/local/real_profiles/.gitkeep
 dating_assistant/outputs/local/*
 !dating_assistant/outputs/local/.gitkeep
 data/oauth2_*.local.json
