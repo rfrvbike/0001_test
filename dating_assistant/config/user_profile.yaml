@@ -1,0 +1,102 @@
+basic_profile:
+  personality:
+    - 丁寧
+    - 誠実
+    - 落ち着いている
+    - 慣れるとよく話す
+    - 少しユーモアを入れたい
+  desired_impression:
+    - 誠実
+    - 優しい
+    - 落ち着いている
+    - がつがつしていない
+    - ちゃんと話を聞く
+    - 少し余裕がある
+  avoid_impression:
+    - 下心が強い
+    - 軽すぎる
+    - 知ったかぶり
+    - 上から目線
+    - 自動送信っぽい
+    - 誰にでも送っているコピー感
+
+strong_topics:
+  - AI
+  - ChatGPT
+  - 便利ツール
+  - パソコン
+  - スマホ
+  - ガジェット
+  - 動画
+  - ドラマ
+  - YouTube
+  - 食べ物
+  - 健康
+  - コスパ比較
+  - 文章作成
+  - 発信
+  - 仕事の効率化
+
+normal_topics:
+  - カフェ
+  - ご飯
+  - 映画
+  - 料理
+  - 休日
+  - 休日の過ごし方
+  - 買い物
+  - 配信サービス
+
+light_only_topics:
+  - 旅行
+  - 自然
+  - 遠出
+  - 美容
+  - ファッション
+  - お酒
+  - 飲み
+  - 投資
+  - 株
+  - 政治
+  - 都市伝説
+  - 専門的なAI技術
+  - PCの細かすぎる設定
+  - スマホの細かすぎる設定
+
+avoid_topics:
+  - 初手から重い恋愛観
+  - 外見だけを褒める会話
+  - 知ったかぶりが必要な趣味
+  - 自分が行きたくない場所への誘導
+  - 強い政治主張
+  - 怪しい副業に見える話
+  - お得感が強すぎる話
+  - 家
+  - 泊まり
+  - ホテル
+  - 夜飲み
+  - 遅い時間の誘い
+  - 露骨な性的話題
+
+date_preferences:
+  good_first_date_places:
+    - カフェ
+    - 軽いご飯
+    - ランチ
+    - 落ち着いた店
+    - 短時間のお茶
+  avoid_first_date_places:
+    - 家
+    - ホテル
+    - 遠出
+    - 旅行
+    - 夜遅い飲み
+    - 密室感が強い場所
+
+conversation_style:
+  default_tone: 丁寧だが堅すぎない
+  question_limit_per_message: 1
+  prefer_short_messages: true
+  avoid_too_long_explanation: true
+  avoid_over_praise: true
+

@@ -1,0 +1,25 @@
+name_or_label: real_profile_xxx
+age: null
+profile_text: |
+  ここに相手のプロフィール文を貼る。
+  本名、勤務先、学校名、SNS ID、最寄り駅などは入れない。
+
+hobbies:
+  - ここに趣味1
+  - ここに趣味2
+
+photos_memo:
+  - 写真から分かる雰囲気を、個人が特定されない範囲で書く
+  - 例: カフェ写真がある
+  - 例: 旅行先の風景写真がある
+  - 例: 落ち着いた雰囲気
+  - 例: 明るくアクティブそう
+
+location_hint: null
+
+relationship_goal: null
+
+free_notes: |
+  注意点や補足を書く。
+  本名、勤務先、学校名、SNS ID、最寄り駅などは書かない。
+

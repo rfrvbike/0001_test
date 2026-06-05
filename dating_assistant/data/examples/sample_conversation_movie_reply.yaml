@@ -1,0 +1,7 @@
+target_label: cafe_movie_001
+turns:
+  - speaker: user
+    text: はじめまして。プロフィールを見て、映画が好きなところが気になりました。最近見た中で、これは当たりだったなって作品ありますか？
+  - speaker: partner
+    text: 映画館で見る方が好きです！最近はミステリー系をよく見ます。
+

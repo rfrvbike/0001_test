@@ -1,0 +1,7 @@
+target_label: drink_night_001
+turns:
+  - speaker: user
+    text: はじめまして。プロフィールを見て、美味しいご飯が好きなところが気になりました。最近よく行くお店のジャンルとかありますか？
+  - speaker: partner
+    text: 仕事終わりに友達と飲みに行くことが多いです。居酒屋とかイタリアンが好きです。
+

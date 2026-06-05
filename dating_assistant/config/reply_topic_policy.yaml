@@ -1,0 +1,194 @@
+priority_order:
+  - cafe
+  - food
+  - movie
+  - health
+  - travel
+  - fashion_beauty
+  - drink
+
+temperature_style:
+  low:
+    max_sentences: 2
+    allow_warmth: false
+    allow_light_flirt: false
+  normal:
+    max_sentences: 3
+    allow_warmth: true
+    allow_light_flirt: false
+  good:
+    max_sentences: 3
+    allow_warmth: true
+    allow_light_flirt: false
+    warm_phrases:
+      - 話しやすい感じがします。
+      - なんか自然に話せそうです。
+  very_good:
+    max_sentences: 3
+    allow_warmth: true
+    allow_light_flirt: true
+    warm_phrases:
+      - 話していて楽しいです。
+      - こういう感じで話せるのいいですね。
+
+topic_keywords:
+  movie:
+    display_name: 映画
+    keywords:
+      - 映画
+      - 映画館
+      - ミステリー
+      - 洋画
+      - 邦画
+      - Netflix
+      - ネトフリ
+      - ドラマ
+    response_direction: 映画や作品の好みに軽く触れ、最近見て面白かった作品を聞く
+    acknowledgment_examples:
+      - 映画いいですね。
+      - 映画館派なんですね。
+      - ミステリー系いいですね。
+    empathy_examples:
+      - 見終わったあとに少し考えたくなる感じも楽しいですよね。
+      - 映画館で見ると、集中できる感じがありますよね。
+      - 作品の余韻が残る感じもいいですよね。
+    safe_question_examples:
+      - 最近見て面白かった作品はありますか？
+      - 映画館と家だとどちらで見ることが多いですか？
+      - 邦画と洋画だとどちらを見ることが多いですか？
+  cafe:
+    display_name: カフェ
+    keywords:
+      - カフェ
+      - 喫茶店
+      - お茶
+      - ランチ
+      - 落ち着いたお店
+    response_direction: 落ち着いた雰囲気や休日の過ごし方に寄せる
+    acknowledgment_examples:
+      - カフェいいですね。
+      - 落ち着いたカフェ、いいですね。
+      - 休日にカフェ行くのいいですね。
+    empathy_examples:
+      - 落ち着いたお店を見つけた時って、ちょっと得した気分になりますよね。
+      - ゆっくりできる場所があると、休日の満足感が上がりますよね。
+      - 雰囲気のいいお店だと、つい長居したくなりますよね。
+    safe_question_examples:
+      - 最近よかったお店はありますか？
+      - よく選ぶのはどんな雰囲気のお店ですか？
+      - 甘いものとコーヒーだとどちらを目当てに行くことが多いですか？
+  food:
+    display_name: ご飯
+    keywords:
+      - ご飯
+      - 食事
+      - 和食
+      - 洋食
+      - イタリアン
+      - 居酒屋
+      - 美味しい
+    response_direction: 食べ物やお店のジャンルに寄せ、初回から夜飲みへ誘導しない
+    acknowledgment_examples:
+      - ご飯の話いいですね。
+      - 美味しいものの話はしやすいですね。
+      - 食べ物の好みって意外と大事ですよね。
+    empathy_examples:
+      - 美味しいものを食べる時間って、普通に元気が出ますよね。
+      - お店のジャンルが合うと、話も広がりやすいですよね。
+      - 仕事終わりや休日のご飯って、ちょっとした楽しみになりますよね。
+    safe_question_examples:
+      - 普段は和食系と洋食系だとどちらが多いですか？
+      - 最近よかったジャンルはありますか？
+      - 定番で頼みたくなるものってありますか？
+  health:
+    display_name: 健康
+    keywords:
+      - 健康
+      - 運動
+      - ジム
+      - 散歩
+    response_direction: 無理のない日常習慣に軽く触れる
+    acknowledgment_examples:
+      - 健康を意識してるのいいですね。
+      - 体にいいことを続けてるのいいですね。
+      - 生活を整える話、けっこう大事ですよね。
+    empathy_examples:
+      - 無理なく続けられるものが一番いいですよね。
+      - ちょっとした習慣で気分も変わりますよね。
+      - 健康って、頑張りすぎないくらいが続きやすいですよね。
+    safe_question_examples:
+      - 普段は散歩や運動をすることが多いですか？
+      - 続けやすかった習慣はありますか？
+  travel:
+    display_name: 旅行
+    keywords:
+      - 旅行
+      - 遠出
+      - 温泉
+      - 海
+      - 自然
+      - 観光
+    response_direction: 深掘りしすぎず、休日やゆっくり過ごす話に移動する
+    acknowledgment_examples:
+      - 旅行の話いいですね。
+      - 景色のいい場所に行くのいいですね。
+      - 遠出できる休日っていいですね。
+    empathy_examples:
+      - いつもと違う場所に行くと、気分転換になりますよね。
+      - 予定を詰めすぎずにのんびりする旅行も良さそうです。
+      - 写真に残したくなる場所に行けると嬉しいですよね。
+    safe_question_examples:
+      - 休日はのんびり派とアクティブ派だとどちらが多いですか？
+      - カフェやご飯もセットで楽しむことが多いですか？
+      - 海と山だとどちらが好きですか？
+  fashion_beauty:
+    display_name: 美容・ファッション
+    keywords:
+      - 美容
+      - ファッション
+      - 服
+      - 買い物
+      - コスメ
+    response_direction: 詳しいふりをせず、休日や買い物、カフェに移動する
+    acknowledgment_examples:
+      - 買い物やカフェの話いいですね。
+      - 休日に気分転換できる予定があるのはいいですね。
+      - おしゃれなお店を探すのも楽しそうです。
+    empathy_examples:
+      - 気に入ったものを見つけた時って、ちょっと気分上がりますよね。
+      - 休日に外へ出るきっかけがあるのはいいですよね。
+      - カフェも一緒だと、ゆっくりできる時間になりそうですね。
+    safe_question_examples:
+      - 買い物のあとはカフェでゆっくりすることも多いですか？
+      - 休日は買い物に出ることが多いですか？
+      - 気になるものを探す派と決めてから行く派だとどちらですか？
+  drink:
+    display_name: お酒
+    keywords:
+      - お酒
+      - 飲み
+      - ビール
+      - ワイン
+    response_direction: お酒を深掘りせず、ご飯やお店のジャンルに移動する
+    acknowledgment_examples:
+      - 美味しいご飯の話いいですね。
+      - 仕事終わりに少し楽しみがあるのはいいですね。
+      - お店の話はしやすいですね。
+    empathy_examples:
+      - 一日終わったあとに少しリセットできる時間って大事ですよね。
+      - お酒そのものより、お店の雰囲気やご飯も大事ですよね。
+      - 気軽に話せるお店があると、仕事終わりも少し楽しくなりますよね。
+    safe_question_examples:
+      - 普段は和食系と洋食系だとどちらが多いですか？
+      - 最近よかったご飯のジャンルはありますか？
+
+fallback:
+  short_reply:
+    max_length: 12
+    response_direction: 無理に深掘りせず、軽く受け止めて答えやすい質問を1つだけ返す
+    safe_question_examples:
+      - 休日は外に出る日と家で過ごす日、どちらが多いですか？
+      - 最近よかったことはありますか？
+  multiple_topics:
+    response_direction: 複数話題がある場合は、会話履歴とユーザーの話しやすさを考慮し、安全な話題を1つだけ選ぶ
+

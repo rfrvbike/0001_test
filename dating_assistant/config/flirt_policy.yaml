@@ -1,0 +1,43 @@
+default_flirt_level_by_stage:
+  first_message: 0
+  early_chat: 0
+  friendly_chat: 1
+  warm_chat: 2
+  very_warm_chat: 3
+  partner_started_adult_joke: 4
+
+flirt_levels:
+  0:
+    name: 完全に健全
+    allowed:
+      - 丁寧な共感
+      - 趣味への反応
+      - 軽い自己開示
+  1:
+    name: 軽い好意
+    allowed:
+      - 話していて楽しい
+      - 返信が嬉しい
+      - 雰囲気が合いそう
+  2:
+    name: 軽い照れや冗談
+    allowed:
+      - ちょっと照れる
+      - 調子に乗りそう
+  3:
+    name: 少し大人っぽいニュアンス
+    allowed:
+      - 会ったら緊張しそう
+  4:
+    name: 相手が乗ってきた場合のみの軽い冗談
+    allowed:
+      - すぐ健全な方向に戻せる冗談
+
+global_banned:
+  - 身体
+  - ホテル
+  - 家に来て
+  - 泊まり
+  - 断られた後に押す
+  - 露骨
+

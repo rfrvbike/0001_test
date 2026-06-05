@@ -1,0 +1,6 @@
+turns:
+  - speaker: user
+    text: はじめまして。カフェ巡りが好きなところが気になりました。
+  - speaker: partner
+    text: はじめまして！カフェ好きです。最近は静かなところが好きです。
+

@@ -1,0 +1,50 @@
+partner_id: partner_001
+display_name: カフェ映画サンプル
+app_name: sample_app
+status: chatting
+created_at: 2026-06-05T10:00:00+09:00
+updated_at: 2026-06-05T10:05:00+09:00
+profile:
+  age: 30
+  profile_text: カフェ巡りと映画が好きです。休日は気になるお店を探しています。
+  hobbies:
+    - カフェ
+    - 映画
+    - ご飯
+  photos_memo:
+    - カフェの写真がある
+  location_hint: 東京
+  relationship_goal: ゆっくり仲良くなりたい
+  free_notes: 個人情報を含まない動作確認用サンプル
+conversation:
+  - speaker: partner
+    text: 最近は家で映画を見ることが多いです。
+    created_at: 2026-06-05T10:05:00+09:00
+analysis:
+  partner_temperature: normal
+  safe_topics:
+    - カフェ
+    - 映画
+  light_only_topics: []
+  avoid_topics: []
+  next_strategy: 映画の話を短く広げる
+  last_suggested_message: ""
+pending_suggestions: []
+message_state:
+  last_user_message: ""
+  last_partner_message: 最近は家で映画を見ることが多いです。
+  last_suggested_message: ""
+  last_sent_at: null
+  last_received_at: 2026-06-05T10:05:00+09:00
+  awaiting_user_action: true
+  awaiting_partner_reply: false
+  next_action: 返信候補を生成する
+notes:
+  - text: 実在人物ではないサンプル
+    created_at: 2026-06-05T10:06:00+09:00
+activity_log:
+  - event_id: event_001
+    event_type: partner_created
+    created_at: 2026-06-05T10:00:00+09:00
+    summary: partnerを作成
+    related_id: null

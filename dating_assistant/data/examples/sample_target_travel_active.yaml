@@ -1,0 +1,15 @@
+name_or_label: travel_active_001
+age: 31
+profile_text: 旅行と自然が好きです。休みの日は友達と遠出したり、景色のきれいな場所に行くことが多いです。まずは楽しくメッセージできたら嬉しいです。
+hobbies:
+  - 旅行
+  - 自然
+  - 遠出
+  - カフェ
+photos_memo:
+  - 海辺の写真がある
+  - 明るくアクティブそう
+location_hint: 東京
+relationship_goal: まずはメッセージから
+free_notes: 旅行好きだが、ユーザー側は旅行を深掘りしすぎない方針
+

@@ -1,0 +1,23 @@
+default_policy:
+  first_message:
+    max_length: 120
+    must_reference_profile: true
+    max_questions: 1
+    avoid_direct_date_invite: true
+    avoid_appearance_only_praise: true
+    tone: 丁寧だけど自然
+  reply:
+    max_length: 160
+    mirror_partner_energy: true
+    include_self_disclosure: true
+    max_questions: 1
+    avoid_interrogation: true
+  invite:
+    allow_when_partner_temperature_is:
+      - good
+      - very_good
+    default_invite_style: 軽くお茶
+    avoid_pressure: true
+    include_escape_option: true
+    avoid_late_night_first_invite: true
+

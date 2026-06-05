@@ -1,0 +1,15 @@
+name_or_label: cafe_movie_001
+age: 30
+profile_text: カフェ巡りと映画が好きです。休日は家で映画を見たり、気になるお店を探して出かけたりしています。ゆっくり話せる人だと嬉しいです。
+hobbies:
+  - カフェ
+  - 映画
+  - ご飯
+  - 休日
+photos_memo:
+  - カフェの写真がある
+  - 落ち着いた雰囲気
+location_hint: 東京
+relationship_goal: ゆっくり仲良くなりたい
+free_notes: ユーザーと相性が良い話題が多い
+

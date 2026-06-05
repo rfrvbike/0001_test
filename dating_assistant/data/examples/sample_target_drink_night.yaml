@@ -1,0 +1,15 @@
+name_or_label: drink_night_001
+age: 33
+profile_text: 美味しいご飯とお酒が好きです。仕事終わりに友達と飲みに行くことが多いです。気軽に話せる人だと嬉しいです。
+hobbies:
+  - ご飯
+  - お酒
+  - 飲み
+  - 仕事終わり
+photos_memo:
+  - レストランの写真がある
+  - 明るく話しやすそう
+location_hint: 東京
+relationship_goal: 気軽に話したい
+free_notes: 初回から夜飲みや遅い時間の誘いは避ける。まずは食べ物の話か軽いお茶。
+

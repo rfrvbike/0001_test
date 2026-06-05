@@ -1,0 +1,14 @@
+name_or_label: sample_001
+age: 32
+profile_text: カフェ巡りと映画が好きです。休日は友達とご飯に行ったり、家でゆっくり過ごすことが多いです。最初はメッセージから仲良くなれたら嬉しいです。
+hobbies:
+  - カフェ
+  - 映画
+  - ご飯
+photos_memo:
+  - 落ち着いた雰囲気
+  - カフェの写真がある
+location_hint: 東京
+relationship_goal: まずはメッセージから
+free_notes: 慎重そうなので、初回から誘わない。
+

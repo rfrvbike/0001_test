@@ -1,0 +1,15 @@
+name_or_label: fashion_beauty_001
+age: 29
+profile_text: 美容とファッションが好きです。休日は買い物に行ったり、友達とカフェに行くことが多いです。楽しく話せる人と出会えたら嬉しいです。
+hobbies:
+  - 美容
+  - ファッション
+  - 買い物
+  - カフェ
+photos_memo:
+  - おしゃれな雰囲気
+  - カフェ写真がある
+location_hint: 東京
+relationship_goal: 楽しく話せる人
+free_notes: 美容やファッションは深掘り注意。カフェや休日に移動しやすい。
+

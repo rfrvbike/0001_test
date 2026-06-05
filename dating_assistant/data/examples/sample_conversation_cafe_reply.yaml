@@ -1,0 +1,7 @@
+target_label: cafe_movie_001
+turns:
+  - speaker: user
+    text: はじめまして。プロフィールを見て、カフェ巡りが好きなところが気になりました。落ち着いた雰囲気のお店とか好きなんですか？
+  - speaker: partner
+    text: 落ち着いたカフェが好きです。休日に友達と行くことが多いです。
+

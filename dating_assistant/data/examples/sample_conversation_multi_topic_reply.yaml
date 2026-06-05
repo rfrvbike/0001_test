@@ -1,0 +1,7 @@
+target_label: cafe_movie_001
+turns:
+  - speaker: user
+    text: はじめまして。プロフィールを見て、休日の過ごし方が気になりました。休みの日は外に出ることが多いですか？
+  - speaker: partner
+    text: 映画も好きですし、休日は友達とカフェに行くことも多いです。
+
