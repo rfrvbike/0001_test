@@ -21,6 +21,13 @@ data/reference_posts/yokaze_generated_posts.jsonl
 data/reference_posts/*.local.*
 data/*.lock
 data/*.tmp
+dating_assistant/data/local/*
+!dating_assistant/data/local/conversations.example.json
+!dating_assistant/data/local/partners/
+dating_assistant/data/local/partners/*
+!dating_assistant/data/local/partners/.gitkeep
+dating_assistant/outputs/local/*
+!dating_assistant/outputs/local/.gitkeep
 data/oauth2_*.local.json
 data/*token*.local.json
 data/*secret*.local.json
