@@ -1,160 +1,139 @@
 # dating_assistant latest_report
 
 更新日: 2026-06-06
-作業No.: 41
+作業No.: 47
 
 ## 今回の目的
 
-作業No.40で確認した、実プロフィール投入前の安全運用リハーサル結果を運用メモとして整理しました。
+作業No.42からNo.45で確認した、実プロフィール入力から返信候補の送信済み記録までの運用ループを整理しました。
 
-今回の主目的は、コードの大きな変更ではなく、今後ユーザーが迷わず実運用に進めるように以下を明文化することです。
+今回の更新はコード変更ではなく、実運用時に迷わず使える手順、安全ルール、状態遷移をドキュメント化するものです。実プロフィール本文、実返信本文、スクリーンショット画像、顔写真、個人を特定できる情報は記載していません。
 
-- 実プロフィールは `data/local/real_profiles/` に保存する
-- partner実データは `data/local/partners/` に保存する
-- スクリーンショット画像そのものは保存しない
-- 個人情報や実データをGit管理対象に含めない
-- CLIは現時点では `python -m dating_assistant` ではなく、`dating_assistant` 配下で `python main.py ...` を使う
-- unittestはリポジトリルートではなく、`dating_assistant` 配下で実行する
+## 実運用ループ確認メモ
 
-## 作業No.40 実プロフィール運用前リハーサルメモ
-
-作業No.40で、実プロフィール投入前の安全リハーサルを実施しました。
+作業No.42からNo.45で、実プロフィール1件を使った基本運用ループを確認しました。
 
 確認済みの流れ:
 
-1. ダミーreal profile作成
-2. `real-profile-list` / `real-profile-show` / `real-profile-rehearse` 確認
-3. `partner-create` でpartner作成
-4. `partner-generate-first` で初回メッセージ候補生成
-5. `pending_suggestions` 保存確認
-6. `partner-dashboard` / `partner-timeline` 確認
-7. unittest 108件成功
+1. 実プロフィールを安全に要約し、real profileとしてlocal保存する
+2. `real-profile-rehearse` で初回候補の流れを確認する
+3. `partner-create` で相手ごとの管理データを作成する
+4. `partner-generate-first` で初回メッセージ候補を生成する
+5. ユーザーが文面を確認し、`partner-mark-sent` で送信済みとして記録する
+6. 相手から返信が来たら、内容を安全に要約して `partner-add-turn` で会話履歴へ追加する
+7. `partner-generate-reply` で返信候補を生成する
+8. ユーザーが文面を確認し、`partner-mark-sent` で送信済みとして記録する
+9. 以降は `partner-add-turn` -> `partner-generate-reply` -> 人間確認 -> `partner-mark-sent` を繰り返す
 
-作成したダミーデータ:
+この一連の操作では、実アプリへの自動送信、外部投稿、実LLM API呼び出しは行いません。送るかどうかは必ずユーザー本人が手動で判断します。
 
-- `data/local/real_profiles/sample_profile_001.yaml`
-- `data/local/partners/partner_009.yaml`
-- `pending_suggestions: suggestion_001`
+## 状態遷移メモ
 
-上記はすべてGit管理対象外のlocal配下に作成され、Git候補には出ませんでした。
+初回候補生成後:
+
+- `pending_suggestions` に初回候補が保存される
+- `next_action` は候補確認と送信待ちに近い状態になる
+- `dashboard` では要対応として確認できる
+
+初回送信済み記録後:
+
+- `pending_suggestions` は0件になる
+- `conversation_history` に `user` 発話が追加される
+- `status` は `first_message_sent` になる
+- `next_action` は相手の返信待ちになる
+- `timeline` に送信済み記録が残る
+
+相手返信追加後:
+
+- `conversation_history` に `partner` 発話が追加される
+- `status` は `chatting` になる
+- `message_state` は自分の対応待ちに近い状態になる
+- `next_action` は返信候補生成または返信候補確認に移る
+
+返信候補生成後:
+
+- `pending_suggestions` に返信候補が保存される
+- `timeline` に返信候補生成の履歴が残る
+- `dashboard` では要対応として確認できる
+
+返信候補の送信済み記録後:
+
+- `pending_suggestions` は0件になる
+- `conversation_history` に `user` 発話が追加される
+- `status` は `chatting` のまま維持される
+- `next_action` は相手の返信待ちになる
+- `dashboard` では返信待ちとして確認できる
+
+## 実運用時の安全ルール
+
+- スクリーンショット画像そのものは保存しない
+- 顔写真そのものは保存しない
+- プロフィール本文や返信文は必要最小限に要約する
+- 本名、勤務先、学校名、LINE ID、SNS ID、住所、電話番号、メールアドレスは保存しない
+- 実データは `data/local/` 配下のみで管理する
+- `data/local/` と `outputs/local/` はGit管理しない
+- 生成候補は自動送信しない
+- 送信するかどうかはユーザー本人が手動で判断する
+- 候補文が説明っぽい場合は、送信前に短く自然な文へ整える
+- 相手をだます表現、詳しくない話題に詳しいふりをする表現、距離感が近すぎる表現は避ける
 
 ## 安全確認
 
-- 実LLM API呼び出しなし
-- 外部通信なし
-- 自動送信なし
-- 外部投稿なし
-- スクリーンショット画像そのものの保存なし
-- `data/local/` 配下のみ使用
-- `outputs/local/` 配下はGit管理対象外
-- Git管理ファイルへの実データ混入なし
-- 本名、勤務先、学校名、住所、電話番号、メールアドレス、LINE ID、SNS IDの保存なし
+今回のドキュメント更新では、実プロフィール本文、実返信本文、スクリーンショット画像、顔写真、個人を特定できる情報を記載していません。
 
-## コマンド実行時の注意
+Git管理対象に含めるのは `dating_assistant/reports/latest_report.md` のみです。`data/local/` と `outputs/local/` は引き続きGit管理対象外として扱います。
 
-現時点では、リポジトリルートからの `python -m dating_assistant` は `__main__.py` がないため使用できません。
+## 実運用コマンド例
 
-CLI確認や運用コマンドは、`dating_assistant` ディレクトリ内で既存の `main.py` を使います。
-
-例:
+以下は `dating_assistant` ディレクトリで実行します。
 
 ```powershell
-cd "C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test\dating_assistant"
-python main.py real-profile-list
-python main.py real-profile-show --label sample_profile_001
-python main.py real-profile-rehearse --label sample_profile_001 --display-name sample_profile_001 --app-name rehearsal --dry-run
-python main.py partner-create --source data/local/real_profiles/sample_profile_001.yaml --display-name sample_profile_001 --app-name rehearsal
-python main.py partner-generate-first --partner-id partner_009
+python main.py real-profile-create --label <label> --profile-text "<safe_summary>"
+python main.py real-profile-rehearse --label <label> --display-name "<safe_display_name>" --dry-run
+python main.py partner-create --source data/local/real_profiles/<label>.yaml --display-name "<safe_display_name>" --app-name <app_name>
+python main.py partner-generate-first --partner-id <partner_id>
+python main.py partner-mark-sent --partner-id <partner_id> --suggestion-id <suggestion_id>
+python main.py partner-add-turn --partner-id <partner_id> --speaker partner --text "<safe_reply_summary>"
+python main.py partner-generate-reply --partner-id <partner_id>
 python main.py partner-dashboard
-python main.py partner-timeline --partner-id partner_009
+python main.py partner-timeline --partner-id <partner_id>
 ```
 
-unittestもリポジトリルートからではなく、`dating_assistant` 配下で実行します。
+現時点では、リポジトリルートからの `python -m dating_assistant` は使用しません。CLIは `dating_assistant` 配下で `python main.py ...` を使います。
+
+unittestも `dating_assistant` 配下で実行します。
 
 ```powershell
-cd "C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test\dating_assistant"
 python -m unittest discover -s tests -v
 ```
 
-## real-profile-rehearse の注意
+## Git管理メモ
 
-`real-profile-rehearse` は `--label` または `--path` に加えて、`--display-name` が必須です。
+実運用で更新される可能性があるもの:
 
-年齢はCLI仕様上 `int` 指定のため、「30代前半」のような表現はそのまま入力できません。必要に応じて `31` などの数値に置き換えて登録します。
+- `data/local/real_profiles/*.yaml`
+- `data/local/partners/*.yaml`
+- `outputs/local/*.md`
 
-## 実プロフィール入力方針
-
-実際の相手プロフィールを登録する場合も、スクリーンショット画像そのものは保存しません。
-
-保存するもの:
-
-- プロフィール文の要約
-- 趣味、関心
-- 写真の雰囲気メモ
-- 会話で触れてよさそうな話題
-- 避けた方がよい話題
-- 補足メモ
-
-保存しないもの:
-
-- 本名
-- 勤務先
-- 学校名
-- 住所
-- 電話番号
-- メールアドレス
-- LINE ID
-- SNS ID
-- 顔写真やスクリーンショット画像そのもの
-
-危険語警告が出た場合は、保存前に内容を見直します。警告は補助機能であり、完全な検出ではないため、人間の最終確認を必ず行います。
-
-## 確認した出力傾向
-
-ダミープロフィールでは、初回メッセージ候補が以下の方針に沿って生成されました。
-
-- 旅行を深掘りしすぎない
-- カフェ、休日、ご飯の話題へ自然に移動する
-- 初回から誘わない
-- 質問を1つに絞る
-- ユーザー本人が詳しいふりをしない
-- `安全チェック結果` と `一番おすすめ` を含む
-
-`partner-generate-first` 後は、`partner_009` が `first_message_suggested` になり、`suggestion_001` が未送信候補として保存されました。
+これらはGit管理対象外として扱います。commit対象に含めるのは、実データを含まないドキュメント、サンプル、テスト、コードのみです。
 
 ## テスト結果
 
-作業No.40での確認:
+直近確認:
 
 ```text
-Ran 108 tests in 0.494s
+Ran 108 tests
 
 OK
 ```
 
-作業No.41でも、追記後に再度unittestを実行して確認します。
-
-## Git状態メモ
-
-作業No.40で作成したlocal配下のダミーデータは、`.gitignore` によりGit管理対象外です。
-
-確認済み:
-
-- `dating_assistant/data/local/real_profiles/*`
-- `dating_assistant/data/local/partners/*`
-- `dating_assistant/outputs/local/*`
-
-今回commit対象に含めるのは、運用メモとして更新したGit管理ドキュメントのみです。
-
 ## 次に改善すべき点
 
-- 実プロフィール1件をユーザーが貼り、同じ手順で実運用入力に進むか判断する
-- 必要ならREADMEにも、No.40で見つかった実行場所の注意を短く追記する
+- 実返信が来たら、安全に要約して `partner-add-turn` に入れる
+- 返信候補の文面をユーザーが確認し、手動送信するか判断する
+- 候補文が説明っぽい場合の短文化ルールをREADMEにも追記するか検討する
 - `python -m dating_assistant` を正式に使いたい場合は `__main__.py` 追加を検討する
-- リポジトリルートからのunittest実行を可能にするか、READMEのテスト実行場所をさらに明確にする
-- 実データを含まないサンプルとテストを維持する
-- local配下の実プロフィール、実会話、実入力をGit管理対象に含めない
-- dashboard / timeline / archive の運用性を実データで確認する
+- 未追跡ファイル群の整理は別作業No.で扱う
 
 ## UTF-8整合性テスト用キーワード
 
