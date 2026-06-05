@@ -131,6 +131,28 @@ python main.py partner-dashboard --archived-only
 - `partner-timeline` にはアーカイブ/解除イベントが残ります。
 - `data/local/partners/` はGit管理対象外です。
 
+## partnerを一括アーカイブする
+
+検証用partnerや終了済みpartnerを、削除せずにまとめてアーカイブできます。
+デフォルトはdry-runで、`--apply` を付けない限りpartner YAMLは変更されません。
+
+```powershell
+python main.py partner-bulk-archive --contains "運用テスト" --dry-run
+python main.py partner-bulk-archive --contains "運用テスト" --apply --reason "検証用データ整理"
+python main.py partner-bulk-archive --partner-id partner_001 --partner-id partner_002 --dry-run
+python main.py partner-bulk-archive --status paused --dry-run
+```
+
+- `--contains`: `display_name` に指定文字列を含むpartnerを対象にします。
+- `--status`: 指定statusのpartnerを対象にします。
+- `--partner-id`: 指定したpartnerだけを対象にします。複数指定できます。
+- `--include-archived`: 既に `archived` のpartnerもdry-run表示対象に含めます。
+- `--apply`: 実際に `archived` へ変更します。条件なしの `--apply` は禁止です。
+- `--reason`: 一括アーカイブ理由をactivity_logへ残します。
+- `--force`: `--apply` の対象が多い場合の確認用です。
+
+一括アーカイブは削除ではありません。実partner YAMLは `data/local/partners/` に残り、このディレクトリはGit管理対象外です。既に `archived` のpartnerは再archiveせずskipします。
+
 ## 実プロフィールYAML作成補助
 
 スクリーンショット画像そのものは保存せず、読み取ったプロフィール文、趣味、写真の特徴メモだけを手入力してYAML化します。

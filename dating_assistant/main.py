@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 
 from src.app_core import generate
+from src.bulk_partner_actions import bulk_archive_partners, find_partners_for_bulk_archive
 from src.conversation_memory import add_turn, build_conversation_for_generation, get_recent_turns
 from src.dashboard_builder import build_partner_dashboard
 from src.formatter import format_result
@@ -91,6 +92,16 @@ def build_parser() -> argparse.ArgumentParser:
     unarchive = sub.add_parser("partner-unarchive")
     unarchive.add_argument("--partner-id", required=True)
     unarchive.add_argument("--status", default="paused", choices=sorted(UNARCHIVE_TARGET_STATUSES))
+
+    bulk_archive = sub.add_parser("partner-bulk-archive")
+    bulk_archive.add_argument("--contains")
+    bulk_archive.add_argument("--status", choices=sorted(VALID_PARTNER_STATUSES))
+    bulk_archive.add_argument("--partner-id", action="append", default=[])
+    bulk_archive.add_argument("--include-archived", action="store_true")
+    bulk_archive.add_argument("--dry-run", action="store_true")
+    bulk_archive.add_argument("--apply", action="store_true")
+    bulk_archive.add_argument("--reason", default="")
+    bulk_archive.add_argument("--force", action="store_true")
 
     note = sub.add_parser("partner-note")
     note.add_argument("--partner-id", required=True)
@@ -239,6 +250,8 @@ def _run_partner_command(args: argparse.Namespace) -> str:
         if args.save_output:
             output = _with_saved_path(output, save_cli_output(args.command, output))
         return output
+    if args.command == "partner-bulk-archive":
+        return _run_partner_bulk_archive(args)
 
     partner = load_partner(args.partner_id)
     if args.command == "partner-show":
@@ -282,6 +295,65 @@ def _run_partner_command(args: argparse.Namespace) -> str:
         suggestion = discard_suggestion(partner, args.suggestion_id)
         return f"候補を破棄しました:\npartner_id: {partner.partner_id}\nsuggestion_id: {suggestion.suggestion_id}"
     return _generate_for_partner(args, partner)
+
+
+def _run_partner_bulk_archive(args: argparse.Namespace) -> str:
+    has_filter = bool(args.contains or args.status or args.partner_id)
+    if args.apply and not has_filter:
+        raise ValueError("--apply requires --contains, --status, or --partner-id")
+
+    partners = find_partners_for_bulk_archive(
+        contains=args.contains,
+        status=args.status,
+        partner_ids=args.partner_id,
+        include_archived=args.include_archived,
+    )
+    if args.apply and len(partners) > 10 and not args.force:
+        raise ValueError("Too many partners matched. Use --force to archive more than 10 partners.")
+
+    if not args.apply:
+        lines = [
+            "一括アーカイブ dry-run:",
+            "変更は行いません。",
+            "",
+            "対象partner:",
+        ]
+        lines.extend(_format_bulk_partner_line(index, partner) for index, partner in enumerate(partners, start=1))
+        if not partners:
+            lines.append("- なし")
+        lines.extend(
+            [
+                "",
+                f"対象件数: {len(partners)}",
+                "実際にアーカイブするには --apply を付けて実行してください。",
+            ]
+        )
+        return "\n".join(lines)
+
+    result = bulk_archive_partners(partners, reason=args.reason)
+    lines = ["一括アーカイブを実行しました。", "", "アーカイブ済み:"]
+    lines.extend(f"- {partner.partner_id}  {partner.display_name}" for partner in result.archived)
+    if not result.archived:
+        lines.append("- なし")
+    lines.append("")
+    lines.append("スキップ:")
+    lines.extend(f"- {partner.partner_id}  {reason}" for partner, reason in result.skipped)
+    if not result.skipped:
+        lines.append("- なし")
+    if result.errors:
+        lines.append("")
+        lines.append("エラー:")
+        lines.extend(f"- {error}" for error in result.errors)
+    lines.extend(["", f"更新件数: {len(result.archived)}", f"スキップ件数: {len(result.skipped)}"])
+    return "\n".join(lines)
+
+
+def _format_bulk_partner_line(index: int, partner: PartnerRecord) -> str:
+    state = partner.message_state
+    return (
+        f"{index}. {partner.partner_id}  {partner.display_name}  status: {partner.status}  "
+        f"updated_at: {partner.updated_at or '-'}  next_action: {state.next_action or '-'}"
+    )
 
 
 def _generate_for_partner(args: argparse.Namespace, partner: PartnerRecord) -> str:
