@@ -172,6 +172,42 @@ safe_data = summary.to_safe_dict()
 debug_line = summary.safe_debug_summary()
 ```
 
+## Mock Pipeline Synthetic Error Mode
+
+The mock-only recent-search pipeline can generate safe error summaries without
+calling mock transport or writing ranked-post CSV output:
+
+```powershell
+python tools/mock_recent_search_pipeline.py --dry-run --mock-error-type rate_limited
+```
+
+Supported synthetic error types:
+
+- `auth_error`
+- `timeout`
+- `network_error`
+- `rate_limited`
+- `server_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+When `--mock-error-type` is provided:
+
+- `HttpErrorInfo` is synthesized locally
+- `build_redacted_error_summary(...)` creates `result.redacted_live_summary`
+- `ranked_rows` remains empty
+- the ranked-post CSV is not written
+- the report contains only the safe summary surface
+- the CLI prints only `safe_debug_summary()`
+
+This path intentionally excludes raw exception messages, raw response bodies,
+raw JSON, raw headers, query text, post text, usernames, author IDs, post IDs,
+authorization values, bearer values, API keys, tokens, secrets, and cookies.
+It does not enable LiveMode, live transport, live HTTP, credential loading, or
+posting.
+
 ## Example
 
 ```python

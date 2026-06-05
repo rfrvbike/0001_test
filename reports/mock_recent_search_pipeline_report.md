@@ -5,7 +5,7 @@ Mock-only dry-run report. No X API call, credential lookup, `.env` read, or post
 ## Redacted Live Summary
 
 ```json
-{"diagnostics_version":"1","endpoint_name":"recent_search","execution_time_ms":1,"fetched_count":2,"method":"GET","metrics_missing_count":2,"next_cursor_present":false,"normalized_post_count":2,"pagination_used":false,"partial_result":false,"query_length":88,"rate_limited":false,"request_id":"mock-dry-run","result_count":2,"retry_after_seconds":null,"retryable":false,"rollback_completed":false,"status":"success","status_code":200,"stop_reason":"completed"}
+{"diagnostics_version":"1","endpoint_name":"recent_search","execution_time_ms":0,"fetched_count":0,"method":"GET","metrics_missing_count":0,"next_cursor_present":false,"normalized_post_count":0,"pagination_used":false,"partial_result":true,"query_length":88,"rate_limited":true,"request_id":"mock-rate_limited","result_count":0,"retry_after_seconds":120,"retryable":true,"rollback_completed":false,"status":"error","status_code":429,"stop_reason":"rate_limited"}
 ```
 
 ## Request Scope
@@ -15,25 +15,23 @@ Mock-only dry-run report. No X API call, credential lookup, `.env` read, or post
 - source_genre: ai_side_business
 
 ## Fetch Summary
-- post_count: 2
-- ranked_count: 2
-- rate_limited: False
-- retry_after_seconds: None
-- partial_result: False
+- post_count: 0
+- ranked_count: 0
+- rate_limited: True
+- retry_after_seconds: 120
+- partial_result: True
 - next_cursor_present: False
 - retry_queue_size: 0
-- rate_limited_count: 0
+- rate_limited_count: 1
 - redaction_status: ok
 - credential_loader: FAKE
 - live_mode_gate: dry_run_allowed
 
 ## Top Posts
-- ai_side_business / buzz_score 1574 / rank 1
-- ai_side_business / buzz_score 531 / rank 2
+- No posts ranked.
 
 ## Metrics Missing Summary
-- missing_impression_count: 1
-- missing_quote_count: 1
+- none: 0
 
 ## Retry Tasks
 - none: 0

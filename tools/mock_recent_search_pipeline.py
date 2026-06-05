@@ -13,6 +13,7 @@ from x_auto_ops.dry_run_recent_search_pipeline import (  # noqa: E402
     DEFAULT_PIPELINE_FIXTURE_PATH,
     DEFAULT_PIPELINE_OUTPUT_PATH,
     DEFAULT_PIPELINE_REPORT_PATH,
+    SUPPORTED_MOCK_ERROR_TYPES,
     load_mock_transport_fixture,
     run_dry_run_recent_search_pipeline,
 )
@@ -30,6 +31,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--reference-now",
         help="Optional ISO-8601 clock for date-stable mock runs.",
+    )
+    parser.add_argument(
+        "--mock-error-type",
+        choices=sorted(SUPPORTED_MOCK_ERROR_TYPES),
+        help="Generate a synthetic redacted error summary without calling mock transport.",
     )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args(argv)
@@ -49,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
             source_genre=args.genre,
             dry_run=True,
             reference_now=_parse_reference_now(args.reference_now),
+            mock_error_type=args.mock_error_type,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -61,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Retry after seconds: {result.fetch_result.retry_after_seconds}")
     print(f"Partial result: {result.fetch_result.partial_result}")
     print(f"RedactedLiveSummary: {result.redacted_live_summary.safe_debug_summary()}")
-    print(f"CSV: {result.output_path}")
+    print(f"CSV: {result.output_path if result.output_path.exists() else 'not written'}")
     print(f"Report: {result.report_path}")
     print("No X API call, credential lookup, .env edit, or posting was performed.")
     return 0

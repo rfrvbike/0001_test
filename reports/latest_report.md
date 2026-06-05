@@ -1,5 +1,76 @@
 # latest_report.md
 
+## 2026-06-06 Redacted Error Summary Mock Pipeline Integration
+
+Connected the existing `build_redacted_error_summary(...)` helper to the
+mock-only dry-run recent-search pipeline through a synthetic error mode. No X
+API call, HTTP communication, HTTP library use, credential lookup, `.env`
+change, LiveMode enablement, real data fetch, or posting was performed.
+
+### Changed Files
+
+- `x_auto_ops/dry_run_recent_search_pipeline.py`
+- `tools/mock_recent_search_pipeline.py`
+- `tests/test_dry_run_recent_search_pipeline.py`
+- `docs/redacted_live_summary.md`
+- `docs/live_api_minimal_test_plan.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Implementation
+
+- added `SUPPORTED_MOCK_ERROR_TYPES`
+- added `mock_error_type` to `run_dry_run_recent_search_pipeline(...)`
+- added CLI option `--mock-error-type`
+- synthesized local `HttpErrorInfo` for mock error paths
+- generated `RedactedLiveSummary` via `build_redacted_error_summary(...)`
+- skipped mock transport execution for synthetic error mode
+- skipped ranked-post CSV output for synthetic error mode
+- wrote only safe summary output to the mock pipeline report
+- printed only `safe_debug_summary()` from the CLI
+
+### Mock Error Types
+
+- `auth_error`
+- `timeout`
+- `network_error`
+- `rate_limited`
+- `server_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+### Verification
+
+CLI:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\mock_recent_search_pipeline.py --dry-run --reference-now 2026-06-03T00:30:00Z --mock-error-type rate_limited
+```
+
+Result:
+
+```text
+DRY-RUN recent search pipeline complete.
+Fetched posts: 0
+Ranked posts: 0
+Rate limited: True
+Retry after seconds: 120
+Partial result: True
+RedactedLiveSummary: <safe one-line summary>
+CSV: not written
+No X API call, credential lookup, .env edit, or posting was performed.
+```
+
+Unittest:
+
+```text
+Ran 161 tests in 0.221s
+
+OK
+```
+
 ## 2026-06-05 RedactedLiveSummary Error Mapping Integration
 
 Added a mock/dry-run-only error-summary construction path for
