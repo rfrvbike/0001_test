@@ -333,3 +333,21 @@ HTTP library selection remains `NEEDS_REVIEW`. `requests`, `httpx`, and
 `urllib` were compared for timeout behavior, testability, dependency size, sync
 simplicity, redaction integration, and maintenance. No library is selected or
 imported by the review.
+
+## Final Integration Readiness Status
+
+The latest integration review is recorded in
+`docs/live_implementation_readiness_review.md`.
+
+Current HTTP client status:
+
+- `HttpClient` protocol: `READY`
+- `DisabledHttpClient`: `READY`
+- `LiveHttpClient` disabled skeleton: `READY`
+- live one-request implementation: `NEEDS_REVIEW`
+- live HTTP execution: `BLOCKED`
+
+The next step should be a LiveHttpClient implementation plan that chooses an
+HTTP library, fixes timeout shape, proves the One Request Rule, and keeps retry,
+pagination, credential loading, request building, CSV, and report output
+outside the HTTP client.

@@ -2235,3 +2235,24 @@ post text, usernames, author IDs, post IDs, authorization values, bearer
 values, API keys, tokens, secrets, and cookies. This does not enable real
 credentials, LiveMode, HTTP communication, X API access, retry execution,
 pagination execution, or posting.
+
+# Live Implementation Readiness Review
+
+The final pre-live integration review is recorded in
+`docs/live_implementation_readiness_review.md`.
+
+Current result:
+
+- overall implementation readiness: `NEEDS_REVIEW`
+- live execution: `BLOCKED`
+- safe success/error diagnostics: `READY`
+- Query Builder, Request Builder, Preflight Validation, Response Normalizer,
+  Rate Limit Parser, HTTP Error Mapping, and RedactedLiveSummary: `READY`
+- RealCredentialLoader, LiveHttpClient, LiveRecentSearchTransport, live retry,
+  and live pagination: `NEEDS_REVIEW`
+
+The first future live test remains limited to read-only recent search, one
+genre, one query, `max_results=10`, `max_pages=1`, no pagination, no retry, no
+live CSV output, and redacted summary report only. Live work must proceed
+through separate implementation plans before any actual X API request is
+approved.

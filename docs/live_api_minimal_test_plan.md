@@ -306,3 +306,25 @@ local `HttpErrorInfo`, builds a redacted summary, writes a safe report summary,
 and skips ranked-post CSV output. It does not call mock transport for the error
 case, perform HTTP, read credentials, enable LiveMode, retry, paginate, or
 persist real response data.
+
+## Final Integration Readiness Status
+
+The final pre-implementation integration review is recorded in
+`docs/live_implementation_readiness_review.md`.
+
+The first live test envelope remains unchanged:
+
+- read-only recent search only
+- one genre
+- one query
+- `max_results=10`
+- `max_pages=1`
+- pagination disabled
+- retry disabled
+- live CSV output disabled
+- report output limited to `RedactedLiveSummary`
+- no write endpoints
+
+The test remains blocked until RealCredentialLoader, LiveHttpClient, and
+LiveRecentSearchTransport each pass their implementation plans, tests, and
+explicit release approval.

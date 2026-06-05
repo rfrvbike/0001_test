@@ -292,3 +292,25 @@ The redacted output boundary for that test is reviewed in
 `docs/redacted_live_summary_review.md`. Live release remains blocked if the
 summary can expose raw response data, query text, post text, user identifiers,
 post ID lists, header values, credentials, or frontend-visible diagnostics.
+
+## Final Integration Readiness Review
+
+The latest pre-live integration review is recorded in
+`docs/live_implementation_readiness_review.md`.
+
+Current result:
+
+- overall implementation readiness: `NEEDS_REVIEW`
+- live execution status: `BLOCKED`
+- safe summary readiness: `READY`
+- LiveModeGate fail-closed default: `READY`
+- RealCredentialLoader, LiveHttpClient, and LiveRecentSearchTransport:
+  `NEEDS_REVIEW`
+
+The next implementation work should still be planned in separate steps:
+
+1. RealCredentialLoader implementation plan
+2. LiveHttpClient implementation plan
+3. LiveRecentSearchTransport implementation plan
+4. first live dry-run gate test
+5. first minimal live API test only after explicit approval
