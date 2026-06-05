@@ -107,12 +107,10 @@ Record bulk archive activity and add tests/docs.
 
 ## 次に改善すべき点
 
-- commit前に既存ahead commitの扱いを確認する
 - bulk archiveの対象表示をさらに見やすくする
 - archive理由の一覧表示を検討する
-
-## 次に改善すべき点
-
 - 実データを含まないサンプルとテストを維持する
 - local 配下の実プロフィール・実会話・実入力をGit管理対象に含めない
 - bulk archive / archive workflow の操作結果を引き続きテストで確認する
+- 実運用に入る場合は、スクショ画像そのものを保存せず、必要なプロフィール文や雰囲気メモだけをlocal保存する
+- dashboard / timeline / archive の運用性を実データで確認する
