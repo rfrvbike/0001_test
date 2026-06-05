@@ -10,9 +10,12 @@ from src.loaders import load_config, load_conversation, load_target_profile, loa
 from src.models import GenerationRequest, PartnerRecord, TargetProfile
 from src.output_writer import save_cli_output
 from src.partner_manager import (
+    UNARCHIVE_TARGET_STATUSES,
     VALID_PARTNER_STATUSES,
     add_partner_note,
+    archive_partner,
     create_partner_from_target_profile,
+    unarchive_partner,
     update_partner_analysis,
     update_partner_status,
 )
@@ -81,6 +84,14 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--partner-id", required=True)
     status.add_argument("--status", required=True, choices=sorted(VALID_PARTNER_STATUSES))
 
+    archive = sub.add_parser("partner-archive")
+    archive.add_argument("--partner-id", required=True)
+    archive.add_argument("--reason", default="")
+
+    unarchive = sub.add_parser("partner-unarchive")
+    unarchive.add_argument("--partner-id", required=True)
+    unarchive.add_argument("--status", default="paused", choices=sorted(UNARCHIVE_TARGET_STATUSES))
+
     note = sub.add_parser("partner-note")
     note.add_argument("--partner-id", required=True)
     note.add_argument("--text", required=True)
@@ -106,6 +117,8 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard.add_argument("--status", choices=sorted(VALID_PARTNER_STATUSES))
     dashboard.add_argument("--needs-action", action="store_true")
     dashboard.add_argument("--waiting", action="store_true")
+    dashboard.add_argument("--include-archived", action="store_true")
+    dashboard.add_argument("--archived-only", action="store_true")
     dashboard.add_argument("--sort", choices=["updated", "received", "sent"], default="updated")
     dashboard.add_argument("--save-output", action="store_true")
 
@@ -219,6 +232,8 @@ def _run_partner_command(args: argparse.Namespace) -> str:
             status=args.status,
             needs_action=args.needs_action,
             waiting=args.waiting,
+            include_archived=args.include_archived,
+            archived_only=args.archived_only,
             sort_key=args.sort,
         )
         if args.save_output:
@@ -240,6 +255,13 @@ def _run_partner_command(args: argparse.Namespace) -> str:
     if args.command == "partner-update-status":
         update_partner_status(partner, args.status)
         return f"ステータスを更新しました: {partner.partner_id} / {args.status}"
+    if args.command == "partner-archive":
+        archive_partner(partner, args.reason)
+        reason_line = f"\nreason: {args.reason}" if args.reason else ""
+        return f"partnerをアーカイブしました:\npartner_id: {partner.partner_id}\nstatus: archived{reason_line}"
+    if args.command == "partner-unarchive":
+        unarchive_partner(partner, args.status)
+        return f"partnerのアーカイブを解除しました:\npartner_id: {partner.partner_id}\nstatus: {args.status}"
     if args.command == "partner-note":
         add_partner_note(partner, args.text)
         return f"メモを追加しました: {partner.partner_id}"
@@ -365,6 +387,14 @@ def _format_partner_show(partner: PartnerRecord) -> str:
         ("最後に生成した候補", state.last_suggested_message or partner.analysis.last_suggested_message or "- なし"),
         ("メモ", _lines([note.text for note in partner.notes])),
     ]
+    if partner.status == "archived":
+        sections.insert(
+            1,
+            (
+                "アーカイブ",
+                "※このpartnerはアーカイブ済みです。通常dashboardには表示されません。",
+            ),
+        )
     return "\n\n".join(f"【{title}】\n{body}" for title, body in sections)
 
 

@@ -29,6 +29,8 @@ python main.py partner-generate-first --partner-id partner_001
 python main.py partner-generate-reply --partner-id partner_001 --save-output
 python main.py partner-generate-invite --partner-id partner_001
 python main.py partner-update-status --partner-id partner_001 --status chatting
+python main.py partner-archive --partner-id partner_001 --reason "検証用データ整理"
+python main.py partner-unarchive --partner-id partner_001 --status paused
 python main.py partner-note --partner-id partner_001 --text "映画の話題が返信しやすそう"
 ```
 
@@ -86,14 +88,18 @@ python main.py partner-dashboard --needs-action
 python main.py partner-dashboard --waiting
 python main.py partner-dashboard --active-only
 python main.py partner-dashboard --status chatting
+python main.py partner-dashboard --include-archived
+python main.py partner-dashboard --archived-only
 python main.py partner-dashboard --sort received
 python main.py partner-dashboard --save-output
 ```
 
-- `--active-only`: `paused` / `closed` を除外
+- `--active-only`: `paused` / `closed` / `archived` を除外
 - `--status`: 指定ステータスのみ表示
 - `--needs-action`: 自分の対応待ち、または未送信候補がある相手のみ表示
 - `--waiting`: 相手の返信待ちのみ表示
+- `--include-archived`: アーカイブ済みも表示
+- `--archived-only`: アーカイブ済みのみ表示
 - `--sort`: `updated`, `received`, `sent` の古い順で表示
 - `--save-output`: 確認用ダッシュボードを `outputs/local/` に保存
 
@@ -106,6 +112,24 @@ partner-dashboard:
 ```
 
 ダッシュボードは確認専用で、自動送信や外部通信は行いません。
+
+## partnerのアーカイブ
+
+検証用partnerや終了したpartnerは、削除せずにアーカイブできます。
+アーカイブ済みpartnerは通常の `partner-dashboard` からは非表示になり、実データYAMLは `data/local/partners/` に残ります。
+
+```powershell
+python main.py partner-archive --partner-id partner_001 --reason "検証用データ整理"
+python main.py partner-unarchive --partner-id partner_001 --status paused
+python main.py partner-dashboard --include-archived
+python main.py partner-dashboard --archived-only
+```
+
+- アーカイブは削除ではありません。
+- 誤ってアーカイブした場合は `partner-unarchive` で `paused`, `chatting`, `warm_chat`, `invite_ready` に戻せます。
+- `partner-show` ではアーカイブ済みであることを明示します。
+- `partner-timeline` にはアーカイブ/解除イベントが残ります。
+- `data/local/partners/` はGit管理対象外です。
 
 ## 実プロフィールYAML作成補助
 
@@ -163,7 +187,7 @@ python main.py partner-mark-sent --partner-id partner_001 --suggestion-id sugges
 ## ステータス
 
 `new_profile`, `first_message_suggested`, `first_message_sent`, `chatting`, `warm_chat`,
-`invite_ready`, `invited`, `scheduling`, `met`, `paused`, `closed`
+`invite_ready`, `invited`, `scheduling`, `met`, `paused`, `closed`, `archived`
 
 ## プライバシー
 

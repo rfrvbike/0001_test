@@ -10,10 +10,13 @@ CATEGORY_LABELS = {
     "waiting": "返信待ち",
     "other": "その他進行中",
     "paused_or_closed": "停止中/終了",
+    "archived": "アーカイブ済み",
 }
 
 
 def classify_partner(record: PartnerRecord) -> str:
+    if record.status == "archived":
+        return "archived"
     if record.status in {"paused", "closed"}:
         return "paused_or_closed"
     if record.message_state.awaiting_user_action or pending_suggestion_count(record) > 0:
@@ -31,17 +34,28 @@ def build_partner_dashboard(
     status: str | None = None,
     needs_action: bool = False,
     waiting: bool = False,
+    include_archived: bool = False,
+    archived_only: bool = False,
     sort_key: str = "updated",
 ) -> str:
     filtered = [
         partner
         for partner in partners
-        if not (active_only and partner.status in {"paused", "closed"})
+        if not (active_only and partner.status in {"paused", "closed", "archived"})
+        and not (not include_archived and not archived_only and partner.status == "archived" and status != "archived")
+        and not (archived_only and partner.status != "archived")
         and not (status and partner.status != status)
         and not (needs_action and classify_partner(partner) != "needs_action")
         and not (waiting and classify_partner(partner) != "waiting")
     ]
-    categories = ["needs_action"] if needs_action else ["waiting"] if waiting else CATEGORY_ORDER
+    if archived_only:
+        categories = ["archived"]
+    elif needs_action:
+        categories = ["needs_action"]
+    elif waiting:
+        categories = ["waiting"]
+    else:
+        categories = CATEGORY_ORDER + (["archived"] if include_archived or status == "archived" else [])
     sections = ["【partnerダッシュボード】"]
     for category in categories:
         category_partners = [partner for partner in filtered if classify_partner(partner) == category]
@@ -75,6 +89,8 @@ def _format_category(label: str, category: str, partners: list[PartnerRecord]) -
         elif category == "invite_ready":
             lines.extend([f"   最終受信: {state.last_received_at or '-'}", f"   次の行動: {state.next_action or '-'}"])
         elif category == "other":
+            lines.extend([f"   最終更新: {partner.updated_at or '-'}", f"   次の行動: {state.next_action or '-'}"])
+        elif category == "archived":
             lines.extend([f"   最終更新: {partner.updated_at or '-'}", f"   次の行動: {state.next_action or '-'}"])
         blocks.append("\n".join(lines))
     return f"{label}:\n" + "\n\n".join(blocks)

@@ -1,122 +1,74 @@
 # dating_assistant latest_report
 
 更新日: 2026-06-06
-作業No.: 20
+作業No.: 28
 
 ## 今回の目的
 
-`dating_assistant` の安全なGit管理対象ファイルだけを実際に `git add` し、commit前にstaged filesとstaged diffを確認しました。
+作業No.27で追加したpartnerアーカイブ機能について、commit前に安全な対象だけをstageし、staged diff、危険語、実データ混入、unittest結果を確認しました。
 
-今回は `git add` とcommit前確認のみを実施し、`git commit` と `git push` は行っていません。
+今回は `git add` と確認のみを実施し、`git commit` と `git push` は行っていません。
 
 ## 実施内容
 
-- 作業前の `git status --short` を確認
-- 実プロフィール、partner、`outputs/local` の実データ除外を再確認
-- No.19で確認済みの安全な `dating_assistant` ファイルだけを `git add`
+- `git status --short` / `git status -sb` で作業状態を確認
+- 実partner YAML、実プロフィールYAML、`outputs/local/*.md` がGit除外されていることを確認
+- No.27の安全な変更ファイルだけを `git add`
 - `git diff --cached --name-only` でstaged filesを確認
-- `git diff --cached --stat` でstaged diff概要を確認
-- staged対象に対して禁止パス・危険語チェックを実施
+- `git diff --cached --stat` と `git diff --cached` でstaged diffを確認
+- staged diffに対する危険語・実データ混入チェックを実施
 - unittestを再実行
-- `reports/git_staging_report.md` を追加
-- `reports/latest_report.md` を作業No.20に更新
+- `reports/archive_staging_report.md` を追加
+- `reports/latest_report.md` を作業No.28に更新
 
-## 実行したgit add
+## staged files
 
-```powershell
-git add dating_assistant/README.md
-git add dating_assistant/app.py
-git add dating_assistant/main.py
-git add dating_assistant/config
-git add dating_assistant/data/examples
-git add dating_assistant/data/local/conversations.example.json
-git add dating_assistant/data/local/partners/.gitkeep
-git add dating_assistant/outputs/examples
-git add dating_assistant/outputs/local/.gitkeep
-git add dating_assistant/prompts
-git add dating_assistant/reports
-git add dating_assistant/src
-git add dating_assistant/tests
-git add dating_assistant/tools
+- `dating_assistant/README.md`
+- `dating_assistant/main.py`
+- `dating_assistant/reports/archive_staging_report.md`
+- `dating_assistant/reports/latest_report.md`
+- `dating_assistant/src/dashboard_builder.py`
+- `dating_assistant/src/partner_manager.py`
+- `dating_assistant/tests/test_partner_archive.py`
+
+## staged diff概要
+
+```text
+dating_assistant/README.md
+dating_assistant/main.py
+dating_assistant/reports/archive_staging_report.md
+dating_assistant/reports/latest_report.md
+dating_assistant/src/dashboard_builder.py
+dating_assistant/src/partner_manager.py
+dating_assistant/tests/test_partner_archive.py
 ```
 
-補足:
+主な内容:
 
-- `dating_assistant/data/local/real_profiles/.gitkeep` は既にGit管理済み。
-- `dating_assistant/data/local/real_profiles/*.yaml` は追加していない。
-- `dating_assistant/data/local/partners/*.yaml` は追加していない。
-- `dating_assistant/outputs/local/*.md` は追加していない。
-- `dating_assistant/**/__pycache__/*` と `*.pyc` は追加していない。
+- `archived` statusを追加
+- `partner-archive` / `partner-unarchive` CLIを追加
+- dashboardで通常表示からarchived partnerを除外
+- `--include-archived` / `--archived-only` を追加
+- `partner-show` にアーカイブ済み表示を追加
+- archive/unarchiveのactivity_log記録を追加
+- READMEとテストを追加・更新
+- staging確認レポートを追加
 
-## staged files確認
+## 危険語・実データ確認
 
-実行コマンド:
+確認語:
 
-```powershell
-git diff --cached --name-only
-```
-
-確認結果:
-
-- staged対象は `dating_assistant` 配下のみ。
-- 実装、設定、サンプル、出力例、プロンプト、レポート、テスト、補助ツールがstageされた。
-- `dating_assistant` 以外のファイルはstageされていない。
-
-stagedに含まれていないことを確認したもの:
-
-- `dating_assistant/data/local/real_profiles/*.yaml`
-- `dating_assistant/data/local/partners/*.yaml`
-- `dating_assistant/outputs/local/*.md`
-- `dating_assistant/**/__pycache__/*`
-- `dating_assistant/**/*.pyc`
-
-## staged diff確認
-
-実行コマンド:
-
-```powershell
-git diff --cached --stat
+```text
+LINE / ライン / Instagram / インスタ / 本名 / 勤務先 / 会社名 / 学校名 / 大学名 / 高校 / 最寄り駅 / 住所 / 電話番号 / メールアドレス / スクリーンショット / 顔写真
 ```
 
 確認結果:
 
-- `dating_assistant` の実装、設定、サンプル、テスト、出力例、プロンプト、レポートのみが追加対象。
-- 実プロフィールYAMLの混入なし。
-- 実partner YAMLの混入なし。
-- `outputs/local/*.md` の混入なし。
-- Pythonキャッシュの混入なし。
-- `dating_assistant` 以外の混入なし。
-
-local配下のstaged diff確認:
-
-```powershell
-git diff --cached -- dating_assistant/data/local dating_assistant/outputs/local
-```
-
-確認結果:
-
-- `dating_assistant/data/local/conversations.example.json`
-- `dating_assistant/data/local/partners/.gitkeep`
-- `dating_assistant/outputs/local/.gitkeep`
-
-上記のみが対象で、実データは含まれていない。
-
-## 個人情報・実データ混入チェック
-
-実行コマンド:
-
-```powershell
-git grep --cached -n -e LINE -e ライン -e Instagram -e インスタ -e 本名 -e 勤務先 -e 会社名 -e 学校名 -e 大学名 -e 高校 -e 最寄り駅 -e 住所 -e 電話番号 -e メールアドレス -e スクリーンショット -e 顔写真 -- dating_assistant
-```
-
-確認結果:
-
-- READMEの禁止注意、safety設定、実装内の危険語検出リスト、テスト用警告語、テンプレートの禁止例、レポート内の検索語一覧・安全確認文として検出された。
-- 実在の連絡先、住所、SNS ID、個人名、実プロフィール本文の混入は確認されなかった。
-
-## 追加したレポート
-
-- `dating_assistant/reports/git_staging_report.md`
+- READMEやレポート内の安全説明・検索語一覧としてのヒットのみ確認
+- 実在の連絡先、住所、SNS ID、個人名、実プロフィール本文の混入なし
+- 実プロフィールYAMLなし
+- partner実データYAMLなし
+- `outputs/local/*.md` なし
 
 ## テスト結果
 
@@ -129,51 +81,53 @@ C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\p
 結果:
 
 ```text
-Ran 94 tests in 0.349s
+Ran 99 tests in 0.388s
 
 OK
 ```
 
 補足:
 
-- `argparse` の異常系テストにより、無効な `--speaker` に対するusage表示が出るが、テストは成功している。
+- `argparse` の異常系テストにより、無効な `--speaker` に対するusage表示が出るが、テストは成功しています。
 
 ## 安全確認
 
+- git add実行済み
+- git commit未実行
+- git push未実行
 - 実LLM API呼び出しなし
 - 外部通信なし
 - 自動送信なし
 - 外部投稿なし
-- 個人情報を含む実データのGit管理なし
-- 実プロフィールYAMLはGit除外
-- 実partner YAMLはGit除外
-- `outputs/local` の実出力はGit除外
-- `dating_assistant` 以外はstageしていない
-- `git commit` 未実行
-- `git push` 未実行
+- 実データのGit管理なし
+- `dating_assistant` 以外のファイルはstageしていない
 
-## 次にユーザー確認が必要なこと
+## commit案
 
-commitしてよいか、ユーザー確認が必要です。
-
-commitメッセージ案:
+commit message:
 
 ```text
-feat: add dating assistant CLI workflow
+feat: add partner archive workflow
 ```
 
-本文案:
+commit body:
 
 ```text
-- Add real profile creation and rehearsal flow
-- Add partner management, suggestions, dashboard, and timeline
-- Add safety checks and local-data git exclusions
-- Add tests and reports
+Add archive and unarchive commands for dating assistant partners.
+
+Hide archived partners from the default dashboard while allowing archived views.
+
+Record archive activity in partner timeline and add tests/docs.
 ```
 
 ## 次に改善すべき点
 
-- staged禁止パターンチェックを監査スクリプト化する
-- commit前チェックリストをREADMEに短く追記する
-- ローカル実データのバックアップ方針を決める
-- ローカル実データの暗号化を検討する
+- commit後のpush前確認を定型化する
+- archive/unarchive運用の実サンプルを増やす
+- アーカイブ理由の一覧表示を検討する
+
+## 次に必要な判断
+
+- staged内容をcommitしてよいか確認
+- 問題なければ作業No.29で `git commit` を実行
+- commit後に必要ならpush前確認を実施

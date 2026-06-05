@@ -18,7 +18,10 @@ VALID_PARTNER_STATUSES = {
     "met",
     "paused",
     "closed",
+    "archived",
 }
+
+UNARCHIVE_TARGET_STATUSES = {"paused", "chatting", "warm_chat", "invite_ready"}
 
 
 def create_partner_from_target_profile(
@@ -55,6 +58,37 @@ def update_partner_status(partner: PartnerRecord, status: str) -> PartnerRecord:
         raise ValueError(f"Invalid status: {status}")
     previous = partner.status
     partner.status = status
+    if previous != status:
+        add_activity_event(partner, "status_updated", f"status: {previous} -> {status}")
+    return _save_updated(partner)
+
+
+def archive_partner(partner: PartnerRecord, reason: str = "") -> PartnerRecord:
+    previous = partner.status
+    partner.status = "archived"
+    partner.message_state.awaiting_user_action = False
+    partner.message_state.awaiting_partner_reply = False
+    partner.message_state.next_action = "アーカイブ済み"
+    if reason:
+        now = _now()
+        partner.notes.append(PartnerNote(text=f"アーカイブ理由: {reason}", created_at=now))
+        add_activity_event(partner, "partner_archived", f"partnerをアーカイブ: {reason}", created_at=now)
+    else:
+        add_activity_event(partner, "partner_archived", "partnerをアーカイブ")
+    if previous != "archived":
+        add_activity_event(partner, "status_updated", f"status: {previous} -> archived")
+    return _save_updated(partner)
+
+
+def unarchive_partner(partner: PartnerRecord, status: str = "paused") -> PartnerRecord:
+    if status not in UNARCHIVE_TARGET_STATUSES:
+        raise ValueError(f"Invalid unarchive status: {status}")
+    previous = partner.status
+    partner.status = status
+    partner.message_state.awaiting_user_action = False
+    partner.message_state.awaiting_partner_reply = False
+    partner.message_state.next_action = "アーカイブ解除済み"
+    add_activity_event(partner, "partner_unarchived", f"アーカイブ解除: status {previous} -> {status}")
     if previous != status:
         add_activity_event(partner, "status_updated", f"status: {previous} -> {status}")
     return _save_updated(partner)
