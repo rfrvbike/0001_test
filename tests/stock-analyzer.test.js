@@ -2510,7 +2510,7 @@ assert.equal(stockAnalyzerHtml.includes('type="module"'), true);
 assert.equal(stockAnalyzerHtml.includes("./src/main.js"), true);
 assert.equal(stockAnalyzerMainSource.includes('document.getElementById("app")'), true);
 assert.equal(stockAnalyzerMainSource.includes("await import("), true);
-assert.equal(stockAnalyzerMainSource.includes("mount failed"), true);
+assert.equal(stockAnalyzerMainSource.includes("画面の初期化に失敗しました"), true);
 assert.equal(stockAnalyzerMainSource.includes("root.dataset.appMounted"), true);
 assert.equal(stockAnalyzerMainSource.includes("console.error"), true);
 assert.equal(stockAnalyzerSource.includes("root.innerHTML = template(state)"), true);
