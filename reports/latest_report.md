@@ -1,5 +1,54 @@
 # latest_report.md
 
+## 2026-06-05 RedactedLiveSummary Error Mapping Integration
+
+Added a mock/dry-run-only error-summary construction path for
+`RedactedLiveSummary`. No X API call, HTTP communication, HTTP library use,
+credential lookup, `.env` change, LiveMode enablement, real data fetch, or
+posting was performed.
+
+### Changed Files
+
+- `x_auto_ops/redacted_live_summary.py`
+- `tests/test_redacted_live_summary.py`
+- `docs/redacted_live_summary.md`
+- `docs/redacted_live_summary_review.md`
+- `docs/live_api_minimal_test_plan.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Implementation
+
+- added `build_redacted_error_summary(...)`
+- maps `HttpErrorInfo` into safe `RedactedLiveSummary` error diagnostics
+- uses `status=error`
+- uses stable `error_type` as `stop_reason`
+- records retryability, retry-after seconds, status code, partial-result state,
+  query length, and zero result counts
+- excludes raw exception messages, raw response bodies, raw JSON, raw headers,
+  query text, post text, usernames, author IDs, post IDs, and credential-shaped
+  values
+
+### Error Types Covered
+
+- `auth_error`
+- `timeout`
+- `network_error`
+- `rate_limited`
+- `server_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+### Verification
+
+```text
+Ran 159 tests in 0.194s
+
+OK
+```
+
 ## 2026-06-05 RedactedLiveSummary Mock Pipeline Integration
 
 Integrated `RedactedLiveSummary` into the mock-only dry-run recent-search
