@@ -1,5 +1,60 @@
 # latest_report.md
 
+## 2026-06-05 RedactedLiveSummary Mock Pipeline Integration
+
+Integrated `RedactedLiveSummary` into the mock-only dry-run recent-search
+pipeline. No X API call, HTTP communication, HTTP library use, credential
+lookup, `.env` change, LiveMode enablement, real data fetch, or posting was
+performed.
+
+### Changed Files
+
+- `x_auto_ops/dry_run_recent_search_pipeline.py`
+- `tools/mock_recent_search_pipeline.py`
+- `tests/test_dry_run_recent_search_pipeline.py`
+- `reports/mock_recent_search_pipeline_report.md`
+- `docs/redacted_live_summary.md`
+- `docs/x_genre_buzz_collector_design.md`
+- `docs/live_api_minimal_test_plan.md`
+- `reports/latest_report.md`
+
+### Implementation
+
+- added `redacted_live_summary` to `DryRunRecentSearchPipelineResult`
+- generated safe summary values for success, partial, and rate-limited fixtures
+- printed only `safe_debug_summary()` from the CLI
+- embedded only the safe summary in the mock pipeline report
+- removed query text, post text, usernames, author IDs, and post IDs from the
+  mock pipeline report
+- kept RedactedLiveSummary fields out of the ranked-post CSV
+- preserved mock-only, dry-run-only, fail-closed behavior
+
+### Verification
+
+CLI:
+
+```text
+python tools/mock_recent_search_pipeline.py --dry-run --reference-now 2026-06-03T00:30:00Z
+```
+
+Result:
+
+```text
+DRY-RUN recent search pipeline complete.
+Fetched posts: 2
+Ranked posts: 2
+RedactedLiveSummary: <safe one-line summary>
+No X API call, credential lookup, .env edit, or posting was performed.
+```
+
+Unittest:
+
+```text
+Ran 273 tests in 0.621s
+
+OK
+```
+
 ## 2026-06-05 RedactedLiveSummary Implementation
 
 Implemented the standalone backend-only `RedactedLiveSummary` diagnostic value

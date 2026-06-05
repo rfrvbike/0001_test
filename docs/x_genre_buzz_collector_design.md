@@ -2155,3 +2155,19 @@ Rules:
 - fixture dates should not be continually edited to follow the calendar
 - LiveMode remains disabled
 - no HTTP or X API behavior is introduced by the test clock
+# RedactedLiveSummary Mock Pipeline Integration
+
+The mock/dry-run recent-search pipeline generates a backend-only
+`RedactedLiveSummary` for every success, partial-result, and rate-limited
+fixture. The result is exposed as `result.redacted_live_summary`.
+
+- CLI output uses only `safe_debug_summary()`.
+- The mock pipeline report embeds only the safe summary derived from the
+  reviewed allowlist.
+- Query text, post text, usernames, author IDs, post IDs, raw responses, and raw
+  JSON are not written to the mock pipeline report.
+- RedactedLiveSummary fields are not added to the ranked-post CSV.
+- `pagination_used` remains false because the dry-run pipeline performs one
+  mock request only.
+- No live transport, live HTTP client, real credential loader, or LiveMode
+  behavior is enabled by this integration.

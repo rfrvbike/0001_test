@@ -60,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Rate limited: {result.fetch_result.rate_limited}")
     print(f"Retry after seconds: {result.fetch_result.retry_after_seconds}")
     print(f"Partial result: {result.fetch_result.partial_result}")
+    print(f"RedactedLiveSummary: {result.redacted_live_summary.safe_debug_summary()}")
     print(f"CSV: {result.output_path}")
     print(f"Report: {result.report_path}")
     print("No X API call, credential lookup, .env edit, or posting was performed.")

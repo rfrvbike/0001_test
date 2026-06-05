@@ -99,6 +99,34 @@ The summary must never contain:
 Standalone JSON export, CSV output, frontend display, retry triggering, and
 pagination triggering remain outside this model.
 
+## Mock Pipeline Integration
+
+The mock-only `run_dry_run_recent_search_pipeline(...)` creates one
+`RedactedLiveSummary` after normalization and ranking. It is available as:
+
+```python
+result.redacted_live_summary
+```
+
+The CLI prints only `safe_debug_summary()`. The mock pipeline report embeds the
+same safe one-line summary and does not expose the query text, post text,
+username, author ID, post ID, raw response, or raw JSON.
+
+The summary is not added to the ranked-post CSV. The CSV remains a post-ranking
+artifact, while the diagnostic summary remains a separate safe diagnostic
+surface.
+
+Mock status mapping:
+
+- normal result: `status=success`, `stop_reason=completed`
+- partial fixture: `status=partial`, `stop_reason=partial_result`
+- rate-limited fixture: `status=rate_limited`, `stop_reason=rate_limited`,
+  `retryable=true`
+
+`pagination_used` remains false because the dry-run pipeline sends one mock
+request only. `next_token_present` records whether a cursor was returned without
+exposing its value.
+
 ## Example
 
 ```python
