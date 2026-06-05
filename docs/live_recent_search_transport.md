@@ -463,3 +463,31 @@ or report output.
 default is to keep the normal success shape at `status_code`, `headers`, and
 `json_body`, adding optional redacted body text only if error mapping requires
 it and never emitting it to report or CSV surfaces.
+
+## Final Integration Readiness Status
+
+The latest integration review is recorded in
+`docs/live_implementation_readiness_review.md`.
+
+Current transport status:
+
+- disabled skeleton: `READY`
+- preflight integration: `READY`
+- safe downstream success/error diagnostics: `READY`
+- live implementation: `NEEDS_REVIEW`
+- live API execution: `BLOCKED`
+
+The future implementation delta remains narrow:
+
+```text
+QueryBuilder
+-> RequestBuilder
+-> PreflightValidation
+-> LiveRecentSearchTransport
+-> LiveHttpClient
+-> TransportResponse
+```
+
+The transport must still not load credentials, approve live mode, paginate,
+retry, enqueue retry tasks, score posts, classify genres, write CSV, or write
+reports.
