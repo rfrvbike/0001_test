@@ -257,3 +257,17 @@ author IDs, or post ID lists.
 This review does not perform the proposed test. Live mode remains disabled, and
 the first-live test remains blocked until every implementation and approval gate
 is satisfied.
+# Mock Validation of Redacted Live Summary
+
+Before any first live connectivity check, the mock/dry-run recent-search
+pipeline validates the proposed safe diagnostic surface:
+
+- a typed `RedactedLiveSummary` is generated for success, partial, and
+  rate-limited fixtures
+- CLI and report output use only the bounded safe debug summary
+- query text, post content, user information, IDs, raw response, and raw JSON
+  remain outside the diagnostic report
+- the ranked-post CSV remains separate from diagnostic summary output
+
+This mock integration does not change any live release condition and does not
+enable LiveMode.

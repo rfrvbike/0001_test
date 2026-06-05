@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import contextlib
+import io
 import json
 import subprocess
 import tempfile
@@ -19,6 +21,7 @@ from x_auto_ops.mock_transport import (
     contains_sensitive_marker,
 )
 from x_auto_ops.redaction import redact_sensitive_text
+from x_auto_ops.redacted_live_summary import RedactedLiveSummary
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -66,6 +69,7 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
 
             with output.open(encoding="utf-8") as fh:
                 rows = list(csv.DictReader(fh))
+            csv_text = output.read_text(encoding="utf-8")
             report_text = report.read_text(encoding="utf-8")
             output_exists = output.exists()
             report_exists = report.exists()
@@ -78,6 +82,16 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
         self.assertEqual(rows[0]["rank_in_genre"], "1")
         self.assertIn("Mock Recent Search Pipeline Report", report_text)
         self.assertIn("Top Posts", report_text)
+        self.assertIsInstance(result.redacted_live_summary, RedactedLiveSummary)
+        self.assertEqual(result.redacted_live_summary.status, "success")
+        self.assertEqual(result.redacted_live_summary.status_code, 200)
+        self.assertIn("Redacted Live Summary", report_text)
+        self.assertIn(result.redacted_live_summary.safe_debug_summary(), report_text)
+        self.assertNotIn("diagnostics_version", rows[0])
+        self.assertNotIn("RedactedLiveSummary", csv_text)
+        self.assertNotIn("pipeline_ai_top", report_text)
+        self.assertNotIn("4001", report_text)
+        self.assertNotIn("Non-engineer AI workflow", report_text)
 
     def test_partial_pipeline_preserves_next_token_and_metrics_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -94,6 +108,10 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
         self.assertEqual(result.fetch_result.next_token, "pipeline-next-token")
         self.assertIn("missing_impression_count", result.ranked_rows[0]["metrics_missing"])
         self.assertEqual(result.ranked_rows[0]["detected_genre"], "daily")
+        self.assertEqual(result.redacted_live_summary.status, "partial")
+        self.assertTrue(result.redacted_live_summary.partial_result)
+        self.assertTrue(result.redacted_live_summary.next_token_present)
+        self.assertGreater(result.redacted_live_summary.metrics_missing_count, 0)
 
     def test_rate_limited_pipeline_preserves_retry_after(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -116,6 +134,12 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
         self.assertIn("rate_limited_count: 1", report_text)
         self.assertIn("Retry Tasks", report_text)
         self.assertIn("redaction_status: ok", report_text)
+        self.assertEqual(result.redacted_live_summary.status, "rate_limited")
+        self.assertEqual(result.redacted_live_summary.status_code, 429)
+        self.assertTrue(result.redacted_live_summary.rate_limited)
+        self.assertTrue(result.redacted_live_summary.retryable)
+        self.assertEqual(result.redacted_live_summary.retry_after_seconds, 240)
+        self.assertIn(result.redacted_live_summary.safe_debug_summary(), report_text)
 
     def test_credential_leak_regression_for_debug_report_csv_and_exception(self) -> None:
         secret_config = {
@@ -143,7 +167,9 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
             csv_text = output.read_text(encoding="utf-8")
             report_text = report.read_text(encoding="utf-8")
 
+        safe_summary = result.redacted_live_summary.safe_debug_summary()
         self.assertFalse(contains_sensitive_marker(result.debug_log), result.debug_log)
+        self.assertFalse(contains_sensitive_marker(safe_summary), safe_summary)
         self.assertFalse(contains_sensitive_marker(report_text), report_text)
         self.assertFalse(contains_sensitive_marker(csv_text), csv_text)
         self.assertFalse(contains_sensitive_marker(redact_sensitive_text("AUTHORIZATION=Bearer TOKEN_SHOULD_NOT_APPEAR")))
@@ -164,23 +190,31 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
             output = Path(tmp) / "pipeline.csv"
             report = Path(tmp) / "pipeline.md"
 
-            exit_code = pipeline_cli_main(
-                [
-                    "--dry-run",
-                    "--fixture",
-                    str(FIXTURE_DIR / "pipeline_success.json"),
-                    "--output",
-                    str(output),
-                    "--report",
-                    str(report),
-                    "--genre",
-                    "ai_side_business",
-                    "--reference-now",
-                    TEST_REFERENCE_NOW.isoformat(),
-                ]
-            )
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = pipeline_cli_main(
+                    [
+                        "--dry-run",
+                        "--fixture",
+                        str(FIXTURE_DIR / "pipeline_success.json"),
+                        "--output",
+                        str(output),
+                        "--report",
+                        str(report),
+                        "--genre",
+                        "ai_side_business",
+                        "--reference-now",
+                        TEST_REFERENCE_NOW.isoformat(),
+                    ]
+                )
 
         self.assertEqual(exit_code, 0)
+        cli_text = stdout.getvalue()
+        self.assertIn("RedactedLiveSummary:", cli_text)
+        self.assertFalse(contains_sensitive_marker(cli_text), cli_text)
+        self.assertNotIn("Non-engineer AI workflow", cli_text)
+        self.assertNotIn("pipeline_ai_top", cli_text)
+        self.assertNotIn("4001", cli_text)
 
     def test_pipeline_generated_csv_is_gitignored(self) -> None:
         ignored = subprocess.run(

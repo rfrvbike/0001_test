@@ -7,6 +7,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Mapping
 
 from x_auto_ops.buzz_read_client import BuzzFetchResult, XApiBuzzReadClient
@@ -24,6 +25,7 @@ from x_auto_ops.mock_transport import (
 )
 from x_auto_ops.query_builder import build_recent_search_query
 from x_auto_ops.redaction import assert_redacted, redact_sensitive_text
+from x_auto_ops.redacted_live_summary import RedactedLiveSummary
 from x_auto_ops.retry_queue import RetryQueue, RetryTask
 
 
@@ -36,6 +38,7 @@ DEFAULT_PIPELINE_FIXTURE_PATH = Path("tests/fixtures/pipeline_success.json")
 class DryRunRecentSearchPipelineResult:
     fetch_result: BuzzFetchResult
     ranked_rows: list[dict[str, Any]]
+    redacted_live_summary: RedactedLiveSummary
     output_path: Path
     report_path: Path
     debug_log: str
@@ -60,6 +63,7 @@ def run_dry_run_recent_search_pipeline(
     if not dry_run:
         raise RuntimeError("dry-run recent search pipeline blocks dry_run=False")
 
+    started_at = perf_counter()
     credentials = (credential_loader or select_credential_loader({"credential_loader": "fake"})).load()
     assert_live_mode_allowed(
         {
@@ -85,12 +89,18 @@ def run_dry_run_recent_search_pipeline(
         )
     ranked_rows = filter_posts(fetch_result.posts, config.genres, now=reference_now)
     output = write_posts_csv(output_path, ranked_rows)
+    redacted_live_summary = _build_redacted_live_summary(
+        query_length=len(query.query),
+        fetch_result=fetch_result,
+        status_code=_mock_status_code(transport, fetch_result),
+        execution_time_ms=max(0, int((perf_counter() - started_at) * 1000)),
+    )
     report = write_pipeline_report(
         report_path,
-        query=query.query,
         source_genre=query.source_genre,
         fetch_result=fetch_result,
         rows=ranked_rows,
+        redacted_live_summary=redacted_live_summary,
         retry_queue_size=queue.size(),
         retry_tasks=retry_tasks,
         credential_source=credentials.source,
@@ -114,6 +124,7 @@ def run_dry_run_recent_search_pipeline(
     return DryRunRecentSearchPipelineResult(
         fetch_result=fetch_result,
         ranked_rows=ranked_rows,
+        redacted_live_summary=redacted_live_summary,
         output_path=output,
         report_path=report,
         debug_log=debug_log,
@@ -130,10 +141,10 @@ def load_mock_transport_fixture(path: str | Path) -> MockRecentSearchTransport:
 def write_pipeline_report(
     path: str | Path,
     *,
-    query: str,
     source_genre: str,
     fetch_result: BuzzFetchResult,
     rows: list[Mapping[str, Any]],
+    redacted_live_summary: RedactedLiveSummary,
     retry_queue_size: int = 0,
     retry_tasks: list[RetryTask] | None = None,
     credential_source: str = "FAKE",
@@ -151,8 +162,16 @@ def write_pipeline_report(
         "",
         "Mock-only dry-run report. No X API call, credential lookup, `.env` read, or posting was performed.",
         "",
-        "## Query",
-        f"- query: {redact_sensitive_text(query)}",
+        "## Redacted Live Summary",
+        "",
+        "```json",
+        redacted_live_summary.safe_debug_summary(),
+        "```",
+        "",
+        "## Request Scope",
+        f"- endpoint_name: {redacted_live_summary.endpoint_name}",
+        f"- method: {redacted_live_summary.method}",
+        f"- query_length: {redacted_live_summary.query_length}",
         f"- source_genre: {redact_sensitive_text(source_genre)}",
         "",
         "## Fetch Summary",
@@ -176,7 +195,6 @@ def write_pipeline_report(
     for row in top_rows:
         lines.append(
             "- "
-            f"{redact_sensitive_text(row.get('post_id'))} / "
             f"{redact_sensitive_text(row.get('detected_genre'))} / "
             f"buzz_score {row.get('buzz_score')} / "
             f"rank {row.get('rank_in_genre')}"
@@ -195,7 +213,6 @@ def write_pipeline_report(
     for task in tasks:
         lines.append(
             "- "
-            f"query={redact_sensitive_text(task.query)} / "
             f"retry_after_seconds={task.retry_after_seconds} / "
             f"retry_count={task.retry_count}"
         )
@@ -221,3 +238,61 @@ def _safe_pipeline_debug(values: Mapping[str, Any]) -> str:
     text = " ".join(f"{key}={redact_sensitive_text(value)}" for key, value in values.items())
     assert_redacted(text, context="pipeline debug log")
     return text
+
+
+def _build_redacted_live_summary(
+    *,
+    query_length: int,
+    fetch_result: BuzzFetchResult,
+    status_code: int,
+    execution_time_ms: int,
+) -> RedactedLiveSummary:
+    if fetch_result.rate_limited:
+        status = "rate_limited"
+        stop_reason = "rate_limited"
+    elif fetch_result.partial_result:
+        status = "partial"
+        stop_reason = "partial_result"
+    else:
+        status = "success"
+        stop_reason = "completed"
+
+    metrics_missing_count = sum(
+        len([item for item in str(post.get("metrics_missing") or "").split("|") if item])
+        for post in fetch_result.posts
+    )
+    return RedactedLiveSummary(
+        diagnostics_version="1",
+        status=status,
+        request_id="mock-dry-run",
+        endpoint_name="recent_search",
+        method="GET",
+        status_code=status_code,
+        query_length=query_length,
+        result_count=len(fetch_result.posts),
+        fetched_count=len(fetch_result.posts),
+        normalized_post_count=len(fetch_result.posts),
+        partial_result=fetch_result.partial_result,
+        stop_reason=stop_reason,
+        rate_limited=fetch_result.rate_limited,
+        retryable=fetch_result.rate_limited,
+        retry_after_seconds=fetch_result.retry_after_seconds,
+        pagination_used=False,
+        next_token_present=bool(fetch_result.next_token),
+        metrics_missing_count=metrics_missing_count,
+        execution_time_ms=execution_time_ms,
+        rollback_completed=False,
+    )
+
+
+def _mock_status_code(
+    transport: RecentSearchTransport,
+    fetch_result: BuzzFetchResult,
+) -> int:
+    fixture = getattr(transport, "response", None)
+    if isinstance(fixture, Mapping):
+        try:
+            return int(fixture.get("status_code", 200))
+        except (TypeError, ValueError):
+            pass
+    return 429 if fetch_result.rate_limited else 200
