@@ -13,6 +13,7 @@ from pathlib import Path
 from tools.mock_recent_search_pipeline import main as pipeline_cli_main
 from x_auto_ops.buzz_read_client import BuzzFetchResult, XApiBuzzReadClient
 from x_auto_ops.dry_run_recent_search_pipeline import (
+    SUPPORTED_MOCK_ERROR_TYPES,
     load_mock_transport_fixture,
     run_dry_run_recent_search_pipeline,
 )
@@ -141,6 +142,64 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
         self.assertEqual(result.redacted_live_summary.retry_after_seconds, 240)
         self.assertIn(result.redacted_live_summary.safe_debug_summary(), report_text)
 
+    def test_synthetic_error_pipeline_builds_safe_summary_without_csv(self) -> None:
+        retryable_by_type = {
+            "timeout",
+            "network_error",
+            "rate_limited",
+            "server_error",
+        }
+        partial_by_type = retryable_by_type
+
+        for error_type in sorted(SUPPORTED_MOCK_ERROR_TYPES):
+            with self.subTest(error_type=error_type):
+                with tempfile.TemporaryDirectory() as tmp:
+                    output = Path(tmp) / "pipeline.csv"
+                    report = Path(tmp) / "pipeline.md"
+                    transport = load_mock_transport_fixture(FIXTURE_DIR / "pipeline_success.json")
+
+                    result = run_dry_run_recent_search_pipeline(
+                        output_path=output,
+                        report_path=report,
+                        transport=transport,
+                        source_genre="ai_side_business",
+                        dry_run=True,
+                        reference_now=TEST_REFERENCE_NOW,
+                        mock_error_type=error_type,
+                    )
+                    report_text = report.read_text(encoding="utf-8")
+                    output_exists = output.exists()
+
+                summary = result.redacted_live_summary
+                self.assertEqual(result.fetch_result.posts, [])
+                self.assertEqual(result.ranked_rows, [])
+                self.assertFalse(output_exists)
+                self.assertEqual(getattr(transport, "sent_queries", []), [])
+                self.assertEqual(summary.status, "error")
+                self.assertEqual(summary.stop_reason, error_type)
+                self.assertEqual(summary.result_count, 0)
+                self.assertEqual(summary.normalized_post_count, 0)
+                self.assertEqual(summary.fetched_count, 0)
+                self.assertEqual(summary.retryable, error_type in retryable_by_type)
+                self.assertEqual(summary.partial_result, error_type in partial_by_type)
+                if error_type == "rate_limited":
+                    self.assertTrue(summary.rate_limited)
+                    self.assertEqual(summary.retry_after_seconds, 120)
+                    self.assertEqual(summary.status_code, 429)
+                else:
+                    self.assertFalse(summary.rate_limited)
+                self.assertIn("Redacted Live Summary", report_text)
+                self.assertIn(summary.safe_debug_summary(), report_text)
+                self.assertIn("No posts ranked.", report_text)
+                self.assertFalse(contains_sensitive_marker(report_text), report_text)
+                self.assertFalse(contains_sensitive_marker(result.debug_log), result.debug_log)
+                self.assertNotIn("mock timeout", report_text)
+                self.assertNotIn("mock network error", report_text)
+                self.assertNotIn("mock auth error", report_text)
+                self.assertNotIn("Non-engineer AI workflow", report_text)
+                self.assertNotIn("pipeline_ai_top", report_text)
+                self.assertNotIn("4001", report_text)
+
     def test_credential_leak_regression_for_debug_report_csv_and_exception(self) -> None:
         secret_config = {
             "source_genre": "ai_side_business",
@@ -215,6 +274,52 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
         self.assertNotIn("Non-engineer AI workflow", cli_text)
         self.assertNotIn("pipeline_ai_top", cli_text)
         self.assertNotIn("4001", cli_text)
+
+    def test_cli_synthetic_error_modes(self) -> None:
+        for error_type in ("rate_limited", "timeout", "auth_error"):
+            with self.subTest(error_type=error_type):
+                with tempfile.TemporaryDirectory() as tmp:
+                    output = Path(tmp) / "pipeline.csv"
+                    report = Path(tmp) / "pipeline.md"
+
+                    stdout = io.StringIO()
+                    with contextlib.redirect_stdout(stdout):
+                        exit_code = pipeline_cli_main(
+                            [
+                                "--dry-run",
+                                "--fixture",
+                                str(FIXTURE_DIR / "pipeline_success.json"),
+                                "--output",
+                                str(output),
+                                "--report",
+                                str(report),
+                                "--genre",
+                                "ai_side_business",
+                                "--reference-now",
+                                TEST_REFERENCE_NOW.isoformat(),
+                                "--mock-error-type",
+                                error_type,
+                            ]
+                        )
+                    report_text = report.read_text(encoding="utf-8")
+                    output_exists = output.exists()
+
+                cli_text = stdout.getvalue()
+                self.assertEqual(exit_code, 0)
+                self.assertFalse(output_exists)
+                self.assertIn("DRY-RUN recent search pipeline complete.", cli_text)
+                self.assertIn("RedactedLiveSummary:", cli_text)
+                self.assertIn('"status":"error"', cli_text)
+                self.assertIn(f'"stop_reason":"{error_type}"', cli_text)
+                self.assertIn("CSV: not written", cli_text)
+                self.assertIn("No X API call, credential lookup, .env edit, or posting was performed.", cli_text)
+                self.assertFalse(contains_sensitive_marker(cli_text), cli_text)
+                self.assertFalse(contains_sensitive_marker(report_text), report_text)
+                self.assertNotIn("Non-engineer AI workflow", cli_text)
+                self.assertNotIn("pipeline_ai_top", cli_text)
+                self.assertNotIn("4001", cli_text)
+                self.assertNotIn("mock timeout", report_text)
+                self.assertNotIn("mock auth error", report_text)
 
     def test_pipeline_generated_csv_is_gitignored(self) -> None:
         ignored = subprocess.run(

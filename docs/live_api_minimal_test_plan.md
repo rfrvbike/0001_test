@@ -294,3 +294,15 @@ code, query length, retryability, retry-after seconds, partial-result flag, and
 the stable error type as `stop_reason`. Raw exception messages, raw responses,
 raw JSON, query text, post text, user data, IDs, headers, and credentials remain
 outside the summary.
+
+The CLI exposes this validation as synthetic mock error mode:
+
+```powershell
+python tools/mock_recent_search_pipeline.py --dry-run --mock-error-type rate_limited
+```
+
+Synthetic error mode is still outside the first-live execution path. It creates
+local `HttpErrorInfo`, builds a redacted summary, writes a safe report summary,
+and skips ranked-post CSV output. It does not call mock transport for the error
+case, perform HTTP, read credentials, enable LiveMode, retry, paginate, or
+persist real response data.

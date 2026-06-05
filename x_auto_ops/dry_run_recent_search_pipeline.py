@@ -12,6 +12,7 @@ from typing import Any, Mapping
 
 from x_auto_ops.buzz_read_client import BuzzFetchResult, XApiBuzzReadClient
 from x_auto_ops.credential_loader import CredentialLoader, select_credential_loader
+from x_auto_ops.http_error_mapping import HttpErrorInfo, map_http_error
 from x_auto_ops.live_mode_gate import assert_live_mode_allowed
 from x_auto_ops.mock_buzz_collector import (
     DEFAULT_CONFIG_PATH,
@@ -25,13 +26,29 @@ from x_auto_ops.mock_transport import (
 )
 from x_auto_ops.query_builder import build_recent_search_query
 from x_auto_ops.redaction import assert_redacted, redact_sensitive_text
-from x_auto_ops.redacted_live_summary import RedactedLiveSummary
+from x_auto_ops.redacted_live_summary import (
+    RedactedLiveSummary,
+    build_redacted_error_summary,
+)
 from x_auto_ops.retry_queue import RetryQueue, RetryTask
 
 
 DEFAULT_PIPELINE_OUTPUT_PATH = Path("data/mock_recent_search_pipeline_posts.csv")
 DEFAULT_PIPELINE_REPORT_PATH = Path("reports/mock_recent_search_pipeline_report.md")
 DEFAULT_PIPELINE_FIXTURE_PATH = Path("tests/fixtures/pipeline_success.json")
+SUPPORTED_MOCK_ERROR_TYPES = frozenset(
+    {
+        "auth_error",
+        "timeout",
+        "network_error",
+        "rate_limited",
+        "server_error",
+        "client_error",
+        "json_parse_error",
+        "schema_error",
+        "disabled_http_client",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -57,6 +74,7 @@ def run_dry_run_recent_search_pipeline(
     retry_queue: RetryQueue | None = None,
     credential_loader: CredentialLoader | None = None,
     reference_now: datetime | None = None,
+    mock_error_type: str | None = None,
 ) -> DryRunRecentSearchPipelineResult:
     """Run the full mock read -> classify -> rank -> CSV -> report path."""
 
@@ -75,9 +93,63 @@ def run_dry_run_recent_search_pipeline(
     config = load_buzz_collection_config(config_path)
     genre = _select_genre(config.genres, source_genre)
     query = build_recent_search_query(genre)
+    queue = retry_queue or RetryQueue()
+    if mock_error_type:
+        error_info = _build_mock_http_error_info(mock_error_type)
+        fetch_result = BuzzFetchResult(
+            posts=[],
+            rate_limited=error_info.error_type == "rate_limited",
+            retry_after_seconds=error_info.retry_after_seconds,
+            partial_result=error_info.partial_result,
+            next_token="",
+            request_window="mock_error",
+        )
+        redacted_live_summary = build_redacted_error_summary(
+            error_info,
+            query_length=len(query.query),
+            execution_time_ms=max(0, int((perf_counter() - started_at) * 1000)),
+            request_id=f"mock-{error_info.error_type}",
+        )
+        report = write_pipeline_report(
+            report_path,
+            source_genre=query.source_genre,
+            fetch_result=fetch_result,
+            rows=[],
+            redacted_live_summary=redacted_live_summary,
+            retry_queue_size=queue.size(),
+            retry_tasks=[],
+            credential_source=credentials.source,
+        )
+        debug_log = _safe_pipeline_debug(
+            {
+                "source_genre": query.source_genre,
+                "query_length": len(query.query),
+                "post_count": 0,
+                "ranked_count": 0,
+                "mock_error_type": error_info.error_type,
+                "rate_limited": fetch_result.rate_limited,
+                "retry_after_seconds": fetch_result.retry_after_seconds,
+                "partial_result": fetch_result.partial_result,
+                "next_cursor_present": False,
+                "retry_queue_size": queue.size(),
+                "redaction_status": "ok",
+                "credential_source": credentials.source,
+                "live_mode_gate": "dry_run_allowed",
+            }
+        )
+        return DryRunRecentSearchPipelineResult(
+            fetch_result=fetch_result,
+            ranked_rows=[],
+            redacted_live_summary=redacted_live_summary,
+            output_path=Path(output_path),
+            report_path=report,
+            debug_log=debug_log,
+            retry_queue=queue,
+            credential_source=credentials.source,
+        )
+
     client = XApiBuzzReadClient(transport=transport, dry_run=True)
     fetch_result = client.fetch_posts(genre)
-    queue = retry_queue or RetryQueue()
     retry_tasks: list[RetryTask] = []
     if fetch_result.rate_limited:
         retry_tasks.append(
@@ -238,6 +310,33 @@ def _safe_pipeline_debug(values: Mapping[str, Any]) -> str:
     text = " ".join(f"{key}={redact_sensitive_text(value)}" for key, value in values.items())
     assert_redacted(text, context="pipeline debug log")
     return text
+
+
+def _build_mock_http_error_info(error_type: str) -> HttpErrorInfo:
+    if error_type not in SUPPORTED_MOCK_ERROR_TYPES:
+        supported = ", ".join(sorted(SUPPORTED_MOCK_ERROR_TYPES))
+        raise ValueError(f"unsupported mock_error_type: {error_type}; supported: {supported}")
+    if error_type == "auth_error":
+        return map_http_error(status_code=401, message="mock auth error")
+    if error_type == "timeout":
+        return map_http_error(error_type="timeout", message="mock timeout")
+    if error_type == "network_error":
+        return map_http_error(exception=OSError("mock network error"))
+    if error_type == "rate_limited":
+        return map_http_error(
+            status_code=429,
+            headers={"Retry-After": "120"},
+            message="mock rate limited",
+        )
+    if error_type == "server_error":
+        return map_http_error(status_code=503, message="mock server error")
+    if error_type == "client_error":
+        return map_http_error(status_code=400, message="mock client error")
+    if error_type == "json_parse_error":
+        return map_http_error(error_type="json_parse_error", message="mock json parse error")
+    if error_type == "schema_error":
+        return map_http_error(error_type="schema_error", message="mock schema error")
+    return map_http_error(exception=RuntimeError("HTTP client disabled"))
 
 
 def _build_redacted_live_summary(
