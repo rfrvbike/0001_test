@@ -1,5 +1,171 @@
 # latest_report.md
 
+## 2026-06-05 RedactedLiveSummary Implementation Review
+
+Completed a design-only review fixing the proposed implementation location,
+data structure, safe-debug format, JSON serialization policy, report boundary,
+size limits, and error-summary integration for a future
+`RedactedLiveSummary`. No code implementation, HTTP communication, X API call,
+HTTP library use, credential lookup, `.env` change, environment variable read,
+LiveMode enablement, real data fetch, or posting was performed.
+
+### Added Files
+
+- `docs/redacted_live_summary_implementation_review.md`
+
+### Changed Files
+
+- `docs/redacted_live_summary_review.md`
+- `reports/latest_report.md`
+
+### Review Result
+
+Recommended first implementation location:
+
+```text
+x_auto_ops/redacted_live_summary.py
+```
+
+Canonical safe representation:
+
+```text
+to_safe_dict() -> allowlisted scalar dictionary
+safe_debug_summary() -> bounded one-line string generated from safe dictionary
+```
+
+Standalone JSON files and diagnostics export remain blocked.
+
+### Placement Comparison
+
+- `x_auto_ops/redacted_live_summary.py`: READY; recommended first location
+- `x_auto_ops/diagnostics/redacted_live_summary.py`: NEEDS_REVIEW; reconsider
+  when several diagnostic schemas exist
+- `x_auto_ops/models/redacted_live_summary.py`: BLOCKED for first
+  implementation because it hides the security-specific responsibility
+
+### Data Structure
+
+Required:
+
+- diagnostics_version
+- status
+- request_id
+- endpoint_name
+- method
+- query_length
+- result_count
+- normalized_post_count
+- partial_result
+- stop_reason
+- rate_limited
+- retryable
+- pagination_used
+- next_token_present
+- metrics_missing_count
+- execution_time_ms
+- rollback_completed
+
+Optional:
+
+- status_code
+- retry_after_seconds
+- fetched_count
+
+Remove candidate:
+
+- score_source
+
+### Safe Debug Summary
+
+- canonical format: allowlisted dictionary
+- human/log format: bounded one-line string derived from safe dictionary
+- generic object repr prohibited
+- nested values and unreviewed fields prohibited
+
+### JSON and Report Policy
+
+- in-memory JSON-compatible safe dictionary: READY
+- redacted report embedding: NEEDS_REVIEW
+- standalone summary JSON file: BLOCKED for first live test
+- diagnostics export: BLOCKED
+- raw object serialization: BLOCKED
+
+### Size Limit Proposal
+
+- maximum schema fields: 24
+- maximum safe_debug_summary length: 1,024 characters
+- maximum safe dictionary JSON size: 4,096 bytes
+- maximum report summary block: 4,096 characters
+- maximum individual string: 64 characters
+
+### Error Summary Integration
+
+Auth, timeout, network, rate-limit, server, client, JSON parse, and schema
+errors map into controlled status, stop_reason, status_code, retryable,
+rate-limit, and rollback fields. Raw error messages, response bodies, and header
+values remain prohibited.
+
+### Gap Analysis
+
+READY:
+
+- recommended module location
+- field classification
+- safe dictionary direction
+- bounded one-line debug direction
+- no standalone export policy
+- proposed size limits
+- controlled error mapping
+
+NEEDS_REVIEW:
+
+- fetched_count semantics
+- optional null-versus-omitted serialization
+- exact enum definitions
+- report writer integration
+- validation error type
+- request ID strategy
+- final size limits
+- date-stable mock pipeline fixtures or an injected test clock
+
+BLOCKED:
+
+- implementation before explicit implementation task
+- standalone JSON files
+- diagnostics export
+- generic object serialization
+- raw error/header/response/query/post/user/ID output
+- frontend/screenshot exposure
+- summary-triggered retry or pagination
+
+### Verification
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 265 tests
+FAILED (failures=1, errors=1)
+```
+
+Existing failing tests:
+
+- `test_success_pipeline_writes_csv_and_report_with_ranking`
+- `test_partial_pipeline_preserves_next_token_and_metrics_missing`
+
+Observed cause:
+
+- both tests received `ranked_rows=[]`
+- the mock pipeline fixtures contain fixed `created_at` timestamps
+- on 2026-06-05 those timestamps fall outside the configured genre
+  `days_back` filter windows
+- no code or fixture changes were made because this task is documentation-only
+
 ## 2026-06-05 Redacted Live Summary Schema Review
 
 Completed a design-only review defining which fields may appear in the first

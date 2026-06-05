@@ -256,3 +256,15 @@ values.
 
 This review defines the safe output boundary only. It does not implement
 summary generation and does not approve live API execution.
+
+## Implementation Review Reference
+
+The implementation placement, data structure, serialization, size limit, report
+boundary, and error integration review is recorded in
+`docs/redacted_live_summary_implementation_review.md`.
+
+The recommended first implementation location is
+`x_auto_ops/redacted_live_summary.py`. The canonical serialization boundary
+should be an explicit allowlisted `to_safe_dict()`, with
+`safe_debug_summary()` generated only from that safe dictionary. Standalone
+JSON export remains blocked for the first live test.
