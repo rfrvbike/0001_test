@@ -2171,3 +2171,67 @@ fixture. The result is exposed as `result.redacted_live_summary`.
   mock request only.
 - No live transport, live HTTP client, real credential loader, or LiveMode
   behavior is enabled by this integration.
+
+# RedactedLiveSummary Error Mapping Integration
+
+The safe diagnostic surface also supports error cases through
+`build_redacted_error_summary(HttpErrorInfo, ...)`.
+
+Covered error types:
+
+- `auth_error`
+- `timeout`
+- `network_error`
+- `rate_limited`
+- `server_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+The summary records `status=error`, `stop_reason=<error_type>`, status code,
+retryability, retry-after seconds, partial-result state, query length, and zero
+result counts. It intentionally excludes raw exception messages, raw response
+bodies, raw JSON, raw headers, query text, post text, usernames, author IDs,
+post IDs, and credential-shaped values.
+
+This remains mock/dry-run infrastructure only. It does not implement
+`LiveHttpClient`, live recent-search transport, real credential loading,
+LiveMode, HTTP communication, X API access, or posting.
+
+# Synthetic Error Mode for Mock Pipeline
+
+The mock recent-search pipeline can now exercise the error-summary path from
+the CLI without touching any live transport:
+
+```powershell
+python tools/mock_recent_search_pipeline.py --dry-run --mock-error-type rate_limited
+```
+
+Supported synthetic errors:
+
+- `auth_error`
+- `timeout`
+- `network_error`
+- `rate_limited`
+- `server_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+When synthetic error mode is active:
+
+- the pipeline synthesizes local `HttpErrorInfo`
+- `build_redacted_error_summary(...)` creates `RedactedLiveSummary`
+- `result.redacted_live_summary` is still populated
+- `ranked_rows` is empty
+- ranked-post CSV output is skipped
+- the report and CLI use only the allowlisted safe summary
+- mock transport is not called for the synthetic error path
+
+The safe output excludes raw errors, raw response bodies, raw JSON, query text,
+post text, usernames, author IDs, post IDs, authorization values, bearer
+values, API keys, tokens, secrets, and cookies. This does not enable real
+credentials, LiveMode, HTTP communication, X API access, retry execution,
+pagination execution, or posting.

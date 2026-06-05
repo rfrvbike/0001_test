@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import unittest
 
+from x_auto_ops.http_error_mapping import map_http_error
 from x_auto_ops.redacted_live_summary import (
     MAX_SAFE_DEBUG_SUMMARY_LENGTH,
     SAFE_FIELD_NAMES,
     RedactedLiveSummary,
     RedactedLiveSummaryValidationError,
+    build_redacted_error_summary,
 )
 from x_auto_ops.redaction import contains_sensitive_marker
 
@@ -92,6 +94,97 @@ class RedactedLiveSummaryTests(unittest.TestCase):
                     _summary(request_id=marker)
                 self.assertNotIn(marker, str(ctx.exception))
                 self.assertFalse(contains_sensitive_marker(str(ctx.exception)))
+
+    def test_build_redacted_error_summary_maps_supported_error_types(self) -> None:
+        cases = {
+            "auth_error": map_http_error(status_code=401, message="auth failed"),
+            "timeout": map_http_error(error_type="timeout", message="request timeout"),
+            "network_error": map_http_error(exception=OSError("connection reset")),
+            "rate_limited": map_http_error(
+                status_code=429,
+                headers={"Retry-After": "90"},
+                message="too many requests",
+            ),
+            "server_error": map_http_error(status_code=503, message="service down"),
+            "client_error": map_http_error(status_code=400, message="bad request"),
+            "json_parse_error": map_http_error(
+                error_type="json_parse_error",
+                message="json parse failed",
+            ),
+            "schema_error": map_http_error(
+                error_type="schema_error",
+                message="schema mismatch",
+            ),
+            "disabled_http_client": map_http_error(
+                exception=RuntimeError("HTTP client disabled")
+            ),
+        }
+
+        for error_type, info in cases.items():
+            with self.subTest(error_type=error_type):
+                summary = build_redacted_error_summary(
+                    info,
+                    endpoint_name="recent_search",
+                    method="GET",
+                    query_length=88,
+                    execution_time_ms=15,
+                    request_id="error-test",
+                )
+                safe = summary.to_safe_dict()
+                debug = summary.safe_debug_summary()
+
+                self.assertEqual(safe["status"], "error")
+                self.assertEqual(safe["stop_reason"], error_type)
+                self.assertEqual(safe["status_code"], info.status_code)
+                self.assertEqual(safe["query_length"], 88)
+                self.assertEqual(safe["result_count"], 0)
+                self.assertEqual(safe["fetched_count"], 0)
+                self.assertEqual(safe["normalized_post_count"], 0)
+                self.assertEqual(safe["partial_result"], info.partial_result)
+                self.assertEqual(safe["retryable"], info.retryable)
+                self.assertEqual(safe["retry_after_seconds"], info.retry_after_seconds)
+                self.assertEqual(safe["rate_limited"], error_type == "rate_limited")
+                self.assertFalse(safe["pagination_used"])
+                self.assertFalse(safe["next_token_present"])
+                self.assertEqual(safe["metrics_missing_count"], 0)
+                json.dumps(safe)
+                self.assertLessEqual(len(debug), MAX_SAFE_DEBUG_SUMMARY_LENGTH)
+                self.assertFalse(contains_sensitive_marker(debug), debug)
+
+    def test_build_redacted_error_summary_excludes_raw_error_details(self) -> None:
+        info = map_http_error(
+            status_code=500,
+            message=(
+                "raw body API_KEY=abc TOKEN=def SECRET=ghi COOKIE=jkl "
+                "AUTHORIZATION=Bearer mno query=(AI workflow) post_id=4001 "
+                "author_id=801 username=pipeline_ai_top"
+            ),
+        )
+
+        summary = build_redacted_error_summary(info, query_length=88)
+        safe_values = list(summary.to_safe_dict().values())
+        combined = json.dumps(safe_values, ensure_ascii=True) + summary.safe_debug_summary()
+
+        for blocked in (
+            "raw body",
+            "abc",
+            "def",
+            "ghi",
+            "jkl",
+            "mno",
+            "AI workflow",
+            "4001",
+            "801",
+            "pipeline_ai_top",
+            "Authorization",
+            "Bearer",
+            "API_KEY",
+            "TOKEN",
+            "SECRET",
+            "COOKIE",
+        ):
+            self.assertNotIn(blocked, combined)
+        self.assertFalse(contains_sensitive_marker(combined), combined)
 
 
 if __name__ == "__main__":
