@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -52,6 +53,7 @@ def run_dry_run_recent_search_pipeline(
     dry_run: bool = True,
     retry_queue: RetryQueue | None = None,
     credential_loader: CredentialLoader | None = None,
+    reference_now: datetime | None = None,
 ) -> DryRunRecentSearchPipelineResult:
     """Run the full mock read -> classify -> rank -> CSV -> report path."""
 
@@ -81,7 +83,7 @@ def run_dry_run_recent_search_pipeline(
                 retry_count=0,
             )
         )
-    ranked_rows = filter_posts(fetch_result.posts, config.genres)
+    ranked_rows = filter_posts(fetch_result.posts, config.genres, now=reference_now)
     output = write_posts_csv(output_path, ranked_rows)
     report = write_pipeline_report(
         report_path,

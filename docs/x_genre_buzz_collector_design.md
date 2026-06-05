@@ -2136,3 +2136,22 @@ Gap result:
 - `BLOCKED`: live HTTP, X API calls, socket communication,
   `requests`/`httpx`/`urllib` execution, credential reads, `.env` or process
   value reads, live mode, write endpoints
+
+## Date-Stable Mock Pipeline Tests
+
+Added on 2026-06-05 to prevent dry-run pipeline tests from depending on the
+wall-clock date.
+
+Date-sensitive mock pipeline tests must inject a fixed `reference_now` into
+`run_dry_run_recent_search_pipeline(...)`. The pipeline passes that value to
+`filter_posts(..., now=reference_now)`, so fixture `created_at` values are
+evaluated against an explicit test clock.
+
+Rules:
+
+- production/default dry-run behavior may continue to use the current time
+- tests with fixed fixture timestamps must provide a fixed reference time
+- CLI fixture tests may pass `--reference-now` to use the same injected clock
+- fixture dates should not be continually edited to follow the calendar
+- LiveMode remains disabled
+- no HTTP or X API behavior is introduced by the test clock

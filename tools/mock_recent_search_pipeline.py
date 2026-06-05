@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 if __package__ in {None, ""}:
@@ -26,6 +27,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--output", default=str(DEFAULT_PIPELINE_OUTPUT_PATH))
     parser.add_argument("--report", default=str(DEFAULT_PIPELINE_REPORT_PATH))
     parser.add_argument("--genre", default="ai_side_business")
+    parser.add_argument(
+        "--reference-now",
+        help="Optional ISO-8601 clock for date-stable mock runs.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args(argv)
 
@@ -43,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
             transport=load_mock_transport_fixture(args.fixture),
             source_genre=args.genre,
             dry_run=True,
+            reference_now=_parse_reference_now(args.reference_now),
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -58,6 +64,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Report: {result.report_path}")
     print("No X API call, credential lookup, .env edit, or posting was performed.")
     return 0
+
+
+def _parse_reference_now(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 if __name__ == "__main__":

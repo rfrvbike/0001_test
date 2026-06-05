@@ -5,6 +5,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 from tools.mock_recent_search_pipeline import main as pipeline_cli_main
@@ -22,6 +23,7 @@ from x_auto_ops.redaction import redact_sensitive_text
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 ROOT = Path(__file__).resolve().parents[1]
+TEST_REFERENCE_NOW = datetime(2026, 6, 3, 0, 30, tzinfo=timezone.utc)
 
 
 def load_fixture(name: str) -> dict:
@@ -59,6 +61,7 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
                 transport=load_mock_transport_fixture(FIXTURE_DIR / "pipeline_success.json"),
                 source_genre="ai_side_business",
                 dry_run=True,
+                reference_now=TEST_REFERENCE_NOW,
             )
 
             with output.open(encoding="utf-8") as fh:
@@ -84,6 +87,7 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
                 transport=load_mock_transport_fixture(FIXTURE_DIR / "pipeline_partial.json"),
                 source_genre="daily",
                 dry_run=True,
+                reference_now=TEST_REFERENCE_NOW,
             )
 
         self.assertTrue(result.fetch_result.partial_result)
@@ -171,6 +175,8 @@ class DryRunRecentSearchPipelineTests(unittest.TestCase):
                     str(report),
                     "--genre",
                     "ai_side_business",
+                    "--reference-now",
+                    TEST_REFERENCE_NOW.isoformat(),
                 ]
             )
 

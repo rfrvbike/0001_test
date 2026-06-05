@@ -1,5 +1,53 @@
 # latest_report.md
 
+## 2026-06-05 Mock Pipeline Date-Stable Test Fix
+
+Stabilized the mock recent-search pipeline tests against wall-clock date
+changes. No X API call, HTTP communication, credential lookup, `.env` change,
+LiveMode enablement, real data fetch, or posting was performed.
+
+### Cause
+
+- pipeline fixture `created_at` values are fixed
+- `filter_posts(...)` previously used the current wall-clock time
+- on 2026-06-05, success and partial fixtures fell outside configured
+  `days_back` windows
+- resulting `ranked_rows` were empty
+
+### Changes
+
+- added optional `reference_now` to
+  `run_dry_run_recent_search_pipeline(...)`
+- passed `reference_now` to existing `filter_posts(..., now=...)`
+- added mock CLI-only `--reference-now` support for date-stable CLI fixture
+  tests
+- fixed the success and partial pipeline tests to use
+  `2026-06-03T00:30:00Z`
+- documented that date-sensitive mock tests must use an injected test clock
+
+### Changed Files
+
+- `x_auto_ops/dry_run_recent_search_pipeline.py`
+- `tools/mock_recent_search_pipeline.py`
+- `tests/test_dry_run_recent_search_pipeline.py`
+- `docs/x_genre_buzz_collector_design.md`
+- `reports/latest_report.md`
+
+### Verification
+
+Command:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest discover -s tests -v
+```
+
+Result:
+
+```text
+Ran 265 tests
+OK
+```
+
 ## 2026-06-05 RedactedLiveSummary Implementation Review
 
 Completed a design-only review fixing the proposed implementation location,
