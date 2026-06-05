@@ -127,6 +127,51 @@ Mock status mapping:
 request only. `next_token_present` records whether a cursor was returned without
 exposing its value.
 
+## Error Summary Mapping
+
+`build_redacted_error_summary(...)` converts a mapped `HttpErrorInfo` into a
+safe `RedactedLiveSummary` for failed mock or future first-live checks.
+
+The helper records only stable metadata:
+
+- `status=error`
+- `stop_reason=<error_type>`
+- `status_code`
+- `retryable`
+- `retry_after_seconds`
+- `partial_result`
+- zero result, fetched, normalized-post, and metrics-missing counts
+
+Supported error types:
+
+- `auth_error`
+- `timeout`
+- `network_error`
+- `rate_limited`
+- `server_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+Raw exception messages, response bodies, response headers, query text, post
+text, usernames, author IDs, post IDs, authorization values, bearer values,
+API keys, tokens, secrets, cookies, raw JSON, and raw responses are not copied
+into the summary.
+
+Example:
+
+```python
+from x_auto_ops.http_error_mapping import map_http_error
+from x_auto_ops.redacted_live_summary import build_redacted_error_summary
+
+error = map_http_error(status_code=429, headers={"Retry-After": "90"})
+summary = build_redacted_error_summary(error, query_length=88)
+
+safe_data = summary.to_safe_dict()
+debug_line = summary.safe_debug_summary()
+```
+
 ## Example
 
 ```python

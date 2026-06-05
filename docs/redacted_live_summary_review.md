@@ -268,3 +268,29 @@ The recommended first implementation location is
 should be an explicit allowlisted `to_safe_dict()`, with
 `safe_debug_summary()` generated only from that safe dictionary. Standalone
 JSON export remains blocked for the first live test.
+# Error Mapping Integration
+
+`RedactedLiveSummary` now has an error-summary construction path through
+`build_redacted_error_summary(...)`. The helper accepts `HttpErrorInfo` and
+copies only stable, reviewed metadata into the safe summary surface.
+
+Error summaries use `status=error` and `stop_reason=<error_type>`. They do not
+include raw exception messages, raw response bodies, raw JSON, raw headers,
+query text, post text, usernames, author IDs, post IDs, or credential-shaped
+values.
+
+Covered error types:
+
+- `auth_error`
+- `timeout`
+- `network_error`
+- `rate_limited`
+- `server_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+The error mapping remains mock/dry-run only and does not enable LiveMode,
+`LiveHttpClient`, live transport, real credentials, HTTP communication, or X API
+access.

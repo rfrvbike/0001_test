@@ -271,3 +271,26 @@ pipeline validates the proposed safe diagnostic surface:
 
 This mock integration does not change any live release condition and does not
 enable LiveMode.
+
+## Mock Validation of Error Summaries
+
+Before first live connectivity, failed-connectivity diagnostics can be validated
+through `HttpErrorInfo -> RedactedLiveSummary` without making HTTP requests.
+
+The mock error-summary path covers:
+
+- `auth_error`
+- `timeout`
+- `network_error`
+- `rate_limited`
+- `server_error`
+- `client_error`
+- `json_parse_error`
+- `schema_error`
+- `disabled_http_client`
+
+Each summary uses safe metadata only: status, endpoint name, method, status
+code, query length, retryability, retry-after seconds, partial-result flag, and
+the stable error type as `stop_reason`. Raw exception messages, raw responses,
+raw JSON, query text, post text, user data, IDs, headers, and credentials remain
+outside the summary.
