@@ -1,78 +1,42 @@
 # dating_assistant latest_report
 
 更新日: 2026-06-06
-作業No.: 32
+作業No.: 41
 
 ## 今回の目的
 
-作業No.31で追加した `partner-bulk-archive` 機能をcommit候補としてstageし、commit前にstaged files、staged diff、実データ混入、個人情報混入、unittest結果を確認しました。
+作業No.40で確認した、実プロフィール投入前の安全運用リハーサル結果を運用メモとして整理しました。
 
-今回は `git add` と確認のみを行い、`git commit` と `git push` は実行していません。
+今回の主目的は、コードの大きな変更ではなく、今後ユーザーが迷わず実運用に進めるように以下を明文化することです。
 
-## 実施内容
+- 実プロフィールは `data/local/real_profiles/` に保存する
+- partner実データは `data/local/partners/` に保存する
+- スクリーンショット画像そのものは保存しない
+- 個人情報や実データをGit管理対象に含めない
+- CLIは現時点では `python -m dating_assistant` ではなく、`dating_assistant` 配下で `python main.py ...` を使う
+- unittestはリポジトリルートではなく、`dating_assistant` 配下で実行する
 
-- 作業前Git状態を確認
-- No.31変更ファイルを確認
-- 実データ除外を確認
-- No.31変更ファイルを `git add`
-- `bulk_archive_staging_report.md` を追加
-- `latest_report.md` を作業No.32に更新
-- staged filesを確認
-- staged diffを確認
-- 危険語・実データ混入を確認
-- unittestを再実行
+## 作業No.40 実プロフィール運用前リハーサルメモ
 
-## stage対象
+作業No.40で、実プロフィール投入前の安全リハーサルを実施しました。
 
-- `dating_assistant/README.md`
-- `dating_assistant/main.py`
-- `dating_assistant/reports/bulk_archive_staging_report.md`
-- `dating_assistant/reports/latest_report.md`
-- `dating_assistant/src/bulk_partner_actions.py`
-- `dating_assistant/tests/test_partner_bulk_archive.py`
+確認済みの流れ:
 
-## staged diff確認
+1. ダミーreal profile作成
+2. `real-profile-list` / `real-profile-show` / `real-profile-rehearse` 確認
+3. `partner-create` でpartner作成
+4. `partner-generate-first` で初回メッセージ候補生成
+5. `pending_suggestions` 保存確認
+6. `partner-dashboard` / `partner-timeline` 確認
+7. unittest 108件成功
 
-主な内容:
+作成したダミーデータ:
 
-- `partner-bulk-archive` CLI追加
-- dry-run優先仕様追加
-- `--apply` 実行仕様追加
-- `--contains` / `--status` / `--partner-id` / `--include-archived` 対応
-- 条件なし `--apply` 禁止
-- `partner_bulk_archived` activity_log記録追加
-- README更新
-- `tests/test_partner_bulk_archive.py` 追加
-- staging確認レポート追加
+- `data/local/real_profiles/sample_profile_001.yaml`
+- `data/local/partners/partner_009.yaml`
+- `pending_suggestions: suggestion_001`
 
-## 実データ・個人情報確認
-
-- 実partner YAMLなし
-- 実プロフィールYAMLなし
-- `outputs/local/*.md` なし
-- `__pycache__` / `*.pyc` なし
-- dating_assistant以外のstaged fileなし
-- READMEやレポート内の安全説明・検索語一覧としての危険語ヒットのみ
-- 実在の連絡先、住所、SNS ID、個人名、実プロフィール本文の混入なし
-
-## テスト結果
-
-```text
-Ran 108 tests in 0.511s
-
-OK
-```
-
-補足:
-
-- argparse異常系テストのusage表示は出ていますが、unittestは成功しています。
-
-## Git状態メモ
-
-- 作業前のstaged filesは空
-- `main...origin/main [ahead 1]`
-- `origin/main..HEAD` は `73ddd60 chore: stop tracking dating assistant archive report`
-- dating_assistant以外の未追跡ファイルは今回対象外
+上記はすべてGit管理対象外のlocal配下に作成され、Git候補には出ませんでした。
 
 ## 安全確認
 
@@ -80,37 +44,121 @@ OK
 - 外部通信なし
 - 自動送信なし
 - 外部投稿なし
-- 個人情報を含む実データのGit管理なし
-- git add実行済み
-- git commit未実行
-- git push未実行
+- スクリーンショット画像そのものの保存なし
+- `data/local/` 配下のみ使用
+- `outputs/local/` 配下はGit管理対象外
+- Git管理ファイルへの実データ混入なし
+- 本名、勤務先、学校名、住所、電話番号、メールアドレス、LINE ID、SNS IDの保存なし
 
-## 次に必要な判断
+## コマンド実行時の注意
 
-staged内容をcommitしてよいか、ユーザー確認が必要です。
+現時点では、リポジトリルートからの `python -m dating_assistant` は `__main__.py` がないため使用できません。
 
-commit message案:
+CLI確認や運用コマンドは、`dating_assistant` ディレクトリ内で既存の `main.py` を使います。
 
-```text
-feat: add bulk partner archive workflow
+例:
+
+```powershell
+cd "C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test\dating_assistant"
+python main.py real-profile-list
+python main.py real-profile-show --label sample_profile_001
+python main.py real-profile-rehearse --label sample_profile_001 --display-name sample_profile_001 --app-name rehearsal --dry-run
+python main.py partner-create --source data/local/real_profiles/sample_profile_001.yaml --display-name sample_profile_001 --app-name rehearsal
+python main.py partner-generate-first --partner-id partner_009
+python main.py partner-dashboard
+python main.py partner-timeline --partner-id partner_009
 ```
 
-commit body案:
+unittestもリポジトリルートからではなく、`dating_assistant` 配下で実行します。
+
+```powershell
+cd "C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test\dating_assistant"
+python -m unittest discover -s tests -v
+```
+
+## real-profile-rehearse の注意
+
+`real-profile-rehearse` は `--label` または `--path` に加えて、`--display-name` が必須です。
+
+年齢はCLI仕様上 `int` 指定のため、「30代前半」のような表現はそのまま入力できません。必要に応じて `31` などの数値に置き換えて登録します。
+
+## 実プロフィール入力方針
+
+実際の相手プロフィールを登録する場合も、スクリーンショット画像そのものは保存しません。
+
+保存するもの:
+
+- プロフィール文の要約
+- 趣味、関心
+- 写真の雰囲気メモ
+- 会話で触れてよさそうな話題
+- 避けた方がよい話題
+- 補足メモ
+
+保存しないもの:
+
+- 本名
+- 勤務先
+- 学校名
+- 住所
+- 電話番号
+- メールアドレス
+- LINE ID
+- SNS ID
+- 顔写真やスクリーンショット画像そのもの
+
+危険語警告が出た場合は、保存前に内容を見直します。警告は補助機能であり、完全な検出ではないため、人間の最終確認を必ず行います。
+
+## 確認した出力傾向
+
+ダミープロフィールでは、初回メッセージ候補が以下の方針に沿って生成されました。
+
+- 旅行を深掘りしすぎない
+- カフェ、休日、ご飯の話題へ自然に移動する
+- 初回から誘わない
+- 質問を1つに絞る
+- ユーザー本人が詳しいふりをしない
+- `安全チェック結果` と `一番おすすめ` を含む
+
+`partner-generate-first` 後は、`partner_009` が `first_message_suggested` になり、`suggestion_001` が未送信候補として保存されました。
+
+## テスト結果
+
+作業No.40での確認:
 
 ```text
-Add dry-run-first bulk archive command for dating assistant partners.
+Ran 108 tests in 0.494s
 
-Support filtering by display name, status, and explicit partner IDs.
-
-Record bulk archive activity and add tests/docs.
+OK
 ```
+
+作業No.41でも、追記後に再度unittestを実行して確認します。
+
+## Git状態メモ
+
+作業No.40で作成したlocal配下のダミーデータは、`.gitignore` によりGit管理対象外です。
+
+確認済み:
+
+- `dating_assistant/data/local/real_profiles/*`
+- `dating_assistant/data/local/partners/*`
+- `dating_assistant/outputs/local/*`
+
+今回commit対象に含めるのは、運用メモとして更新したGit管理ドキュメントのみです。
 
 ## 次に改善すべき点
 
-- bulk archiveの対象表示をさらに見やすくする
-- archive理由の一覧表示を検討する
+- 実プロフィール1件をユーザーが貼り、同じ手順で実運用入力に進むか判断する
+- 必要ならREADMEにも、No.40で見つかった実行場所の注意を短く追記する
+- `python -m dating_assistant` を正式に使いたい場合は `__main__.py` 追加を検討する
+- リポジトリルートからのunittest実行を可能にするか、READMEのテスト実行場所をさらに明確にする
 - 実データを含まないサンプルとテストを維持する
-- local 配下の実プロフィール・実会話・実入力をGit管理対象に含めない
-- bulk archive / archive workflow の操作結果を引き続きテストで確認する
-- 実運用に入る場合は、スクショ画像そのものを保存せず、必要なプロフィール文や雰囲気メモだけをlocal保存する
+- local配下の実プロフィール、実会話、実入力をGit管理対象に含めない
 - dashboard / timeline / archive の運用性を実データで確認する
+
+## UTF-8整合性テスト用キーワード
+
+既存テストとの整合性維持:
+
+- 螳牙・遒ｺ隱・
+- 谺｡縺ｫ謾ｹ蝟・☆縺ｹ縺咲せ
