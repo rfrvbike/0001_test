@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from x_auto_ops.http_error_mapping import HttpErrorInfo
 from x_auto_ops.redaction import contains_sensitive_marker
 
 
@@ -143,6 +144,48 @@ class RedactedLiveSummary:
         if contains_sensitive_marker(summary):
             raise RedactedLiveSummaryValidationError("sensitive diagnostic value rejected")
         return summary
+
+
+def build_redacted_error_summary(
+    error_info: HttpErrorInfo,
+    *,
+    endpoint_name: str = "recent_search",
+    method: str = "GET",
+    query_length: int = 0,
+    execution_time_ms: int = 0,
+    request_id: str = "mock-error",
+    rollback_completed: bool = False,
+    diagnostics_version: str = "1",
+) -> RedactedLiveSummary:
+    """Build a safe failed-connectivity summary from mapped error metadata.
+
+    Raw exception messages, response bodies, headers, query text, and post data
+    are intentionally excluded. The stable error type is the only error detail
+    that crosses into the safe summary surface.
+    """
+
+    return RedactedLiveSummary(
+        diagnostics_version=diagnostics_version,
+        status="error",
+        request_id=request_id,
+        endpoint_name=endpoint_name,
+        method=method,
+        status_code=error_info.status_code,
+        query_length=query_length,
+        result_count=0,
+        fetched_count=0,
+        normalized_post_count=0,
+        partial_result=error_info.partial_result,
+        stop_reason=error_info.error_type,
+        rate_limited=error_info.error_type == "rate_limited",
+        retryable=error_info.retryable,
+        retry_after_seconds=error_info.retry_after_seconds,
+        pagination_used=False,
+        next_token_present=False,
+        metrics_missing_count=0,
+        execution_time_ms=execution_time_ms,
+        rollback_completed=rollback_completed,
+    )
 
 
 def _validate_safe_text(field_name: str, value: Any) -> None:
