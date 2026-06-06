@@ -1,5 +1,45 @@
 # latest_report.md
 
+## 2026-06-06 Planning PR Refresh Review Refresh
+
+Refreshed the PR #12 report onto latest `origin/main` after PR #10 and PR #14
+were merged. This resolves the previous `reports/latest_report.md` conflict by
+preserving the PR #10 and PR #14 report sections and adding the PR #12 refresh
+summary on top. No PR merge, PR close, direct `main` push, GitHub manual
+conflict resolution, HTTP communication, X API call, credential lookup, `.env`
+change, LiveMode enablement, real data fetch, write endpoint, or posting was
+performed.
+
+### Added Files
+
+- `reports/refresh_planning_prs_review.md`
+
+### Changed Files
+
+- `reports/latest_report.md`
+
+### Refresh Summary
+
+- recreated PR #12 content from latest `origin/main`
+- preserved the merged PR #10 `Live Merge Order Review` section
+- preserved the merged PR #14 `PR Final Pre-Merge Check Refresh` section
+- restored `reports/refresh_planning_prs_review.md` as the PR #12 report
+  artifact
+- kept the diff limited to `reports/refresh_planning_prs_review.md` and
+  `reports/latest_report.md`
+- did not carry over `dating_assistant/`, stock analyzer, `.gitignore`,
+  deletion, credential, token, `.env`, or implementation diffs
+
+### Verification
+
+Unittest:
+
+```text
+Ran 280 tests in 0.791s
+
+OK
+```
+
 ## 2026-06-06 PR Final Pre-Merge Check Refresh
 
 Refreshed the PR #11 report onto latest `origin/main` after PR #10 was merged.
