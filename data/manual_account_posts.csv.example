@@ -1,0 +1,5 @@
+﻿post_text,status,scheduled_date,posted_at,tweet_id,error
+ここに1日目の投稿文を入力してください,pending,,,,
+ここに2日目の投稿文を入力してください,pending,,,,
+日付指定したい場合のサンプル投稿です,pending,2099-01-01,,,
+投稿済み行のサンプルです,posted,,2026-05-17T09:00:00,1234567890,
