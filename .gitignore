@@ -7,6 +7,8 @@ server/.env
 logs/
 *.log
 data/manual_account_posts.csv
+# Local dry-run CSVs
+data/*.local.csv
 data/mock_buzz_posts.csv
 data/mock_buzz_posts_*.csv
 data/mock_recent_search_pipeline_posts.csv
