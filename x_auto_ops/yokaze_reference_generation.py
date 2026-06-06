@@ -1,7 +1,8 @@
 """Generate yokaze_daily draft previews from reference-post analyses.
 
-Reference posts are used as structure only. This module does not create live
-provider clients; callers must inject clients for non-mock generation.
+Reference posts are used as structure only. The normal flow is local/mock
+generation; provider-backed generation is guarded behind an explicit opt-in
+flag and this module does not create provider clients by itself.
 """
 
 from __future__ import annotations
@@ -108,6 +109,7 @@ def generate_yokaze_posts_from_reference(
     max_same_pattern: int = 2,
     settings: Mapping[str, Any] | None = None,
     clients: ProviderClients | None = None,
+    allow_provider_generation: bool = False,
 ) -> YokazeGenerationResult:
     validate_style_pattern(style_pattern)
     if max_same_pattern < 1:
@@ -135,10 +137,15 @@ def generate_yokaze_posts_from_reference(
                 style_pattern=pattern,
             )
         else:
+            if not allow_provider_generation:
+                raise RuntimeError(
+                    "Provider generation is disabled for the normal flow. "
+                    "Run with mock_llm=True or dry_run=True."
+                )
             if settings is None or clients is None:
                 raise RuntimeError(
-                    "Live generation requires provider settings and injected "
-                    "clients. Run with --mock-llm --dry-run first."
+                    "Provider generation requires settings, injected clients, "
+                    "and explicit allow_provider_generation=True."
                 )
             item = generate_yokaze_post_with_provider(
                 analysis,

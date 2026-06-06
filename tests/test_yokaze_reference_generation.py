@@ -114,6 +114,29 @@ class YokazeReferenceGenerationTests(unittest.TestCase):
         self.assertGreaterEqual(generated[0]["quality_check"]["final_score"], 0)
         self.assertLessEqual(generated[0]["quality_check"]["final_score"], 100)
 
+    def test_provider_generation_is_blocked_without_explicit_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            input_path = Path(tmp) / "analyzed.jsonl"
+            output_path = Path(tmp) / "generated.jsonl"
+            report_path = Path(tmp) / "report.md"
+            write_jsonl(input_path, sample_rows())
+
+            with self.assertRaisesRegex(RuntimeError, "Provider generation is disabled"):
+                generate_yokaze_posts_from_reference(
+                    input_path=input_path,
+                    output_path=output_path,
+                    report_path=report_path,
+                    top_n=1,
+                    theme=None,
+                    dry_run=False,
+                    mock_llm=False,
+                    settings={
+                        "TEXT_LLM_PROVIDER": "openai",
+                        "OPENAI_MODEL": "gpt-test",
+                    },
+                    clients=FailingProvider().clients(),
+                )
+
     def test_style_pattern_argument_is_applied(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             input_path = Path(tmp) / "analyzed.jsonl"

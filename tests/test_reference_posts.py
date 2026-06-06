@@ -87,6 +87,18 @@ class ReferencePostsTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["source_handle"], "kiwamiamaama")
 
+    def test_collect_non_dry_run_is_blocked_without_explicit_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "raw_posts.csv"
+            with self.assertRaisesRegex(RuntimeError, "Live X collection is not implemented"):
+                collect_reference_posts(
+                    source_path=Path(tmp) / "missing_source.csv",
+                    output_path=output,
+                    limit=2,
+                    dry_run=False,
+                    client=FailingXClient(),
+                )
+
     def test_limit_cap_is_enforced(self) -> None:
         self.assertEqual(clamp_limit(MAX_LIMIT), MAX_LIMIT)
         with self.assertRaises(ValueError):
@@ -179,6 +191,43 @@ class ReferencePostsTests(unittest.TestCase):
         self.assertIn("target", analyses[0])
         self.assertIn("Collected accounts: 1", report_text)
         self.assertIn("Similarity Risk", report_text)
+
+    def test_provider_analysis_is_blocked_without_explicit_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            scored = Path(tmp) / "scored.csv"
+            analyzed = Path(tmp) / "analyzed.jsonl"
+            with scored.open("w", encoding="utf-8", newline="") as fh:
+                writer = csv.DictWriter(
+                    fh,
+                    fieldnames=[
+                        "source_handle",
+                        "post_id",
+                        "text",
+                        "score",
+                        "category",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "source_handle": "a",
+                        "post_id": "1",
+                        "text": "sample structure text for provider guard",
+                        "score": "10",
+                        "category": "romance",
+                    }
+                )
+
+            with self.assertRaisesRegex(RuntimeError, "Provider analysis is disabled"):
+                analyze_reference_posts(
+                    input_path=scored,
+                    output_path=analyzed,
+                    top_n=1,
+                    dry_run=False,
+                    mock_llm=False,
+                    settings={"TEXT_LLM_PROVIDER": "openai"},
+                    clients=None,
+                )
 
 
 if __name__ == "__main__":

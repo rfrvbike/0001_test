@@ -16,6 +16,12 @@ python -m unittest tests.test_reference_posts tests.test_yokaze_reference_genera
 If `python` is not on PATH, use the bundled Codex Python path shown in
 `reports/latest_report.md`.
 
+## Provider Status
+
+The current workflow is local/mock generation only. External LLM providers are
+not called by default, and provider-backed generation is blocked unless future
+code explicitly opts in with reviewed settings and injected clients.
+
 ## Inputs
 
 - `data/reference_posts/analyzed_posts.jsonl`

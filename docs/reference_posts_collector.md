@@ -15,7 +15,7 @@ breaks, or sentence order.
 
 ## Dry-Run Flow
 
-Run these commands before any live API work:
+Run these commands for the current local/mock workflow:
 
 ```powershell
 python tools/x_collect_reference_posts.py --dry-run
@@ -27,15 +27,15 @@ python -m unittest tests.test_reference_posts -v
 `--dry-run` collection uses sample posts and never calls X. `--mock-llm`
 analysis uses local deterministic analysis and never calls an external LLM.
 
-## Live API Notes
+## Live API Status
 
-Live X collection is intentionally not wired by default. A future phase should
-inject an `XReferenceClient` that resolves user ids, fetches recent posts, and
-honors `Retry-After` on 429 responses. Keep `--limit` capped at 200 unless the
-cost/rate-limit policy is reviewed.
+Live X collection is not implemented in the normal flow. The collector does not
+create an X client, does not call X, and does not read live credentials during
+local/mock operation. Non-dry-run collection is blocked unless future code
+explicitly opts in and injects a reviewed client.
 
-Use `.env` for `X_BEARER_TOKEN`; never commit `.env`, tokens, local raw CSVs,
-or generated JSONL analysis files.
+Any production credential design is a future review item. Do not commit local
+raw CSVs, generated JSONL analysis files, or credential files.
 
 ## Yokaze Analysis Rules
 

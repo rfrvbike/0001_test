@@ -1,7 +1,8 @@
 """Reference-post collection, scoring, analysis, and reporting helpers.
 
-The helpers are dry-run/mock-first. Live X API or LLM clients must be injected
-by callers; this module does not create external clients by itself.
+The helpers are local/mock/dry-run first. Live X API or provider-backed LLM
+paths are guarded behind explicit opt-in flags and are not used by the normal
+tooling flow.
 """
 
 from __future__ import annotations
@@ -125,20 +126,6 @@ def read_source_accounts(path: str | Path) -> list[SourceAccount]:
     return accounts
 
 
-def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
-    env_path = Path(path)
-    if not env_path.exists():
-        return {}
-    values: dict[str, str] = {}
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        key, value = stripped.split("=", 1)
-        values[key.strip()] = value.strip().strip('"').strip("'")
-    return values
-
-
 def collect_reference_posts(
     *,
     source_path: str | Path,
@@ -146,10 +133,16 @@ def collect_reference_posts(
     limit: int = DEFAULT_LIMIT,
     dry_run: bool,
     client: XReferenceClient | None = None,
+    allow_live_collection: bool = False,
     now: datetime | None = None,
 ) -> CollectionResult:
     limit = clamp_limit(limit)
     output = Path(output_path)
+    if not dry_run and not allow_live_collection:
+        raise RuntimeError(
+            "Live X collection is not implemented for the normal flow. "
+            "Run with dry_run=True."
+        )
     accounts = _accounts_for_collection(source_path, dry_run=dry_run)
     estimated_posts = len(accounts) * limit
 
@@ -162,8 +155,8 @@ def collect_reference_posts(
     else:
         if client is None:
             raise RuntimeError(
-                "Live X collection requires an injected XReferenceClient. "
-                "Run with --dry-run first."
+                "Live X collection requires an injected XReferenceClient and "
+                "explicit allow_live_collection=True."
             )
         posts = []
         for account in accounts:
@@ -259,6 +252,7 @@ def analyze_reference_posts(
     mock_llm: bool,
     settings: Mapping[str, Any] | None = None,
     clients: ProviderClients | None = None,
+    allow_provider_analysis: bool = False,
 ) -> AnalysisResult:
     if top_n < 1:
         raise ValueError("--top-n must be 1 or greater")
@@ -271,10 +265,15 @@ def analyze_reference_posts(
         if mock_llm or dry_run:
             analysis = mock_analyze_post(row)
         else:
+            if not allow_provider_analysis:
+                raise RuntimeError(
+                    "Provider analysis is disabled for the normal flow. "
+                    "Run with mock_llm=True or dry_run=True."
+                )
             if settings is None or clients is None:
                 raise RuntimeError(
-                    "Live analysis requires provider settings and injected clients. "
-                    "Run with --mock-llm --dry-run first."
+                    "Provider analysis requires settings, injected clients, "
+                    "and explicit allow_provider_analysis=True."
                 )
             analysis = analyze_post_with_provider(row, settings, clients)
         analyses.append(analysis)

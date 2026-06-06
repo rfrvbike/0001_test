@@ -10,7 +10,6 @@ if __package__ in {None, ""}:
 from x_auto_ops.reference_posts import (  # noqa: E402
     DEFAULT_LIMIT,
     collect_reference_posts,
-    load_dotenv,
 )
 
 
@@ -22,19 +21,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--output", default="data/reference_posts/raw_posts.csv")
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
     parser.add_argument("--dry-run", action="store_true")
+    parser.set_defaults(dry_run=True)
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     try:
-        if not args.dry_run:
-            env = load_dotenv()
-            if not env.get("X_BEARER_TOKEN"):
-                raise RuntimeError(
-                    "X_BEARER_TOKEN is missing. Run --dry-run first; live "
-                    "collection client wiring is a later phase."
-                )
         result = collect_reference_posts(
             source_path=args.source,
             output_path=args.output,
