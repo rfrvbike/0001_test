@@ -1,5 +1,45 @@
 # latest_report.md
 
+## 2026-06-06 RealCredentialLoader Implementation Plan
+
+Created a planning-only document for safely implementing
+`RealCredentialLoader`. No real credential read, `.env` read or write, token
+file creation, HTTP communication, X API call, LiveMode enablement, real data
+fetch, or posting was performed.
+
+### Added Files
+
+- `docs/real_credential_loader_implementation_plan.md`
+
+### Changed Files
+
+- `reports/latest_report.md`
+
+### Plan Summary
+
+- keep `RealCredentialLoader` fail-closed by default
+- use `CredentialStorageAdapter` as the future backend-only source interface
+- do not implement `.env`, local JSON, local token file, OS credential store, or
+  secret manager adapters in the first implementation
+- first implementation should call only injected fake/in-memory adapters when
+  explicitly enabled for tests
+- validate `CredentialBundle` fields before returning
+- use typed safe errors for disabled, missing, storage, and validation failures
+- keep credential values out of logs, reports, CSV, summaries, retry metadata,
+  pagination metadata, and exceptions
+
+### Verification
+
+```text
+python -m unittest discover -s tests -v
+Ran 163 tests
+FAILED (errors=2)
+```
+
+The failures are baseline import errors already present on `origin/main` for
+`x_auto_ops.reference_posts` and `x_auto_ops.yokaze_reference_generation`; this
+planning-only change does not add or modify those tests or modules.
+
 ## 2026-06-06 Redacted Error Summary Mock Pipeline Integration
 
 Connected the existing `build_redacted_error_summary(...)` helper to the
