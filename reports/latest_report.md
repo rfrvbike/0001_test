@@ -1,5 +1,33 @@
 # latest_report.md
 
+## 2026-06-06 Baseline Import Error Investigation
+
+Investigated the previous `origin/main` baseline import errors for
+`x_auto_ops.reference_posts` and `x_auto_ops.yokaze_reference_generation`. The
+latest `origin/main` now contains both modules, so no code fix was needed in
+this branch. No X API call, HTTP communication, credential read, `.env` edit,
+LiveMode enablement, posting, or write endpoint was performed.
+
+### Added Files
+
+- `reports/baseline_import_error_investigation.md`
+
+### Findings
+
+- current `origin/main` includes `x_auto_ops/reference_posts.py`
+- current `origin/main` includes `x_auto_ops/yokaze_reference_generation.py`
+- both were added by `55dc607 chore: add safe local tooling files`
+- the earlier failure was caused by an outdated worktree / moving baseline
+- RealCredentialLoader planning changes did not cause the import errors
+
+### Verification
+
+```text
+python -m unittest discover -s tests -v
+Ran 183 tests
+OK
+```
+
 ## 2026-06-06 Redacted Error Summary Mock Pipeline Integration
 
 Connected the existing `build_redacted_error_summary(...)` helper to the
