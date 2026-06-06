@@ -1,5 +1,49 @@
 # latest_report.md
 
+## 2026-06-06 First Minimal Live API Test Plan
+
+Created a planning-only document for the first future minimal live X API
+connectivity test. No X API call, HTTP communication, HTTP library use,
+credential lookup, `.env` change, LiveMode enablement, real data fetch, CSV
+live output, or posting was performed.
+
+### Added Files
+
+- `docs/first_minimal_live_api_test_plan.md`
+
+### Changed Files
+
+- `reports/latest_report.md`
+
+### Plan Summary
+
+- fixed the first-live test scope to one read-only recent-search request
+- limited the first-live envelope to one genre, one query, `max_results=10`,
+  `max_pages=1`, no retry execution, no pagination execution, no live CSV,
+  and redacted summary only
+- required explicit user approval before any future live test
+- required `dry_run=false`, `live_mode=true`, `credential_loader=real`,
+  `transport=live`, `http_client=live`, `read_only_recent_search=true`, and
+  `write_actions=false` before live execution
+- defined success criteria for transport success, data success, and reviewed
+  empty-result success
+- defined fail-closed stop conditions for missing approval, credentials,
+  disabled live components, write endpoints, scope expansion, raw output risk,
+  auth errors, rate limits, timeout, network, JSON, and schema errors
+- defined the redacted live report allowlist and blocked raw/credential fields
+- documented rollback to `live_mode=false`, `transport=mock`,
+  `credential_loader=fake`, `http_client=disabled`, and `dry_run=true`
+
+### Verification
+
+Unittest:
+
+```text
+Ran 280 tests in 0.740s
+
+OK
+```
+
 ## 2026-06-06 Redacted Error Summary Mock Pipeline Integration
 
 Connected the existing `build_redacted_error_summary(...)` helper to the
