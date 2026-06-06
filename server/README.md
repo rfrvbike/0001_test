@@ -68,6 +68,30 @@ or:
 npm run start:server
 ```
 
+## Test
+
+Normally, run the stock analyzer test from the repository root:
+
+```powershell
+npm test
+```
+
+If `npm` is not available on `PATH`, run the same test script directly with Node:
+
+```powershell
+node tests/stock-analyzer.test.js
+```
+
+In environments such as Codex where a dedicated Node executable path is available,
+use that executable to run the same JavaScript test file:
+
+```powershell
+<path-to-node.exe> tests/stock-analyzer.test.js
+```
+
+This test suite uses mock/stubbed responses for external data paths and must not
+connect to the real J-Quants API.
+
 ## URLs
 
 ```text
