@@ -32,6 +32,12 @@ dating_assistant/data/local/real_profiles/*
 dating_assistant/outputs/local/*
 !dating_assistant/outputs/local/.gitkeep
 dating_assistant/reports/archive_staging_report.md
+
+# Local/generated reports
+reports/codex_report_*.md
+reports/reference_posts_report.md
+reports/yokaze_reference_generation_report.md
+reports/*.png
 data/oauth2_*.local.json
 data/*token*.local.json
 data/*secret*.local.json
