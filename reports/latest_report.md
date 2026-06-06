@@ -1,5 +1,46 @@
 # latest_report.md
 
+## 2026-06-06 Refresh Planning PRs Review
+
+Reviewed how to refresh, recreate, close, or supersede pending X API planning
+PRs before any Live implementation work. This was a review/report-only change.
+No PR merge, PR close, direct `main` push, HTTP communication, X API call,
+credential lookup, `.env` change, LiveMode enablement, real data fetch, write
+endpoint, or posting was performed.
+
+### Added Files
+
+- `reports/refresh_planning_prs_review.md`
+
+### Changed Files
+
+- `reports/latest_report.md`
+
+### Review Summary
+
+- PR #3 should be recreated from latest `origin/main` because the current branch
+  has strong mixed diff
+- PR #4 should be recreated from latest `origin/main` because the current branch
+  has strong mixed diff
+- PR #5 is a close/supersede candidate because latest `origin/main` passes the
+  full unittest suite
+- PR #6 through PR #9 should be refreshed or recreated to remove `.gitignore`
+  divergence before merge
+- PR #10 and PR #11 are report-only merge candidates after GitHub Files changed
+  confirmation
+- Live implementation should wait until planning PRs are merged, refreshed, or
+  intentionally closed
+
+### Verification
+
+Unittest:
+
+```text
+Ran 280 tests in 0.860s
+
+OK
+```
+
 ## 2026-06-06 Redacted Error Summary Mock Pipeline Integration
 
 Connected the existing `build_redacted_error_summary(...)` helper to the
