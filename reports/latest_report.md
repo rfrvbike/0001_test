@@ -7206,3 +7206,122 @@ Dry-run interaction:
   empty if a future module import fails.
 - Full browser network inspection is still limited by the in-app Browser API,
   but DOM, console, root mount, and UI button smoke checks passed.
+
+# 2026-06-06 Final Operation Checklist
+
+## Final Cleanup Summary
+
+Work No.39-62 completed cleanup and verification for `dating_assistant`,
+reference tooling, `excel_daily_poster`, and repository cleanup.
+
+Final repository state at the start of Work No.63:
+
+- `main` and `origin/main` are synchronized.
+- No staged changes.
+- No untracked files.
+- `dating_assistant` local real data remains outside Git.
+- `outputs/local` remains outside Git.
+- Real profile YAML and partner real data YAML are not Git-managed.
+- token, secret, credential, and `.env` files are not Git-managed.
+
+## Project Completion Status
+
+### dating_assistant
+
+- Confirmed local YAML workflow for one real-profile rehearsal.
+- Confirmed partner creation, first-message suggestions, `partner-mark-sent`,
+  `add-turn`, `generate-reply`, and the manual send recording loop.
+- Documented message polishing rules for shorter and more natural candidates.
+- Kept the workflow manual-first: no autosend, no external posting, and no real
+  LLM API calls.
+
+### reference tooling
+
+- Local and mock workflow is documented.
+- Live/provider paths are blocked unless explicit opt-in is used.
+- `X_BEARER_TOKEN` and `.env` are not used by normal local/mock CLI paths.
+- Related tests passed in the latest verification run.
+
+### excel_daily_poster
+
+- Added Excel/CSV queue workflow, OAuth helper/local callback, and scripts.
+- Token and state local JSON files stay outside Git.
+- Dry-run-first and explicit confirmation rules are documented.
+- No real X posting was performed in tests.
+
+### repo_cleanup
+
+- Reviewed and removed leftover untracked files.
+- Final untracked file list is empty.
+- No tracked files were deleted during cleanup.
+
+## Pre-Operation Checklist
+
+### dating_assistant
+
+- Do not save screenshots or face photos.
+- Do not save real name, workplace, school, LINE ID, SNS ID, address, phone
+  number, or email.
+- Save real profiles only under `dating_assistant/data/local/real_profiles/`.
+- Save partner real data only under `dating_assistant/data/local/partners/`.
+- Review every suggested message manually before sending.
+- Keep suggested messages short, natural, and true to what the user can actually
+  say.
+- After manual sending, record only local state with `partner-mark-sent`.
+
+### excel_daily_poster
+
+- Do not Git-manage real CSV queues.
+- Do not Git-manage token or state local JSON files.
+- Run dry-run checks before any live action.
+- Use live posting only after explicit manual confirmation.
+- Keep production/local batch files outside Git.
+
+### reference tooling
+
+- Use local/mock workflow first.
+- Do not rely on `.env` or `X_BEARER_TOKEN` to silently enter live/provider
+  paths.
+- Use live/provider paths only with explicit opt-in and reviewed settings.
+
+## Main Test Commands
+
+`dating_assistant`:
+
+```text
+cd C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test\dating_assistant
+python -m unittest discover -s tests -v
+```
+
+Repository root:
+
+```text
+cd C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test
+python -m unittest tests.test_reference_posts -v
+python -m unittest tests.test_yokaze_reference_generation -v
+python -m unittest tests.test_manual_reference_posts_import -v
+python -m unittest tests.test_excel_daily_poster -v
+```
+
+Use the bundled Codex Python runtime if `python` is not available on PATH:
+
+```text
+C:\Users\oyue_\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe
+```
+
+## Latest Verification Results
+
+- `dating_assistant` unittest: Ran 108 tests / OK.
+- `tests.test_reference_posts`: OK.
+- `tests.test_yokaze_reference_generation`: OK.
+- `tests.test_manual_reference_posts_import`: OK.
+- `tests.test_excel_daily_poster`: Ran 94 tests / OK.
+
+## Remaining Decisions
+
+- Treat the repository cleanup as complete if the final Git and test checks stay
+  green.
+- Start actual operation only with local-only data handling and manual send
+  confirmation.
+- Recreate sample CSV or Discord export tooling only as separate future work,
+  with safe dummy data and explicit privacy controls.
