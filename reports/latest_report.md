@@ -1,5 +1,40 @@
 # latest_report.md
 
+## 2026-06-06 LiveHttpClient Implementation Plan
+
+Created a planning-only document for safely implementing `LiveHttpClient` in
+the X API buzz post extraction system. No live HTTP communication, X API call,
+real credential read, `.env` edit, LiveMode enablement, posting, or write
+endpoint was performed.
+
+### Added Files
+
+- `docs/live_http_client_implementation_plan.md`
+
+### Changed Files
+
+- `reports/latest_report.md`
+
+### Plan Summary
+
+- keep `LiveHttpClient` fail-closed until explicit live approval
+- preserve one-request / one-response behavior
+- keep retry and pagination outside the HTTP client
+- keep credential loading outside the HTTP client
+- do not log or report header values, bearer tokens, response bodies, raw JSON,
+  query text, post text, usernames, author IDs, or post ID lists
+- map timeout, network, auth, rate limit, server, client, JSON parse, schema,
+  disabled, and unknown errors into safe diagnostics
+- use mock/disabled paths for tests and CI until live implementation is approved
+
+### Verification
+
+```text
+python -m unittest discover -s tests -v
+Ran 280 tests
+OK
+```
+
 ## 2026-06-06 Redacted Error Summary Mock Pipeline Integration
 
 Connected the existing `build_redacted_error_summary(...)` helper to the
