@@ -1,5 +1,46 @@
 # latest_report.md
 
+## 2026-06-06 Superseded PR Close Check
+
+Confirmed that old PR #11, PR #12, and PR #13 can be treated as close or
+supersede candidates because their replacement PRs (#14, #15, and #16) and the
+post-merge sync PR (#17) are merged into latest `origin/main`. No PR close, PR
+merge, direct `main` push, GitHub manual conflict resolution, HTTP
+communication, X API call, credential lookup, `.env` change, LiveMode
+enablement, real data fetch, write endpoint, or posting was performed.
+
+### Added Files
+
+- `reports/superseded_pr_close_check.md`
+
+### Changed Files
+
+- `reports/latest_report.md`
+
+### Replacement Artifacts Confirmed
+
+- PR #14 replacement for old PR #11: `reports/pr_final_pre_merge_check.md`
+- PR #15 replacement for old PR #12: `reports/refresh_planning_prs_review.md`
+- PR #16 replacement for old PR #13: `reports/merge_readiness_confirmation.md`
+- PR #17 post-merge verification: `reports/post_merge_sync_review.md`
+- Combined history: `reports/latest_report.md`
+
+### Close/Supersede Decision
+
+- old PR #11: close/supersede candidate, replaced by PR #14
+- old PR #12: close/supersede candidate, replaced by PR #15
+- old PR #13: close/supersede candidate, replaced by PR #16
+
+### Verification
+
+Unittest:
+
+```text
+Ran 280 tests in 1.275s
+
+OK
+```
+
 ## 2026-06-06 Post-Merge Main Sync and Superseded PR Review
 
 Confirmed latest `origin/main` after PR #10, PR #14, PR #15, and PR #16 were
