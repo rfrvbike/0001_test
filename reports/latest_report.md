@@ -1,5 +1,47 @@
 # latest_report.md
 
+## 2026-06-06 Post-Merge Main Sync and Superseded PR Review
+
+Confirmed latest `origin/main` after PR #10, PR #14, PR #15, and PR #16 were
+merged. The merged report artifacts remain present, `reports/latest_report.md`
+has no conflict markers, and old PR #11, PR #12, and PR #13 can be treated as
+close/supersede candidates because their replacement PRs are already merged.
+No PR merge, PR close, direct `main` push, GitHub manual conflict resolution,
+HTTP communication, X API call, credential lookup, `.env` change, LiveMode
+enablement, real data fetch, write endpoint, or posting was performed.
+
+### Added Files
+
+- `reports/post_merge_sync_review.md`
+
+### Changed Files
+
+- `reports/latest_report.md`
+
+### Confirmed Merged Artifacts
+
+- PR #10: `reports/live_merge_order_review.md`
+- PR #14: `reports/pr_final_pre_merge_check.md`
+- PR #15: `reports/refresh_planning_prs_review.md`
+- PR #16: `reports/merge_readiness_confirmation.md`
+- Combined history: `reports/latest_report.md`
+
+### Superseded PR Decision
+
+- old PR #11: close/supersede candidate, replaced by PR #14
+- old PR #12: close/supersede candidate, replaced by PR #15
+- old PR #13: close/supersede candidate, replaced by PR #16
+
+### Verification
+
+Unittest:
+
+```text
+Ran 280 tests in 0.768s
+
+OK
+```
+
 ## 2026-06-06 Merge Readiness Confirmation Refresh
 
 Refreshed the PR #13 report onto latest `origin/main` after PR #10, PR #14,
