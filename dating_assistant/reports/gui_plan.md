@@ -258,6 +258,13 @@ last_human_confirmed_action: null
   - 候補確認
 - 自動送信なし、mark-sentは確認チェック付きにする。
 
+起動例:
+
+```powershell
+cd "C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test\dating_assistant"
+python -m streamlit run gui_streamlit_app.py
+```
+
 ### Phase 2
 
 - 会話履歴インポートのパーサーを独立モジュール化する。
