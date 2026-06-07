@@ -7,9 +7,11 @@ from gui_helpers import (
     append_conversation_turns_to_partner,
     build_partner_label,
     build_partner_creation_preview,
+    build_generation_status_message,
     build_partner_summary,
     build_conversation_import_preview,
     build_profile_save_preview,
+    can_generate_suggestion,
     build_real_profile_from_form,
     detect_conversation_safety_warnings,
     detect_duplicate_turn_sequence,
@@ -17,6 +19,8 @@ from gui_helpers import (
     format_conversation_history,
     format_pending_suggestions,
     format_timeline_items,
+    generate_suggestion_for_gui,
+    get_generation_mode_for_partner,
     get_real_profile_path,
     list_real_profiles_for_gui,
     load_real_profile_for_gui,
@@ -28,7 +32,7 @@ from gui_helpers import (
     validate_imported_turns,
     validate_profile_form,
 )
-from src.models import ActivityEvent, ConversationTurn, PartnerRecord, PendingSuggestion
+from src.models import ActivityEvent, ConversationTurn, MessageState, PartnerProfile, PartnerRecord, PendingSuggestion
 from src.partner_store import load_partner, save_partner
 
 
@@ -336,6 +340,84 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(stored.pending_suggestions, [])
         self.assertEqual(stored.message_state.next_action, "初回候補生成待ち")
         self.assertTrue(any(event.event_type == "partner_created" for event in stored.activity_log))
+
+    def test_generation_mode_allows_first_message_for_new_profile(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="new_profile",
+            profile=PartnerProfile(profile_text="カフェが好きです。", hobbies=["カフェ"]),
+        )
+
+        self.assertEqual(get_generation_mode_for_partner(partner), "first")
+        self.assertTrue(can_generate_suggestion(partner))
+        self.assertIn("初回メッセージ候補", build_generation_status_message(partner))
+
+    def test_generation_mode_allows_reply_when_partner_waits_for_user(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            conversation=[ConversationTurn("partner", "カフェ好きです", "2026-06-07T10:00:00+09:00")],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+
+        self.assertEqual(get_generation_mode_for_partner(partner), "reply")
+        self.assertTrue(can_generate_suggestion(partner))
+        self.assertIn("返信候補", build_generation_status_message(partner))
+
+    def test_generation_mode_blocks_pending_waiting_reply_and_archived(self):
+        pending = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            pending_suggestions=[PendingSuggestion("suggestion_001", "reply", "text", "2026-06-07T10:00:00+09:00")],
+        )
+        waiting = PartnerRecord(
+            partner_id="partner_002",
+            display_name="sample",
+            message_state=MessageState(awaiting_partner_reply=True),
+        )
+        archived = PartnerRecord(partner_id="partner_003", display_name="sample", status="archived")
+
+        self.assertEqual(get_generation_mode_for_partner(pending), "blocked")
+        self.assertFalse(can_generate_suggestion(pending))
+        self.assertIn("pending_suggestions", build_generation_status_message(pending))
+        self.assertEqual(get_generation_mode_for_partner(waiting), "blocked")
+        self.assertFalse(can_generate_suggestion(waiting))
+        self.assertIn("相手の返信待ち", build_generation_status_message(waiting))
+        self.assertEqual(get_generation_mode_for_partner(archived), "blocked")
+        self.assertFalse(can_generate_suggestion(archived))
+        self.assertIn("archived", build_generation_status_message(archived))
+
+    def test_generate_suggestion_for_gui_saves_first_and_reply_without_external_api(self):
+        first = PartnerRecord(
+            partner_id="partner_001",
+            display_name="first",
+            status="new_profile",
+            profile=PartnerProfile(profile_text="カフェが好きです。", hobbies=["カフェ"]),
+        )
+        reply = PartnerRecord(
+            partner_id="partner_002",
+            display_name="reply",
+            status="chatting",
+            profile=PartnerProfile(profile_text="カフェが好きです。", hobbies=["カフェ"]),
+            conversation=[ConversationTurn("partner", "カフェもご飯も好きです", "2026-06-07T10:00:00+09:00")],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+        save_partner(first)
+        save_partner(reply)
+
+        first_result = generate_suggestion_for_gui("partner_001")
+        reply_result = generate_suggestion_for_gui("partner_002")
+        first_stored = load_partner("partner_001")
+        reply_stored = load_partner("partner_002")
+
+        self.assertEqual(first_result["mode"], "first")
+        self.assertEqual(first_stored.status, "first_message_suggested")
+        self.assertEqual(first_stored.pending_suggestions[0].purpose, "first")
+        self.assertEqual(reply_result["mode"], "reply")
+        self.assertEqual(reply_stored.pending_suggestions[0].purpose, "reply")
+        self.assertEqual(reply_stored.message_state.next_action, "返信候補を確認して送る")
 
 
 if __name__ == "__main__":

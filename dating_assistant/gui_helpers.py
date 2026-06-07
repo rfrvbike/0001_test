@@ -7,10 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from src.activity_log import add_activity_event
+from src.app_core import generate
 from src.conversation_planner import estimate_partner_temperature
-from src.models import PartnerNote, PartnerRecord, TargetProfile
+from src.loaders import load_user_profile
+from src.models import ConversationTurn, GenerationRequest, PartnerNote, PartnerRecord, TargetProfile
 from src.partner_store import list_partners, load_partner
-from src.models import ConversationTurn
 from src.partner_manager import create_partner_from_target_profile, save_updated_partner
 from src.real_profile_manager import (
     create_real_profile,
@@ -20,7 +21,7 @@ from src.real_profile_manager import (
     load_real_profile,
     validate_real_profile_label,
 )
-from src.suggestion_manager import get_pending_suggestions
+from src.suggestion_manager import add_suggestion, get_pending_suggestions
 from src.timeline_builder import build_timeline_events
 
 PROFILE_SAFETY_PATTERNS = {
@@ -125,6 +126,85 @@ def format_timeline_items(partner: PartnerRecord, limit: int = 50) -> list[dict[
         }
         for event in events
     ]
+
+
+def get_generation_mode_for_partner(partner: PartnerRecord) -> str:
+    if partner.status == "archived":
+        return "blocked"
+    if get_pending_suggestions(partner):
+        return "blocked"
+    if partner.message_state.awaiting_partner_reply:
+        return "blocked"
+    if not partner.conversation:
+        if partner.profile.profile_text.strip() or partner.profile.hobbies or partner.profile.photos_memo:
+            return "first"
+        return "blocked"
+    latest_partner = next((turn for turn in reversed(partner.conversation) if turn.speaker == "partner"), None)
+    if latest_partner and partner.message_state.awaiting_user_action:
+        return "reply"
+    return "blocked"
+
+
+def build_generation_status_message(partner: PartnerRecord) -> str:
+    pending_count = len(get_pending_suggestions(partner))
+    if partner.status == "archived":
+        return "archivedのため候補生成できません。"
+    if pending_count:
+        return "既存のpending_suggestionsがあります。確認または破棄してから生成してください。"
+    if partner.message_state.awaiting_partner_reply:
+        return "現在は相手の返信待ちです。新しい候補は生成しません。"
+    mode = get_generation_mode_for_partner(partner)
+    if mode == "first":
+        return "初回メッセージ候補を生成できます。自動送信ではありません。"
+    if mode == "reply":
+        return "返信候補を生成できます。自動送信ではありません。"
+    return "候補生成に必要なプロフィール情報または相手発話が不足しています。"
+
+
+def can_generate_suggestion(partner: PartnerRecord) -> bool:
+    return get_generation_mode_for_partner(partner) in {"first", "reply"}
+
+
+def generate_suggestion_for_gui(partner_id: str) -> dict[str, Any]:
+    partner = load_partner(partner_id)
+    mode = get_generation_mode_for_partner(partner)
+    if mode not in {"first", "reply"}:
+        raise ValueError(build_generation_status_message(partner))
+    purpose = "first_message" if mode == "first" else "reply"
+    request = GenerationRequest(
+        target_profile=_target_from_partner(partner),
+        user_profile=load_user_profile(),
+        conversation_history=list(partner.conversation),
+        purpose=purpose,
+        current_stage="first_message" if mode == "first" else "auto",
+    )
+    result = generate(request)
+    text = result.best_message
+    partner.analysis.partner_temperature = result.partner_temperature
+    partner.analysis.safe_topics = list(result.safe_topics)
+    partner.analysis.light_only_topics = list(result.light_only_topics)
+    partner.analysis.avoid_topics = list(result.avoid_topics)
+    partner.analysis.next_strategy = result.recommended_strategy
+    partner.analysis.last_suggested_message = text
+    suggestion = add_suggestion(
+        partner,
+        purpose="first" if mode == "first" else "reply",
+        text=text,
+        source="gui-generate-first" if mode == "first" else "gui-generate-reply",
+        safety_result="OK",
+    )
+    if mode == "first":
+        partner.status = "first_message_suggested"
+        save_updated_partner(partner)
+    elif partner.status in {"new_profile", "first_message_sent", "first_message_suggested"}:
+        partner.status = "chatting"
+        save_updated_partner(partner)
+    return {
+        "mode": mode,
+        "suggestion_id": suggestion.suggestion_id,
+        "text": suggestion.text,
+        "status": suggestion.status,
+    }
 
 
 def split_form_list(value: str) -> list[str]:
@@ -430,3 +510,17 @@ def _update_message_state_from_turn(partner: PartnerRecord, speaker: str, text: 
         partner.message_state.awaiting_user_action = False
         partner.message_state.awaiting_partner_reply = True
         partner.message_state.next_action = "相手の返信待ち"
+
+
+def _target_from_partner(partner: PartnerRecord) -> TargetProfile:
+    profile = partner.profile
+    return TargetProfile(
+        name_or_label=partner.display_name,
+        age=profile.age,
+        profile_text=profile.profile_text,
+        hobbies=list(profile.hobbies),
+        photos_memo=list(profile.photos_memo),
+        location_hint=profile.location_hint,
+        relationship_goal=profile.relationship_goal,
+        free_notes=profile.free_notes,
+    )

@@ -16,13 +16,17 @@ from gui_helpers import (
     build_partner_summary,
     build_conversation_import_preview,
     build_partner_creation_preview,
+    build_generation_status_message,
     build_profile_save_preview,
+    can_generate_suggestion,
     detect_conversation_safety_warnings,
     detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
     format_conversation_history,
     format_pending_suggestions,
     format_timeline_items,
+    generate_suggestion_for_gui,
+    get_generation_mode_for_partner,
     load_partner_choices,
     load_partner_for_view,
     list_real_profiles_for_gui,
@@ -86,6 +90,8 @@ def render_partner_viewer() -> None:
     with st.expander("message_state", expanded=True):
         st.json(summary["message_state"])
 
+    render_generation_controls(partner)
+
     tab_history, tab_suggestions, tab_timeline = st.tabs(["会話履歴", "未送信候補", "timeline"])
 
     with tab_history:
@@ -121,6 +127,26 @@ def render_partner_viewer() -> None:
             st.info("timeline は空です。")
         else:
             st.dataframe(timeline, width="stretch", hide_index=True)
+
+
+def render_generation_controls(partner) -> None:
+    st.subheader("候補生成")
+    mode = get_generation_mode_for_partner(partner)
+    mode_label = {"first": "初回メッセージ候補", "reply": "返信候補", "blocked": "生成不可"}[mode]
+    st.write(f"**現在:** {build_generation_status_message(partner)}")
+    st.write(f"**生成タイプ:** {mode_label}")
+    st.caption("候補生成はlocalのpending_suggestionsへ保存するだけです。自動送信ではありません。")
+    confirm = st.checkbox("自動送信ではないことを確認し、候補をlocal保存する", key=f"generate_confirm_{partner.partner_id}")
+    if st.button(f"{mode_label}を生成する", disabled=not (can_generate_suggestion(partner) and confirm), key=f"generate_button_{partner.partner_id}"):
+        try:
+            generated = generate_suggestion_for_gui(partner.partner_id)
+        except ValueError as error:
+            st.error(str(error))
+            return
+        st.success(f"{generated['suggestion_id']} をpending_suggestionsへ保存しました。")
+        st.text_area("生成された候補", generated["text"], height=140, disabled=True, key=f"generated_{generated['suggestion_id']}")
+        st.info("送信済み記録ボタンは次作業以降で追加します。")
+        st.rerun()
 
 
 def render_profile_registration() -> None:

@@ -246,6 +246,14 @@ last_human_confirmed_action: null
 
 ## 最小GUI実装計画
 
+### 作業No.108
+
+- partnerビューに「候補生成」セクションを追加する。
+- partner状態から初回メッセージ候補と返信候補を自動判定し、既存のlocal生成ロジックだけを呼び出す。
+- 生成結果は `pending_suggestions` にlocal保存する。自動送信、外部投稿、実LLM API呼び出しは行わない。
+- `pending_suggestions` が残っている場合、相手返信待ち、archived、情報不足の場合は新規生成を止める。
+- `partner-mark-sent` 相当のボタンは今回追加しない。
+
 ### Phase 1
 
 - `dating_assistant/gui_app.py` などにStreamlitアプリを追加する。
