@@ -6,6 +6,7 @@ from unittest.mock import patch
 from gui_helpers import (
     append_conversation_turns_to_partner,
     build_partner_label,
+    build_partner_creation_preview,
     build_partner_summary,
     build_conversation_import_preview,
     build_profile_save_preview,
@@ -17,9 +18,12 @@ from gui_helpers import (
     format_pending_suggestions,
     format_timeline_items,
     get_real_profile_path,
+    list_real_profiles_for_gui,
+    load_real_profile_for_gui,
     load_partner_choices,
     parse_conversation_paste,
     real_profile_exists,
+    save_partner_from_profile,
     save_real_profile_from_form,
     validate_imported_turns,
     validate_profile_form,
@@ -267,6 +271,71 @@ class GuiHelperTests(unittest.TestCase):
         preview = build_conversation_import_preview(partner, turns, ["重複警告"])
         self.assertEqual(preview["追加予定turn数"], 2)
         self.assertIn("重複警告", preview["警告一覧"])
+
+    def test_list_and_load_real_profiles_for_gui(self):
+        save_real_profile_from_form(
+            {
+                "label": "profile_001",
+                "display_name": "sample",
+                "profile_text": "カフェが好きです。",
+                "photo_memo": "",
+                "interests": "カフェ",
+            }
+        )
+
+        profiles = list_real_profiles_for_gui()
+        path, profile = load_real_profile_for_gui("profile_001")
+
+        self.assertEqual(profiles[0]["label"], "profile_001")
+        self.assertIn("profile_001", profiles[0]["display_label"])
+        self.assertTrue(path.name.endswith("profile_001.yaml"))
+        self.assertEqual(profile.profile_text, "カフェが好きです。")
+
+    def test_build_partner_creation_preview_does_not_copy_full_profile_text(self):
+        save_real_profile_from_form(
+            {
+                "label": "profile_001",
+                "display_name": "sample",
+                "profile_text": "長いプロフィール本文です。",
+                "photo_memo": "",
+                "interests": "カフェ",
+                "area": "東京",
+            }
+        )
+
+        preview = build_partner_creation_preview("profile_001", "表示名", "pairs", "初回作成")
+
+        self.assertEqual(preview["source_real_profile"], "profile_001")
+        self.assertEqual(preview["display_name"], "表示名")
+        self.assertEqual(preview["app_name"], "pairs")
+        self.assertEqual(preview["status"], "new_profile")
+        self.assertEqual(preview["conversation_history"], "空")
+        self.assertEqual(preview["pending_suggestions"], "空")
+        self.assertNotIn("長いプロフィール本文です。", str(preview))
+
+    def test_save_partner_from_profile_generates_next_id_and_initializes_empty_state(self):
+        save_partner(PartnerRecord(partner_id="partner_001", display_name="archived", status="archived"))
+        save_real_profile_from_form(
+            {
+                "label": "profile_001",
+                "display_name": "sample",
+                "profile_text": "カフェが好きです。",
+                "photo_memo": "",
+                "interests": "カフェ",
+                "app_name": "pairs",
+            }
+        )
+
+        partner = save_partner_from_profile("profile_001", "表示名", "pairs", "メモ")
+        stored = load_partner(partner.partner_id)
+
+        self.assertEqual(partner.partner_id, "partner_002")
+        self.assertEqual(stored.display_name, "表示名")
+        self.assertEqual(stored.app_name, "pairs")
+        self.assertEqual(stored.conversation, [])
+        self.assertEqual(stored.pending_suggestions, [])
+        self.assertEqual(stored.message_state.next_action, "初回候補生成待ち")
+        self.assertTrue(any(event.event_type == "partner_created" for event in stored.activity_log))
 
 
 if __name__ == "__main__":

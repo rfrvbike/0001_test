@@ -8,14 +8,16 @@ from typing import Any
 
 from src.activity_log import add_activity_event
 from src.conversation_planner import estimate_partner_temperature
-from src.models import PartnerRecord
+from src.models import PartnerNote, PartnerRecord, TargetProfile
 from src.partner_store import list_partners, load_partner
 from src.models import ConversationTurn
-from src.partner_manager import save_updated_partner
+from src.partner_manager import create_partner_from_target_profile, save_updated_partner
 from src.real_profile_manager import (
     create_real_profile,
     detect_privacy_warnings,
     get_real_profile_dir,
+    list_real_profiles,
+    load_real_profile,
     validate_real_profile_label,
 )
 from src.suggestion_manager import get_pending_suggestions
@@ -216,6 +218,59 @@ def save_real_profile_from_form(form: dict[str, Any]) -> tuple[Path, list[str]]:
         raise ValueError("\n".join(errors))
     data = build_real_profile_from_form(form)
     return create_real_profile(**data)
+
+
+def list_real_profiles_for_gui() -> list[dict[str, Any]]:
+    profiles = []
+    for path, profile in list_real_profiles():
+        label = profile.name_or_label or path.stem
+        profiles.append(
+            {
+                "label": label,
+                "path": path,
+                "display_label": f"{label} / age:{profile.age or '-'} / hobbies:{', '.join(profile.hobbies[:3]) if profile.hobbies else '-'}",
+            }
+        )
+    return profiles
+
+
+def load_real_profile_for_gui(label: str) -> tuple[Path, TargetProfile]:
+    return load_real_profile(label=label)
+
+
+def build_partner_creation_preview(label: str, display_name: str, app_name: str = "", source_memo: str = "") -> dict[str, Any]:
+    path, profile = load_real_profile_for_gui(label)
+    return {
+        "source_real_profile": label,
+        "source_path": str(path),
+        "display_name": display_name.strip() or profile.name_or_label or label,
+        "app_name": app_name.strip() or "-",
+        "source_memo": source_memo.strip() or "-",
+        "status": "new_profile",
+        "next_action": "初回候補生成待ち",
+        "conversation_history": "空",
+        "pending_suggestions": "空",
+        "profile_summary": {
+            "age": profile.age,
+            "hobbies": profile.hobbies,
+            "location_hint": profile.location_hint,
+            "profile_text_chars": len(profile.profile_text),
+        },
+        "保存先": "data/local/partners/<next partner_id>.yaml",
+    }
+
+
+def save_partner_from_profile(label: str, display_name: str, app_name: str = "", source_memo: str = "") -> PartnerRecord:
+    _path, profile = load_real_profile_for_gui(label)
+    chosen_display_name = display_name.strip() or profile.name_or_label or label
+    partner = create_partner_from_target_profile(profile, display_name=chosen_display_name, app_name=app_name.strip())
+    partner.message_state.next_action = "初回候補生成待ち"
+    if source_memo.strip():
+        partner.notes.append(
+            PartnerNote(text=f"source memo: {source_memo.strip()}", created_at=partner.created_at)
+        )
+    save_updated_partner(partner)
+    return partner
 
 
 def parse_conversation_paste(text: str) -> tuple[list[dict[str, Any]], list[str]]:

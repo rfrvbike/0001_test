@@ -15,6 +15,7 @@ from gui_helpers import (
     build_partner_label,
     build_partner_summary,
     build_conversation_import_preview,
+    build_partner_creation_preview,
     build_profile_save_preview,
     detect_conversation_safety_warnings,
     detect_duplicate_turn_sequence,
@@ -24,9 +25,11 @@ from gui_helpers import (
     format_timeline_items,
     load_partner_choices,
     load_partner_for_view,
+    list_real_profiles_for_gui,
     parse_conversation_paste,
     real_profile_exists,
     save_real_profile_from_form,
+    save_partner_from_profile,
     validate_imported_turns,
     validate_profile_form,
 )
@@ -37,13 +40,18 @@ def main() -> None:
     st.title("dating_assistant")
     st.caption("ローカルGUI")
 
-    tab_viewer, tab_profile, tab_import = st.tabs(["partnerビュー", "プロフィール登録", "会話履歴インポート"])
+    tab_viewer, tab_profile, tab_partner_create, tab_import = st.tabs(
+        ["partnerビュー", "プロフィール登録", "プロフィールからpartner作成", "会話履歴インポート"]
+    )
 
     with tab_viewer:
         render_partner_viewer()
 
     with tab_profile:
         render_profile_registration()
+
+    with tab_partner_create:
+        render_partner_creation()
 
     with tab_import:
         render_conversation_import()
@@ -180,7 +188,38 @@ def render_profile_registration() -> None:
         if save_warnings:
             st.warning("保存内容に注意語が含まれます: " + " / ".join(save_warnings))
 
-    st.info("partner作成は次作業で追加します。")
+    st.info("保存後は「プロフィールからpartner作成」タブでpartner化できます。")
+
+
+def render_partner_creation() -> None:
+    st.subheader("プロフィールからpartner作成")
+
+    profiles = list_real_profiles_for_gui()
+    if not profiles:
+        st.info("保存済みreal_profileがありません。先にプロフィール登録を行ってください。")
+        return
+
+    profile_options = {profile["display_label"]: profile["label"] for profile in profiles}
+    with st.form("partner_creation_form"):
+        selected_profile = st.selectbox("real_profile選択", options=list(profile_options.keys()))
+        display_name = st.text_input("partner display_name")
+        app_name = st.text_input("partner app_name")
+        source_memo = st.text_area("source memo", height=80)
+        confirm_create = st.checkbox("保存内容を確認し、partner YAMLとして保存する")
+        submitted = st.form_submit_button("partnerを作成")
+
+    label = profile_options[selected_profile]
+    preview = build_partner_creation_preview(label, display_name=display_name, app_name=app_name, source_memo=source_memo)
+    st.markdown("**保存プレビュー**")
+    st.json(preview)
+
+    if submitted:
+        if not confirm_create:
+            st.error("保存前確認チェックを入れてください。")
+            return
+        partner = save_partner_from_profile(label, display_name=display_name, app_name=app_name, source_memo=source_memo)
+        st.success(f"保存しました: {partner.partner_id}")
+        st.info("返信候補生成とmark-sentは次作業以降で追加します。")
 
 
 def render_conversation_import() -> None:

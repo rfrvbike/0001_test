@@ -285,6 +285,16 @@ python -m streamlit run gui_streamlit_app.py
 - 保存は確認チェック後に `data/local/partners/` 配下の選択partner YAMLへ追記する。
 - 返信候補生成、mark-sent、自動送信、マッチングアプリ操作は今回の範囲外とする。
 
+作業No.107で追加する最小範囲:
+
+- `gui_streamlit_app.py` に「プロフィールからpartner作成」タブを追加する。
+- `data/local/real_profiles/` 配下の保存済みreal_profileを一覧表示し、選択できるようにする。
+- 入力項目は real_profile選択、partner display_name、partner app_name、source memo、保存確認チェックとする。
+- 保存前にsource real_profile、display_name、app_name、初期status、空のconversation_history、空のpending_suggestions、保存先をプレビュー表示する。
+- partner_id採番と保存は既存の `create_partner_from_target_profile` を使い、既存partnerと衝突させない。
+- 保存は確認チェック後に `data/local/partners/` 配下のlocal YAMLのみに行う。
+- 返信候補生成、mark-sent、自動送信、マッチングアプリ操作は今回の範囲外とする。
+
 ### Phase 2
 
 - 会話履歴インポートのパーサーを独立モジュール化する。
