@@ -11,17 +11,23 @@ if str(APP_DIR) not in sys.path:
 import streamlit as st
 
 from gui_helpers import (
+    append_conversation_turns_to_partner,
     build_partner_label,
     build_partner_summary,
+    build_conversation_import_preview,
     build_profile_save_preview,
+    detect_conversation_safety_warnings,
+    detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
     format_conversation_history,
     format_pending_suggestions,
     format_timeline_items,
     load_partner_choices,
     load_partner_for_view,
+    parse_conversation_paste,
     real_profile_exists,
     save_real_profile_from_form,
+    validate_imported_turns,
     validate_profile_form,
 )
 
@@ -31,13 +37,16 @@ def main() -> None:
     st.title("dating_assistant")
     st.caption("ローカルGUI")
 
-    tab_viewer, tab_profile = st.tabs(["partnerビュー", "プロフィール登録"])
+    tab_viewer, tab_profile, tab_import = st.tabs(["partnerビュー", "プロフィール登録", "会話履歴インポート"])
 
     with tab_viewer:
         render_partner_viewer()
 
     with tab_profile:
         render_profile_registration()
+
+    with tab_import:
+        render_conversation_import()
 
 
 def render_partner_viewer() -> None:
@@ -172,6 +181,77 @@ def render_profile_registration() -> None:
             st.warning("保存内容に注意語が含まれます: " + " / ".join(save_warnings))
 
     st.info("partner作成は次作業で追加します。")
+
+
+def render_conversation_import() -> None:
+    st.subheader("会話履歴インポート")
+
+    partners = load_partner_choices(include_archived=False)
+    if not partners:
+        st.info("インポート対象のpartnerがありません。")
+        return
+
+    labels = {build_partner_label(partner): partner.partner_id for partner in partners}
+    with st.form("conversation_import_form"):
+        selected_label = st.selectbox("対象partner選択", options=list(labels.keys()))
+        user_label = st.text_input("自分の発話者ラベル", value="自分")
+        partner_label = st.text_input("相手の発話者ラベル", value="相手")
+        pasted = st.text_area("会話履歴貼り付け欄", height=220)
+        confirm_import = st.checkbox("保存内容を確認し、conversation_historyへ追加する")
+        submitted = st.form_submit_button("会話履歴を保存")
+
+    normalized = _normalize_conversation_labels(pasted, user_label, partner_label)
+    turns, parse_warnings = parse_conversation_paste(normalized)
+    safety_warnings = detect_conversation_safety_warnings(pasted)
+    partner = load_partner_for_view(labels[selected_label])
+    errors = validate_imported_turns(turns, parse_warnings)
+    duplicate_warning = detect_duplicate_turn_sequence(partner, turns)
+    warnings = list(parse_warnings)
+    if safety_warnings:
+        warnings.append("安全チェック: " + " / ".join(safety_warnings))
+    if duplicate_warning:
+        warnings.append("既存conversation_history末尾と完全一致する連続turnです。")
+
+    if turns:
+        st.markdown("**保存プレビュー**")
+        st.json(build_conversation_import_preview(partner, turns, warnings))
+    if errors:
+        for error in errors:
+            st.error(error)
+    if safety_warnings:
+        st.warning("保存前に見直してください: " + " / ".join(safety_warnings))
+    if duplicate_warning:
+        st.warning("既存conversation_history末尾と完全一致する連続turnです。")
+
+    if submitted:
+        if errors:
+            st.error("保存できません。貼り付け内容を確認してください。")
+            return
+        if not confirm_import:
+            st.error("保存前確認チェックを入れてください。")
+            return
+        updated = append_conversation_turns_to_partner(partner.partner_id, turns)
+        st.success(f"保存しました: {updated.partner_id} に {len(turns)} turn 追加")
+        st.info("返信候補生成とmark-sentは次作業以降で追加します。")
+
+
+def _normalize_conversation_labels(text: str, user_label: str, partner_label: str) -> str:
+    replacements = {}
+    if user_label.strip() and user_label.strip() not in {"自分", "user", "me"}:
+        replacements[user_label.strip()] = "自分"
+    if partner_label.strip() and partner_label.strip() not in {"相手", "partner", "you"}:
+        replacements[partner_label.strip()] = "相手"
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        replaced = line
+        for source, target in replacements.items():
+            if stripped.startswith(f"{source}:") or stripped.startswith(f"{source}："):
+                prefix_len = len(source)
+                replaced = f"{target}{stripped[prefix_len:]}"
+                break
+        lines.append(replaced)
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

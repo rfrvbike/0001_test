@@ -275,6 +275,16 @@ python -m streamlit run gui_streamlit_app.py
 - 同じlabelが存在する場合は上書きしない。
 - partner作成、候補生成、mark-sentは今回の範囲外とする。
 
+作業No.106で追加する最小範囲:
+
+- `gui_streamlit_app.py` に「会話履歴インポート」タブを追加する。
+- 対象partner選択、会話履歴貼り付け欄、自分/相手の発話者ラベル、保存確認チェックを用意する。
+- `自分:`, `相手:`, `user:`, `partner:`, `me:`, `you:` の最小形式をturn候補へ変換する。
+- 発話者を判定できない行は警告し、自動保存しない。
+- 保存前に対象partner、追加予定turn数、speakerごとの発話、警告一覧、保存先をプレビュー表示する。
+- 保存は確認チェック後に `data/local/partners/` 配下の選択partner YAMLへ追記する。
+- 返信候補生成、mark-sent、自動送信、マッチングアプリ操作は今回の範囲外とする。
+
 ### Phase 2
 
 - 会話履歴インポートのパーサーを独立モジュール化する。

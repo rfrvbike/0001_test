@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime
 import re
 from pathlib import Path
 from typing import Any
 
+from src.activity_log import add_activity_event
+from src.conversation_planner import estimate_partner_temperature
 from src.models import PartnerRecord
 from src.partner_store import list_partners, load_partner
+from src.models import ConversationTurn
+from src.partner_manager import save_updated_partner
 from src.real_profile_manager import (
     create_real_profile,
     detect_privacy_warnings,
@@ -35,6 +40,15 @@ PROFILE_SAFETY_WORDS = [
     "高校",
     "本名",
 ]
+SPEAKER_ALIASES = {
+    "自分": "user",
+    "user": "user",
+    "me": "user",
+    "相手": "partner",
+    "partner": "partner",
+    "you": "partner",
+}
+SPEAKER_LINE_RE = re.compile(r"^\s*([^:：]+)\s*[:：]\s*(.*)$")
 
 
 def load_partner_choices(include_archived: bool = False) -> list[PartnerRecord]:
@@ -204,6 +218,103 @@ def save_real_profile_from_form(form: dict[str, Any]) -> tuple[Path, list[str]]:
     return create_real_profile(**data)
 
 
+def parse_conversation_paste(text: str) -> tuple[list[dict[str, Any]], list[str]]:
+    turns: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    current: dict[str, Any] | None = None
+    unknown_lines: list[str] = []
+
+    for line_no, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = SPEAKER_LINE_RE.match(line)
+        if match:
+            label = match.group(1).strip()
+            content = match.group(2).strip()
+            speaker = SPEAKER_ALIASES.get(label.lower()) or SPEAKER_ALIASES.get(label)
+            if speaker:
+                if current:
+                    _append_parsed_turn(turns, current)
+                current = {"speaker": speaker, "text": content, "line_no": line_no, "source_label": label}
+            else:
+                unknown_lines.append(f"{line_no}: {raw_line}")
+                if current:
+                    current["text"] = f"{current['text']}\n{raw_line}".strip()
+            continue
+
+        if current:
+            current["text"] = f"{current['text']}\n{raw_line}".strip()
+        else:
+            unknown_lines.append(f"{line_no}: {raw_line}")
+
+    if current:
+        _append_parsed_turn(turns, current)
+    if unknown_lines:
+        warnings.append("発話者を判定できない行があります: " + " / ".join(unknown_lines[:5]))
+    return turns, warnings
+
+
+def validate_imported_turns(turns: list[dict[str, Any]], warnings: list[str] | None = None) -> list[str]:
+    errors = list(warnings or [])
+    if not turns:
+        errors.append("会話履歴を解析できませんでした。")
+    for index, turn in enumerate(turns, start=1):
+        if turn.get("speaker") not in {"user", "partner"}:
+            errors.append(f"{index}件目のspeakerが不正です。")
+        if not str(turn.get("text", "")).strip():
+            errors.append(f"{index}件目の本文が空です。")
+    return errors
+
+
+def detect_conversation_safety_warnings(text: str) -> list[str]:
+    return detect_profile_safety_warnings({"conversation": text})
+
+
+def build_conversation_import_preview(partner: PartnerRecord, turns: list[dict[str, Any]], warnings: list[str]) -> dict[str, Any]:
+    return {
+        "対象partner_id": partner.partner_id,
+        "display_name": partner.display_name,
+        "追加予定turn数": len(turns),
+        "speakerごとの発話数": {
+            "user": sum(1 for turn in turns if turn.get("speaker") == "user"),
+            "partner": sum(1 for turn in turns if turn.get("speaker") == "partner"),
+        },
+        "turns": [
+            {"index": index, "speaker": turn["speaker"], "text": turn["text"]}
+            for index, turn in enumerate(turns, start=1)
+        ],
+        "警告一覧": warnings,
+        "保存先": f"data/local/partners/{partner.partner_id}.yaml",
+    }
+
+
+def detect_duplicate_turn_sequence(partner: PartnerRecord, turns: list[dict[str, Any]]) -> bool:
+    if not turns or len(partner.conversation) < len(turns):
+        return False
+    recent = partner.conversation[-len(turns) :]
+    return all(
+        existing.speaker == turn.get("speaker") and existing.text == str(turn.get("text", ""))
+        for existing, turn in zip(recent, turns)
+    )
+
+
+def append_conversation_turns_to_partner(partner_id: str, turns: list[dict[str, Any]]) -> PartnerRecord:
+    errors = validate_imported_turns(turns)
+    if errors:
+        raise ValueError("\n".join(errors))
+    partner = load_partner(partner_id)
+    timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    for turn in turns:
+        speaker = str(turn["speaker"])
+        text = str(turn["text"]).strip()
+        partner.conversation.append(ConversationTurn(speaker=speaker, text=text, timestamp=timestamp))
+        add_activity_event(partner, "turn_added", f"{speaker}発言をインポート", created_at=timestamp)
+        _update_message_state_from_turn(partner, speaker, text, timestamp)
+    partner.analysis.partner_temperature = estimate_partner_temperature(partner.conversation)
+    return save_updated_partner(partner)
+
+
 def _parse_optional_int(value: Any) -> int | None:
     if value is None:
         return None
@@ -232,3 +343,35 @@ def _build_free_notes(form: dict[str, Any]) -> str | None:
         lines.append("notes:")
         lines.append(notes)
     return "\n".join(lines) if lines else None
+
+
+def _append_parsed_turn(turns: list[dict[str, Any]], current: dict[str, Any]) -> None:
+    text = str(current.get("text", "")).strip()
+    if text:
+        turns.append(
+            {
+                "speaker": current["speaker"],
+                "text": text,
+                "line_no": current["line_no"],
+                "source_label": current["source_label"],
+            }
+        )
+
+
+def _update_message_state_from_turn(partner: PartnerRecord, speaker: str, text: str, timestamp: str) -> None:
+    if speaker == "partner":
+        partner.message_state.last_partner_message = text
+        partner.message_state.last_received_at = timestamp
+        partner.message_state.awaiting_user_action = True
+        partner.message_state.awaiting_partner_reply = False
+        partner.message_state.next_action = "返信候補を生成する"
+        if partner.status == "first_message_sent":
+            previous = partner.status
+            partner.status = "chatting"
+            add_activity_event(partner, "status_updated", f"status: {previous} -> chatting", created_at=timestamp)
+    else:
+        partner.message_state.last_user_message = text
+        partner.message_state.last_sent_at = timestamp
+        partner.message_state.awaiting_user_action = False
+        partner.message_state.awaiting_partner_reply = True
+        partner.message_state.next_action = "相手の返信待ち"

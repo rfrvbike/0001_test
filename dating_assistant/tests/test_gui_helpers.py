@@ -4,22 +4,28 @@ import unittest
 from unittest.mock import patch
 
 from gui_helpers import (
+    append_conversation_turns_to_partner,
     build_partner_label,
     build_partner_summary,
+    build_conversation_import_preview,
     build_profile_save_preview,
     build_real_profile_from_form,
+    detect_conversation_safety_warnings,
+    detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
     format_conversation_history,
     format_pending_suggestions,
     format_timeline_items,
     get_real_profile_path,
     load_partner_choices,
+    parse_conversation_paste,
     real_profile_exists,
     save_real_profile_from_form,
+    validate_imported_turns,
     validate_profile_form,
 )
 from src.models import ActivityEvent, ConversationTurn, PartnerRecord, PendingSuggestion
-from src.partner_store import save_partner
+from src.partner_store import load_partner, save_partner
 
 
 class GuiHelperTests(unittest.TestCase):
@@ -186,6 +192,81 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(validate_profile_form(form), [])
         self.assertEqual(data["profile_text"], "プロフィール文なし。写真メモのみ登録。")
         self.assertEqual(data["photos_memo"], ["公園の写真"])
+
+    def test_parse_conversation_paste_supports_japanese_labels(self):
+        turns, warnings = parse_conversation_paste("自分: はじめまして\n相手: カフェも好きです")
+
+        self.assertEqual(warnings, [])
+        self.assertEqual([turn["speaker"] for turn in turns], ["user", "partner"])
+        self.assertEqual(turns[0]["text"], "はじめまして")
+
+    def test_parse_conversation_paste_supports_multiline_blocks(self):
+        text = "自分：\nはじめまして。\nよろしくお願いします。\n\n相手：\nこちらこそ。"
+
+        turns, warnings = parse_conversation_paste(text)
+
+        self.assertEqual(warnings, [])
+        self.assertEqual(turns[0]["speaker"], "user")
+        self.assertEqual(turns[0]["text"], "はじめまして。\nよろしくお願いします。")
+        self.assertEqual(turns[1]["speaker"], "partner")
+
+    def test_parse_conversation_paste_supports_user_partner_and_me_you(self):
+        turns, warnings = parse_conversation_paste("user: hi\npartner: hello\nme: thanks\nyou: ok")
+
+        self.assertEqual(warnings, [])
+        self.assertEqual([turn["speaker"] for turn in turns], ["user", "partner", "user", "partner"])
+
+    def test_parse_conversation_unknown_lines_warn_and_block_validation(self):
+        turns, warnings = parse_conversation_paste("これは誰の発言かわからない\n自分: hello")
+        errors = validate_imported_turns(turns, warnings)
+
+        self.assertEqual([turn["speaker"] for turn in turns], ["user"])
+        self.assertTrue(any("発話者を判定できない行" in warning for warning in warnings))
+        self.assertTrue(any("発話者を判定できない行" in error for error in errors))
+
+    def test_conversation_import_detects_safety_warnings_and_empty_input(self):
+        warnings = detect_conversation_safety_warnings("LINEと sample@example.com と 090-1234-5678")
+        empty_turns, empty_warnings = parse_conversation_paste("")
+
+        self.assertIn("LINE", warnings)
+        self.assertIn("メールアドレス", warnings)
+        self.assertIn("電話番号", warnings)
+        self.assertIn("会話履歴を解析できませんでした。", validate_imported_turns(empty_turns, empty_warnings))
+
+    def test_append_conversation_turns_to_partner_keeps_existing_history(self):
+        save_partner(
+            PartnerRecord(
+                partner_id="partner_001",
+                display_name="sample",
+                conversation=[ConversationTurn("partner", "既存発言", "2026-06-07T10:00:00+09:00")],
+            )
+        )
+        turns, warnings = parse_conversation_paste("自分: はじめまして\n相手: よろしくお願いします")
+
+        self.assertEqual(validate_imported_turns(turns, warnings), [])
+        updated = append_conversation_turns_to_partner("partner_001", turns)
+        stored = load_partner("partner_001")
+
+        self.assertEqual(len(updated.conversation), 3)
+        self.assertEqual(stored.conversation[0].text, "既存発言")
+        self.assertEqual(stored.conversation[-1].speaker, "partner")
+        self.assertEqual(stored.message_state.next_action, "返信候補を生成する")
+
+    def test_duplicate_turn_sequence_is_detected_but_not_removed(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            conversation=[
+                ConversationTurn("user", "同じ", "2026-06-07T10:00:00+09:00"),
+                ConversationTurn("partner", "同じ返事", "2026-06-07T10:01:00+09:00"),
+            ],
+        )
+        turns, _ = parse_conversation_paste("自分: 同じ\n相手: 同じ返事")
+
+        self.assertTrue(detect_duplicate_turn_sequence(partner, turns))
+        preview = build_conversation_import_preview(partner, turns, ["重複警告"])
+        self.assertEqual(preview["追加予定turn数"], 2)
+        self.assertIn("重複警告", preview["警告一覧"])
 
 
 if __name__ == "__main__":
