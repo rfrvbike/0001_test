@@ -936,6 +936,50 @@ def build_real_profile_summary_for_gui(label: str) -> dict[str, Any]:
     }
 
 
+def format_list_or_empty(values: Any, empty: str = "未設定") -> list[str]:
+    if values is None:
+        return [empty]
+    if isinstance(values, str):
+        items = split_form_list(values)
+    elif isinstance(values, (list, tuple, set)):
+        items = [str(item).strip() for item in values if str(item).strip()]
+    else:
+        item = str(values).strip()
+        items = [item] if item else []
+    return items or [empty]
+
+
+def build_profile_display_sections(label: str) -> dict[str, Any]:
+    _path, profile = load_real_profile_for_gui(label)
+    free_sections = _parse_free_note_sections(profile.free_notes or "")
+    return {
+        "title": "選択中のプロフィール",
+        "summary": [
+            {"label": "表示名", "value": profile.name_or_label or label},
+            {"label": "年齢", "value": profile.age if profile.age is not None else "未設定"},
+            {"label": "エリア", "value": profile.location_hint or "未設定"},
+            {"label": "アプリ", "value": _first_free_note_value(profile.free_notes or "", "app_name") or "未設定"},
+            {"label": "label", "value": label},
+        ],
+        "profile_text": profile.profile_text.strip() or "未設定",
+        "sections": [
+            {"title": "趣味", "items": format_list_or_empty(profile.hobbies)},
+            {"title": "写真メモ", "items": format_list_or_empty(profile.photos_memo, empty="なし")},
+            {
+                "title": "会話に使えそうな話題",
+                "items": format_list_or_empty(free_sections.get("conversation_hooks")),
+            },
+            {
+                "title": "初回メッセージのヒント",
+                "items": format_list_or_empty(free_sections.get("first_message_hints")),
+            },
+            {"title": "避けた方がよい話題", "items": format_list_or_empty(free_sections.get("avoid_topics"))},
+            {"title": "安全メモ", "items": format_list_or_empty(free_sections.get("safety_notes"))},
+        ],
+        "notes": _free_note_body(profile.free_notes or ""),
+    }
+
+
 def find_existing_partners_for_profile(label: str) -> list[dict[str, str]]:
     _path, profile = load_real_profile_for_gui(label)
     matches = []
@@ -946,9 +990,26 @@ def find_existing_partners_for_profile(label: str) -> list[dict[str, str]]:
                     "partner_id": partner.partner_id,
                     "display_name": partner.display_name,
                     "status": partner.status,
+                    "updated_at": partner.updated_at or "-",
+                    "source_real_profile": label,
                 }
             )
     return matches
+
+
+def summarize_existing_partner_candidates(label: str) -> list[dict[str, str]]:
+    candidates = find_existing_partners_for_profile(label)
+    return [
+        {
+            "partner_id": item["partner_id"],
+            "表示名": item["display_name"] or "-",
+            "現在の状態": item["status"] or "-",
+            "最終更新": item.get("updated_at") or "-",
+            "元プロフィール": item.get("source_real_profile") or label,
+            "操作のヒント": "重複作成前にpartnerビューで確認",
+        }
+        for item in candidates
+    ]
 
 
 def build_partner_creation_preview(label: str, display_name: str, app_name: str = "", source_memo: str = "") -> dict[str, Any]:
@@ -970,6 +1031,33 @@ def build_partner_creation_preview(label: str, display_name: str, app_name: str 
             "profile_text_chars": len(profile.profile_text),
         },
         "保存先": "data/local/partners/<next partner_id>.yaml",
+    }
+
+
+def format_partner_preview_for_display(label: str, display_name: str, app_name: str = "", source_memo: str = "") -> dict[str, Any]:
+    _path, profile = load_real_profile_for_gui(label)
+    return {
+        "title": "作成されるpartner",
+        "summary": [
+            {"label": "partner_id", "value": "<next partner_id>"},
+            {"label": "表示名", "value": display_name.strip() or profile.name_or_label or label},
+            {"label": "元プロフィール", "value": label},
+            {"label": "アプリ", "value": app_name.strip() or "未設定"},
+            {"label": "状態", "value": "未開始"},
+            {"label": "初期ステージ", "value": "プロフィール確認済み"},
+        ],
+        "included": [
+            "プロフィール情報",
+            "会話履歴: 空",
+            "未送信候補: 空",
+            "相手別メモ: 空" if not source_memo.strip() else "相手別メモ: source memoを保存",
+            "送信結果メモ: 空",
+        ],
+        "cautions": [
+            "実際の送信は行われません",
+            "マッチングアプリには接続しません",
+            "local保存のみです",
+        ],
     }
 
 
@@ -1123,6 +1211,52 @@ def _build_free_notes(form: dict[str, Any]) -> str | None:
         lines.append("notes:")
         lines.append(notes)
     return "\n".join(lines) if lines else None
+
+
+def _parse_free_note_sections(text: str) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {}
+    current_key: str | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.endswith(":") and not line.startswith("- "):
+            current_key = line[:-1].strip()
+            sections.setdefault(current_key, [])
+            continue
+        if current_key and line.startswith("- "):
+            item = line[2:].strip()
+            if item:
+                sections.setdefault(current_key, []).append(item)
+    return sections
+
+
+def _first_free_note_value(text: str, key: str) -> str:
+    prefix = f"{key}:"
+    for line in text.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix) :].strip()
+    return ""
+
+
+def _free_note_body(text: str) -> str:
+    sections = _parse_free_note_sections(text)
+    notes = sections.get("notes")
+    if notes:
+        return "\n".join(notes)
+    capture = False
+    lines = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line == "notes:":
+            capture = True
+            continue
+        if capture:
+            if line.endswith(":") and not line.startswith("- "):
+                break
+            if line:
+                lines.append(line)
+    return "\n".join(lines)
 
 
 def _append_parsed_turn(turns: list[dict[str, Any]], current: dict[str, Any]) -> None:

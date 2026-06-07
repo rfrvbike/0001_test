@@ -19,6 +19,7 @@ from gui_helpers import (
     build_sent_outcome_preview,
     build_partner_summary,
     build_conversation_import_preview,
+    build_profile_display_sections,
     build_profile_save_preview,
     build_real_profile_summary_for_gui,
     can_generate_suggestion,
@@ -29,6 +30,8 @@ from gui_helpers import (
     detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
     format_conversation_history,
+    format_list_or_empty,
+    format_partner_preview_for_display,
     format_partner_notes,
     format_pending_suggestions,
     format_sent_suggestions_for_outcomes,
@@ -37,6 +40,7 @@ from gui_helpers import (
     generate_suggestion_for_gui,
     filter_real_profiles_for_gui,
     find_existing_partners_for_profile,
+    summarize_existing_partner_candidates,
     get_generation_mode_for_partner,
     discard_suggestion_from_gui,
     get_real_profile_path,
@@ -432,6 +436,63 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(filtered[0]["label"], "profile_cafe")
         self.assertEqual(summary["area"], "Tokyo")
         self.assertEqual(matches[0]["partner_id"], partner.partner_id)
+
+    def test_profile_display_sections_hide_internal_path_and_format_lists(self):
+        save_real_profile_from_form(
+            {
+                "label": "profile_cafe",
+                "display_name": "sample",
+                "profile_text": "カフェが好きです。",
+                "photo_memo": "カフェでの写真あり\n落ち着いた雰囲気",
+                "interests": "カフェ\n映画",
+                "area": "Tokyo",
+                "conversation_hooks": "好きなカフェ\n最近見た映画",
+                "avoid_topics": "",
+                "safety_notes": "個人情報は保存しない",
+            }
+        )
+
+        display = build_profile_display_sections("profile_cafe")
+
+        self.assertEqual(display["title"], "選択中のプロフィール")
+        self.assertNotIn("path", display)
+        self.assertNotIn("source_path", str(display))
+        self.assertIn({"label": "エリア", "value": "Tokyo"}, display["summary"])
+        section_map = {section["title"]: section["items"] for section in display["sections"]}
+        self.assertEqual(section_map["趣味"], ["カフェ", "映画"])
+        self.assertEqual(section_map["写真メモ"], ["カフェでの写真あり", "落ち着いた雰囲気"])
+        self.assertEqual(section_map["会話に使えそうな話題"], ["好きなカフェ", "最近見た映画"])
+        self.assertEqual(section_map["避けた方がよい話題"], ["未設定"])
+        self.assertEqual(section_map["安全メモ"], ["個人情報は保存しない"])
+
+    def test_format_list_or_empty_handles_blank_values(self):
+        self.assertEqual(format_list_or_empty([]), ["未設定"])
+        self.assertEqual(format_list_or_empty("", empty="なし"), ["なし"])
+        self.assertEqual(format_list_or_empty("カフェ\n映画"), ["カフェ", "映画"])
+
+    def test_partner_preview_display_and_existing_candidate_summary_are_readable(self):
+        save_real_profile_from_form(
+            {
+                "label": "profile_001",
+                "display_name": "sample",
+                "profile_text": "カフェが好きです。",
+                "photo_memo": "",
+                "interests": "カフェ",
+                "area": "東京",
+            }
+        )
+        partner = save_partner_from_profile("profile_001", "sample", "pairs", "")
+
+        preview = format_partner_preview_for_display("profile_001", "表示名", "pairs", "")
+        candidates = summarize_existing_partner_candidates("profile_001")
+
+        self.assertEqual(preview["title"], "作成されるpartner")
+        self.assertIn({"label": "表示名", "value": "表示名"}, preview["summary"])
+        self.assertIn("実際の送信は行われません", preview["cautions"])
+        self.assertNotIn("source_path", str(preview))
+        self.assertEqual(candidates[0]["partner_id"], partner.partner_id)
+        self.assertEqual(candidates[0]["表示名"], "sample")
+        self.assertIn("重複作成", candidates[0]["操作のヒント"])
 
     def test_build_partner_creation_preview_does_not_copy_full_profile_text(self):
         save_real_profile_from_form(

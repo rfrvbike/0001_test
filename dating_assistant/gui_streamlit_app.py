@@ -24,6 +24,7 @@ from gui_helpers import (
     build_profile_form_from_paste,
     build_profile_paste_preview,
     build_profile_save_preview,
+    build_profile_display_sections,
     build_real_profile_summary_for_gui,
     build_sent_outcome_preview,
     filter_real_profiles_for_gui,
@@ -40,7 +41,7 @@ from gui_helpers import (
     format_timeline_items,
     generate_suggestion_for_gui,
     generate_suggestion_variants_for_gui,
-    find_existing_partners_for_profile,
+    format_partner_preview_for_display,
     GENERATION_OBJECTIVE_OPTIONS,
     GENERATION_TONE_OPTIONS,
     get_generation_mode_for_partner,
@@ -54,6 +55,7 @@ from gui_helpers import (
     save_real_profile_from_form,
     save_partner_from_profile,
     SENT_OUTCOME_STATUS_OPTIONS,
+    summarize_existing_partner_candidates,
     add_partner_note_from_gui,
     mark_custom_text_sent_from_gui,
     mark_suggestion_sent_from_gui,
@@ -527,6 +529,42 @@ def render_profile_registration() -> None:
     st.info("保存後は「プロフィールからpartner作成」タブでpartner化できます。")
 
 
+def _render_summary_rows(rows: list[dict[str, object]]) -> None:
+    columns = st.columns(2)
+    for index, row in enumerate(rows):
+        with columns[index % 2]:
+            st.caption(str(row["label"]))
+            st.write(str(row["value"]))
+
+
+def _render_bullet_items(title: str, items: list[str]) -> None:
+    st.markdown(f"**{title}**")
+    for item in items:
+        st.markdown(f"- {item}")
+
+
+def _render_profile_display_card(profile_display: dict[str, object]) -> None:
+    with st.container(border=True):
+        st.markdown(f"**{profile_display['title']}**")
+        _render_summary_rows(profile_display["summary"])
+        st.markdown("**自己紹介**")
+        st.write(profile_display["profile_text"])
+        for section in profile_display["sections"]:
+            _render_bullet_items(section["title"], section["items"])
+        notes = str(profile_display.get("notes") or "").strip()
+        if notes:
+            st.markdown("**補足メモ**")
+            st.write(notes)
+
+
+def _render_partner_preview_card(preview_display: dict[str, object]) -> None:
+    with st.container(border=True):
+        st.markdown(f"**{preview_display['title']}**")
+        _render_summary_rows(preview_display["summary"])
+        _render_bullet_items("作成時に含まれる内容", preview_display["included"])
+        _render_bullet_items("注意", preview_display["cautions"])
+
+
 def render_partner_creation() -> None:
     st.subheader("プロフィールからpartner作成")
 
@@ -546,15 +584,22 @@ def render_partner_creation() -> None:
         submitted = st.form_submit_button("partnerを作成")
 
     label = profile_options[selected_profile]
-    st.markdown("**選択中プロフィール**")
-    st.json(build_real_profile_summary_for_gui(label))
-    existing_partners = find_existing_partners_for_profile(label)
+    _render_profile_display_card(build_profile_display_sections(label))
+    with st.expander("詳細データを表示", expanded=False):
+        st.json(build_real_profile_summary_for_gui(label))
+
+    existing_partners = summarize_existing_partner_candidates(label)
     if existing_partners:
-        st.warning("このreal_profileから作成済みと思われるpartnerがあります。必要ならpartnerビューで開いてください。")
+        st.warning(
+            "このプロフィールから作成済みと思われるpartnerがあります。"
+            "重複作成しないよう、既存partnerを開くか、新しく作成するか確認してください。"
+        )
         st.dataframe(existing_partners, width="stretch", hide_index=True)
+
     preview = build_partner_creation_preview(label, display_name=display_name, app_name=app_name, source_memo=source_memo)
-    st.markdown("**保存プレビュー**")
-    st.json(preview)
+    _render_partner_preview_card(format_partner_preview_for_display(label, display_name=display_name, app_name=app_name, source_memo=source_memo))
+    with st.expander("保存プレビューの詳細JSONを表示", expanded=False):
+        st.json(preview)
 
     if submitted:
         if not confirm_create:
