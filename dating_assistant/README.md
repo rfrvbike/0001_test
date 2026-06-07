@@ -226,6 +226,64 @@ python tools/regenerate_example_outputs.py --dry-run
 python tools/regenerate_example_outputs.py
 ```
 
+## Streamlit GUI
+
+GUI版は、CLIで行っていた相手管理、プロフィール登録、会話履歴インポート、候補生成、送信済み記録、候補破棄をローカル画面で操作するための補助画面です。
+マッチングアプリへの自動送信、外部投稿、外部API通信、実LLM API呼び出しは行いません。
+
+初回セットアップ:
+
+```powershell
+cd "C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test"
+python -m venv .venv_dating_gui
+.\.venv_dating_gui\Scripts\python.exe -m pip install -r dating_assistant/requirements-gui.txt
+```
+
+起動:
+
+```powershell
+cd "C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test"
+.\.venv_dating_gui\Scripts\python.exe -m streamlit run dating_assistant/gui_streamlit_app.py
+```
+
+起動確認だけを行う場合:
+
+```powershell
+cd "C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test"
+.\.venv_dating_gui\Scripts\python.exe -m streamlit run dating_assistant/gui_streamlit_app.py --server.headless true --browser.gatherUsageStats false --server.port 8501
+```
+
+基本フロー:
+
+1. GUIを起動します。
+2. プロフィール登録タブで、相手プロフィールから安全な要約だけを入力してreal profileとして保存します。
+3. 保存済みreal profileからpartnerを作成します。
+4. 必要に応じて、会話履歴インポートで既存のやり取りをpartnerへ記録します。
+5. partnerを選択し、状態、会話履歴、timeline、pending_suggestionsを確認します。
+6. 初回候補または返信候補を生成します。
+7. 候補文を人間が確認し、必要なら短く自然な文へ整えます。
+8. 実際のマッチングアプリ上では、ユーザー本人が手動で送信します。
+9. 手動送信した後だけ、GUIで送信済みlocal記録を行います。
+10. 相手から返信が来たら、会話履歴インポートまたは相手返信追加で記録し、次の返信候補を生成します。
+11. 使わなかった候補は、必要に応じて候補破棄で整理します。
+
+運用ルール:
+
+- GUIは送信文候補を `pending_suggestions` に保存するだけで、自動送信しません。
+- 送信済み記録は、ユーザーが実際に手動送信した後だけ行います。
+- 候補破棄は `conversation_history` を変更せず、マッチングアプリ側の内容も削除しません。
+- `data/local/` と `outputs/local/` はGit管理対象外です。
+- スクリーンショット画像そのもの、顔写真そのもの、本名、勤務先、学校名、LINE ID、SNS ID、住所、電話番号、メールアドレスは保存しません。
+- 生成候補は必ず人間が確認し、相手との温度感に合わない場合は送らないでください。
+
+電話・会う提案の目安:
+
+- 1往復目はプロフィールに自然に触れる軽い質問を優先します。
+- 2往復目は共感と相手の好みを深掘りしすぎない質問にします。
+- 2から3往復して温度感が良い場合だけ、短時間で断りやすい電話提案を検討します。
+- 電話後、または十分に自然な会話が続いた後に、カフェやご飯など軽い会う提案を検討します。
+- 相手の反応が薄い場合や距離感が近すぎる場合は、電話や会う提案へ進めません。
+
 ## テスト
 
 ```powershell
