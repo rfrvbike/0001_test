@@ -156,11 +156,13 @@ def render_generation_controls(partner) -> None:
     st.write(f"**現在:** {build_generation_status_message(partner)}")
     st.write(f"**生成タイプ:** {mode_label}")
     objectives = st.multiselect(
-        "今回の目的",
+        "今回の目的（上の方ほど日常会話向け）",
         options=GENERATION_OBJECTIVE_OPTIONS,
         default=["相手のプロフィールに触れる", "質問を1つ入れる"],
+        help="電話、会う提案、LINE交換、大人っぽい雰囲気は下の方に置いています。会話の温度感が十分ある場合だけ選んでください。",
         key=f"generation_objectives_{partner.partner_id}",
     )
+    st.caption("電話・会う提案・LINE交換・大人っぽい雰囲気は、相手の反応が良い場合だけ使います。")
     tone = st.selectbox(
         "文章の雰囲気",
         options=GENERATION_TONE_OPTIONS,
@@ -174,8 +176,11 @@ def render_generation_controls(partner) -> None:
             placeholder="例: 新宿あたり / 近場のカフェ / 仕事帰りに寄りやすい場所",
             key=f"generation_place_{partner.partner_id}",
         )
+    preflight = build_generation_preflight(partner, objectives, tone, place_hint)
     with st.expander("生成前チェック", expanded=True):
-        st.json(build_generation_preflight(partner, objectives, tone, place_hint))
+        for warning in preflight["warnings"]:
+            st.warning(warning)
+        st.json(preflight)
     st.caption("候補生成はlocalのpending_suggestionsへ保存するだけです。自動送信ではありません。")
     confirm = st.checkbox("自動送信ではないことを確認し、候補をlocal保存する", key=f"generate_confirm_{partner.partner_id}")
     if st.button(button_label, disabled=not (can_generate_suggestion(partner) and confirm), key=f"generate_button_{partner.partner_id}"):
@@ -191,7 +196,7 @@ def render_generation_controls(partner) -> None:
             return
         st.success("3候補をpending_suggestionsへ保存しました。")
         for variant in generated["variants"]:
-            with st.expander(f"{variant['suggestion_id']} / {variant['objective']} / {variant['use_case']}", expanded=True):
+            with st.expander(f"{variant['use_case']} / {variant['objective']} / {variant['suggestion_id']}", expanded=True):
                 st.text_area(
                     "候補本文",
                     variant["text"],
@@ -297,11 +302,14 @@ def render_profile_registration() -> None:
     st.subheader("プロフィール登録")
 
     with st.form("profile_registration_form"):
+        st.info("まずここにプロフィール文、趣味、写真の印象メモをまとめて貼り付けます。下の入力欄は不足分や修正だけに使います。")
         profile_paste = st.text_area(
             "プロフィール情報まとめ貼り付け欄",
-            height=220,
+            height=280,
             help="マッチングアプリ上のプロフィール文、自己紹介、趣味、エリア、年齢、写真の印象メモなどをまとめて貼り付けます。画像そのものは保存しません。",
         )
+        st.caption("スクリーンショット画像や顔写真そのものは保存しません。読み取ったテキストとメモだけを貼り付けてください。")
+        st.markdown("**不足分・修正欄**")
         label = st.text_input("label", help="英数字・ハイフン・アンダースコアのみ")
         display_name = st.text_input("display_name")
         app_name = st.text_input("app_name")
@@ -337,6 +345,7 @@ def render_profile_registration() -> None:
     if profile_paste.strip():
         st.markdown("**貼り付け内容の抽出プレビュー**")
         st.json(build_profile_paste_preview(profile_paste))
+        st.info("抽出できなかった項目や違う項目は、不足分・修正欄で直してから保存してください。")
     preview = None
     if not errors:
         preview = build_profile_save_preview(form)

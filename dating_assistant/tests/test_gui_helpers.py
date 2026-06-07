@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from gui_helpers import (
+    GENERATION_OBJECTIVE_OPTIONS,
     append_conversation_turns_to_partner,
     build_partner_label,
     build_partner_creation_preview,
@@ -191,6 +192,9 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(data["hobbies"], ["カフェ", "映画"])
         self.assertIn("conversation_hooks:", data["free_notes"])
         self.assertEqual(preview["auto_send"], False)
+        self.assertEqual(preview["extracted_fields"]["display_name"], "sample")
+        self.assertIn("avoid_topics", preview["missing_fields"])
+        self.assertTrue(preview["manual_review_required"])
 
     def test_profile_form_requires_core_fields(self):
         errors = validate_profile_form({"label": "", "display_name": "", "profile_text": "", "photo_memo": ""})
@@ -506,7 +510,35 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(len(result["variants"]), 3)
         self.assertEqual(len([item for item in stored.pending_suggestions if item.status == "pending"]), 3)
         self.assertTrue(all(item.purpose == "reply" for item in stored.pending_suggestions))
+        self.assertEqual([item["use_case"].split(":")[0] for item in result["variants"]], ["候補A", "候補B", "候補C"])
         self.assertIn("stage", result)
+
+    def test_generation_preflight_emphasizes_early_risky_objectives(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            profile=PartnerProfile(profile_text="カフェが好きです。", hobbies=["カフェ"]),
+            conversation=[
+                ConversationTurn("partner", "カフェもご飯も好きです", "2026-06-07T10:00:00+09:00"),
+            ],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+
+        preflight = build_generation_preflight(
+            partner,
+            ["電話に誘う", "会う提案をする", "LINE交換を提案する", "少し大人っぽい雰囲気にする"],
+            "少し大人っぽいが控えめ",
+            "",
+        )
+        warnings = "\n".join(preflight["warnings"])
+
+        self.assertGreater(GENERATION_OBJECTIVE_OPTIONS.index("電話に誘う"), GENERATION_OBJECTIVE_OPTIONS.index("質問を1つ入れる"))
+        self.assertIn("電話提案はまだ早い", warnings)
+        self.assertIn("会う提案はまだ早い", warnings)
+        self.assertIn("LINE交換提案は唐突", warnings)
+        self.assertIn("大人っぽい雰囲気", warnings)
+        self.assertFalse(preflight["auto_send"])
 
     def test_mark_sent_requires_pending_suggestion_and_confirmation(self):
         partner = PartnerRecord(

@@ -84,18 +84,18 @@ PROFILE_PASTE_FIELDS = [
 ]
 
 GENERATION_OBJECTIVE_OPTIONS = [
-    "相手の趣味を広げる",
     "相手のプロフィールに触れる",
-    "自分の紹介をする",
-    "共感のリアクション重視",
     "質問を1つ入れる",
+    "共感のリアクション重視",
+    "相手の趣味を広げる",
+    "自分の紹介をする",
     "軽くユーモアを入れる",
+    "恋愛観に軽く触れる",
+    "少し大人っぽい雰囲気にする",
     "電話に誘う",
     "会う提案をする",
     "場所を指定して会う提案をする",
     "LINE交換を提案する",
-    "少し大人っぽい雰囲気にする",
-    "恋愛観に軽く触れる",
 ]
 
 GENERATION_TONE_OPTIONS = [
@@ -332,11 +332,13 @@ def build_generation_preflight(partner: PartnerRecord, objectives: list[str] | N
     objectives = [item for item in (objectives or []) if item]
     warnings = []
     if any("電話" in item for item in objectives) and stage["round_count"] < 2:
-        warnings.append("電話提案はまだ早い可能性があります。")
+        warnings.append("電話提案はまだ早い可能性があります。2から3往復後で、相手の反応が良い場合だけ検討してください。")
     if any("会う" in item for item in objectives) and stage["round_count"] < 3:
-        warnings.append("会う提案はまだ早い可能性があります。")
+        warnings.append("会う提案はまだ早い可能性があります。電話後、または十分に自然な会話が続いた後まで待つ方が安全です。")
     if any("LINE" in item for item in objectives) and stage["round_count"] < 2:
-        warnings.append("LINE交換提案は唐突になりやすいため注意してください。")
+        warnings.append("LINE交換提案は唐突になりやすいため注意してください。LINE IDそのものは保存しないでください。")
+    if (any("大人っぽい" in item for item in objectives) or "大人っぽい" in tone) and stage["round_count"] < 2:
+        warnings.append("大人っぽい雰囲気は距離が近すぎる印象になりやすいため、初回や1往復目では控えめにしてください。")
     return {
         "partner_id": partner.partner_id,
         "generation_mode": get_generation_mode_for_partner(partner),
@@ -577,9 +579,17 @@ def merge_profile_form_with_paste(form: dict[str, Any], pasted_form: dict[str, A
 
 def build_profile_paste_preview(text: str) -> dict[str, Any]:
     extracted, warnings = build_profile_form_from_paste(text)
+    extracted_fields = {key: extracted.get(key) or "未抽出" for key in PROFILE_PASTE_FIELDS}
+    missing_fields = [key for key, value in extracted.items() if not value]
     return {
-        "extracted_fields": {key: value or "-" for key, value in extracted.items()},
+        "extracted_fields": extracted_fields,
+        "missing_fields": missing_fields,
         "warnings": warnings,
+        "review_notes": [
+            "抽出できなかった項目や違う項目は、保存前に下の入力欄で修正できます。",
+            "スクリーンショット画像や顔写真そのものではなく、読み取ったテキストと印象メモだけを保存します。",
+            "本名、勤務先、学校名、LINE ID、SNS ID、住所、電話番号、メールアドレスは保存しないでください。",
+        ],
         "manual_review_required": True,
         "saves_images": False,
         "auto_send": False,
@@ -1006,13 +1016,17 @@ def _trim_for_gui(text: str, max_len: int = 160) -> str:
 
 
 def _variant_use_case(index: int) -> str:
-    return ["一番無難。迷ったらこれ。", "少し距離を縮める用。", "相手の反応が良いとき用。"][index % 3]
+    return ["候補A: 一番無難。迷ったらこれ。", "候補B: 少し距離を縮める用。", "候補C: 相手の反応が良いとき用。"][index % 3]
 
 
 def _candidate_safety_notes(text: str, objective: str) -> list[str]:
     notes = ["自動送信ではありません。送信前に人間が確認してください。"]
     if "電話" in objective or "会う" in objective or "LINE" in objective:
         notes.append("会話の温度感が低い場合は送らないでください。")
+    if "LINE" in objective:
+        notes.append("LINE IDそのものは保存しないでください。")
+    if "大人っぽい" in objective:
+        notes.append("下ネタや身体的表現に寄せず、控えめにしてください。")
     if text.count("？") + text.count("?") > 1:
         notes.append("質問が複数あります。1つに減らすと自然です。")
     return notes
