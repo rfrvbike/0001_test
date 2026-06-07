@@ -231,6 +231,25 @@ python tools/regenerate_example_outputs.py
 GUI版は、CLIで行っていた相手管理、プロフィール登録、会話履歴インポート、候補生成、送信済み記録、候補破棄をローカル画面で操作するための補助画面です。
 マッチングアプリへの自動送信、外部投稿、外部API通信、実LLM API呼び出しは行いません。
 
+かんたん起動:
+
+リポジトリルートにある次のbatファイルをダブルクリックします。
+
+```text
+start_dating_assistant_gui.bat
+```
+
+起動後、ブラウザでdating_assistant GUIが開きます。
+自動で開かない場合は、PowerShellに表示されるURLをブラウザで開いてください。
+通常は次のURLです。
+
+```text
+http://localhost:8501
+```
+
+このbatはGUIを起動するだけです。
+マッチングアプリへの自動送信、マッチングアプリ操作、外部投稿、実LLM API呼び出しは行いません。
+
 初回セットアップ:
 
 ```powershell
