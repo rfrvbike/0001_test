@@ -265,6 +265,16 @@ cd "C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test\dating_assistant
 python -m streamlit run gui_streamlit_app.py
 ```
 
+作業No.104で追加した最小範囲:
+
+- `gui_streamlit_app.py` に「プロフィール登録」タブを追加する。
+- 入力項目は label, display_name, app_name, age, area, profile_text, photo_memo, interests, avoid_topics, notes とする。
+- 必須項目は label, display_name, profile_text または photo_memo のどちらかとする。
+- 保存前に危険語警告と保存プレビューを表示する。
+- 保存は `data/local/real_profiles/` 配下のlocal YAMLのみに行う。
+- 同じlabelが存在する場合は上書きしない。
+- partner作成、候補生成、mark-sentは今回の範囲外とする。
+
 ### Phase 2
 
 - 会話履歴インポートのパーサーを独立モジュール化する。

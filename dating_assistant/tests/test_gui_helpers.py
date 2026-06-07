@@ -6,10 +6,17 @@ from unittest.mock import patch
 from gui_helpers import (
     build_partner_label,
     build_partner_summary,
+    build_profile_save_preview,
+    build_real_profile_from_form,
+    detect_profile_safety_warnings,
     format_conversation_history,
     format_pending_suggestions,
     format_timeline_items,
+    get_real_profile_path,
     load_partner_choices,
+    real_profile_exists,
+    save_real_profile_from_form,
+    validate_profile_form,
 )
 from src.models import ActivityEvent, ConversationTurn, PartnerRecord, PendingSuggestion
 from src.partner_store import save_partner
@@ -18,12 +25,20 @@ from src.partner_store import save_partner
 class GuiHelperTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.env = patch.dict(os.environ, {"DATING_ASSISTANT_PARTNER_DIR": self.temp.name})
+        self.real_profiles = tempfile.TemporaryDirectory()
+        self.env = patch.dict(
+            os.environ,
+            {
+                "DATING_ASSISTANT_PARTNER_DIR": self.temp.name,
+                "DATING_ASSISTANT_REAL_PROFILE_DIR": self.real_profiles.name,
+            },
+        )
         self.env.start()
 
     def tearDown(self):
         self.env.stop()
         self.temp.cleanup()
+        self.real_profiles.cleanup()
 
     def test_load_partner_choices_excludes_archived_by_default(self):
         save_partner(PartnerRecord(partner_id="partner_001", display_name="active", status="first_message_suggested"))
@@ -93,6 +108,84 @@ class GuiHelperTests(unittest.TestCase):
         partner = PartnerRecord(partner_id="partner_001", display_name="sample", status="chatting")
 
         self.assertEqual(build_partner_label(partner), "partner_001 / sample / chatting")
+
+    def test_profile_form_builds_real_profile_data(self):
+        form = {
+            "label": "profile_001",
+            "display_name": "sample",
+            "app_name": "pairs",
+            "age": "32",
+            "area": "東京",
+            "profile_text": "カフェが好きです。",
+            "photo_memo": "自然な笑顔\n旅行写真",
+            "interests": "カフェ, 映画\n散歩",
+            "avoid_topics": "夜遅い予定",
+            "notes": "丁寧に話す",
+        }
+
+        data = build_real_profile_from_form(form)
+        preview = build_profile_save_preview(form)
+
+        self.assertEqual(data["label"], "profile_001")
+        self.assertEqual(data["age"], 32)
+        self.assertEqual(data["hobbies"], ["カフェ", "映画", "散歩"])
+        self.assertEqual(data["photos_memo"], ["自然な笑顔", "旅行写真"])
+        self.assertEqual(data["location_hint"], "東京")
+        self.assertIn("display_name: sample", data["free_notes"])
+        self.assertEqual(preview["保存先label"], "profile_001")
+        self.assertIn("profile_001.yaml", preview["保存先"])
+
+    def test_profile_form_requires_core_fields(self):
+        errors = validate_profile_form({"label": "", "display_name": "", "profile_text": "", "photo_memo": ""})
+
+        self.assertIn("label は必須です。", errors)
+        self.assertIn("display_name は必須です。", errors)
+        self.assertIn("profile_text または photo_memo のどちらかは必須です。", errors)
+
+    def test_profile_form_detects_safety_warnings(self):
+        warnings = detect_profile_safety_warnings(
+            {
+                "label": "profile_001",
+                "display_name": "sample",
+                "profile_text": "LINEとメール sample@example.com は保存しない",
+                "notes": "電話番号 090-1234-5678",
+            }
+        )
+
+        self.assertIn("LINE", warnings)
+        self.assertIn("メールアドレス", warnings)
+        self.assertIn("電話番号", warnings)
+
+    def test_save_real_profile_from_form_writes_local_profile_and_blocks_overwrite(self):
+        form = {
+            "label": "profile_001",
+            "display_name": "sample",
+            "profile_text": "カフェが好きです。",
+            "photo_memo": "",
+        }
+
+        path, warnings = save_real_profile_from_form(form)
+
+        self.assertEqual(warnings, [])
+        self.assertTrue(path.exists())
+        self.assertTrue(real_profile_exists("profile_001"))
+        self.assertEqual(path, get_real_profile_path("profile_001"))
+        with self.assertRaises(FileExistsError):
+            save_real_profile_from_form(form)
+
+    def test_profile_form_accepts_photo_memo_without_profile_text(self):
+        form = {
+            "label": "profile_002",
+            "display_name": "photo only",
+            "profile_text": "",
+            "photo_memo": "公園の写真",
+        }
+
+        data = build_real_profile_from_form(form)
+
+        self.assertEqual(validate_profile_form(form), [])
+        self.assertEqual(data["profile_text"], "プロフィール文なし。写真メモのみ登録。")
+        self.assertEqual(data["photos_memo"], ["公園の写真"])
 
 
 if __name__ == "__main__":
