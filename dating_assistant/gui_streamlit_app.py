@@ -575,14 +575,7 @@ def render_partner_creation() -> None:
         return
 
     profile_options = {profile["display_label"]: profile["label"] for profile in profiles}
-    with st.form("partner_creation_form"):
-        selected_profile = st.selectbox("real_profile選択", options=list(profile_options.keys()))
-        display_name = st.text_input("partner display_name")
-        app_name = st.text_input("partner app_name")
-        source_memo = st.text_area("source memo", height=80)
-        confirm_create = st.checkbox("保存内容を確認し、partner YAMLとして保存する")
-        submitted = st.form_submit_button("partnerを作成")
-
+    selected_profile = st.selectbox("real_profile選択", options=list(profile_options.keys()))
     label = profile_options[selected_profile]
     _render_profile_display_card(build_profile_display_sections(label))
     with st.expander("詳細データを表示", expanded=False):
@@ -596,11 +589,18 @@ def render_partner_creation() -> None:
         )
         st.dataframe(existing_partners, width="stretch", hide_index=True)
 
+    st.markdown("**partner作成フォーム**")
+    display_name = st.text_input("partner表示名", help="空欄の場合は保存済みプロフィールの表示名を使います。")
+    app_name = st.text_input("アプリ名", help="Pairs、withなど。未設定でも保存できます。")
+    source_memo = st.text_area("作成時メモ", height=80, help="相手別メモとしてlocal保存したい補足だけを書きます。個人情報は入れないでください。")
+
     preview = build_partner_creation_preview(label, display_name=display_name, app_name=app_name, source_memo=source_memo)
     _render_partner_preview_card(format_partner_preview_for_display(label, display_name=display_name, app_name=app_name, source_memo=source_memo))
     with st.expander("保存プレビューの詳細JSONを表示", expanded=False):
         st.json(preview)
 
+    confirm_create = st.checkbox("保存内容を確認し、partner YAMLとしてlocal保存する")
+    submitted = st.button("partnerを作成")
     if submitted:
         if not confirm_create:
             st.error("保存前確認チェックを入れてください。")
