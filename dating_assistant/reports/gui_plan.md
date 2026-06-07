@@ -272,6 +272,16 @@ last_human_confirmed_action: null
 - archived partnerでは破棄不可にする。
 - この操作はlocal整理のみで、マッチングアプリへの送信・削除、自動操作、外部通信は行わない。
 
+### 作業No.111
+
+- GUI通し確認を実施し、主要画面と主要local操作が実運用前に破綻していないことを確認した。
+- Streamlit AppTestで、partnerビュー、profile登録、partner作成、会話履歴インポート、候補生成、送信済み記録、候補破棄のUI表示を確認した。
+- 一時ディレクトリのダミーデータで、profile保存、partner作成、会話履歴追加、返信候補生成、suggestion_id送信済み記録、custom text送信済み記録、候補破棄のlocal動作を確認した。
+- pendingがある場合の生成ボタン文言を「候補生成不可」に調整した。
+- custom text送信済み記録後の案内を、追加済みの候補破棄UIへ誘導する文言に調整した。
+- `py_compile` と全体unittestは通過した。
+- 残課題として、README/使い方整理、実運用時の注意事項整理、最終受け入れチェックを次作業で行う。
+
 ### Phase 1
 
 - `dating_assistant/gui_app.py` などにStreamlitアプリを追加する。

@@ -142,11 +142,12 @@ def render_generation_controls(partner) -> None:
     st.subheader("候補生成")
     mode = get_generation_mode_for_partner(partner)
     mode_label = {"first": "初回メッセージ候補", "reply": "返信候補", "blocked": "生成不可"}[mode]
+    button_label = f"{mode_label}を生成する" if mode in {"first", "reply"} else "候補生成不可"
     st.write(f"**現在:** {build_generation_status_message(partner)}")
     st.write(f"**生成タイプ:** {mode_label}")
     st.caption("候補生成はlocalのpending_suggestionsへ保存するだけです。自動送信ではありません。")
     confirm = st.checkbox("自動送信ではないことを確認し、候補をlocal保存する", key=f"generate_confirm_{partner.partner_id}")
-    if st.button(f"{mode_label}を生成する", disabled=not (can_generate_suggestion(partner) and confirm), key=f"generate_button_{partner.partner_id}"):
+    if st.button(button_label, disabled=not (can_generate_suggestion(partner) and confirm), key=f"generate_button_{partner.partner_id}"):
         try:
             generated = generate_suggestion_for_gui(partner.partner_id)
         except ValueError as error:
@@ -205,7 +206,7 @@ def render_sent_recording_controls(partner, suggestion: dict) -> None:
             return
         st.success("入力文を送信済みとしてlocal記録しました。")
         if result["remaining_pending_suggestions"]:
-            st.info("元候補はpendingに残っています。候補破棄機能は次作業で追加します。")
+            st.info("元候補はpendingに残っています。下の候補破棄から未使用候補として整理できます。")
         st.rerun()
 
 
