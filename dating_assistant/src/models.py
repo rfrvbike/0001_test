@@ -67,6 +67,9 @@ class PendingSuggestion:
     source: str = ""
     sent_at: str | None = None
     discarded_at: str | None = None
+    outcome_status: str = "未確認"
+    outcome_memo: str = ""
+    outcome_updated_at: str | None = None
 
 
 @dataclass

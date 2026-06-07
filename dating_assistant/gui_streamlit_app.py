@@ -20,10 +20,12 @@ from gui_helpers import (
     build_discard_suggestion_preview,
     build_generation_preflight,
     build_mark_sent_preview,
+    build_partner_note_preview,
     build_profile_form_from_paste,
     build_profile_paste_preview,
     build_profile_save_preview,
     build_real_profile_summary_for_gui,
+    build_sent_outcome_preview,
     filter_real_profiles_for_gui,
     can_discard_suggestion,
     can_generate_suggestion,
@@ -32,7 +34,9 @@ from gui_helpers import (
     detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
     format_conversation_history,
+    format_partner_notes,
     format_pending_suggestions,
+    format_sent_suggestions_for_outcomes,
     format_timeline_items,
     generate_suggestion_for_gui,
     generate_suggestion_variants_for_gui,
@@ -49,8 +53,11 @@ from gui_helpers import (
     real_profile_exists,
     save_real_profile_from_form,
     save_partner_from_profile,
+    SENT_OUTCOME_STATUS_OPTIONS,
+    add_partner_note_from_gui,
     mark_custom_text_sent_from_gui,
     mark_suggestion_sent_from_gui,
+    update_sent_outcome_from_gui,
     validate_imported_turns,
     validate_profile_form,
 )
@@ -107,9 +114,10 @@ def render_partner_viewer() -> None:
     with st.expander("message_state", expanded=True):
         st.json(summary["message_state"])
 
+    render_partner_notes(partner)
     render_generation_controls(partner)
 
-    tab_history, tab_suggestions, tab_timeline = st.tabs(["会話履歴", "未送信候補", "timeline"])
+    tab_history, tab_suggestions, tab_sent_outcomes, tab_timeline = st.tabs(["会話履歴", "未送信候補", "送信結果メモ", "timeline"])
 
     with tab_history:
         rows = format_conversation_history(partner)
@@ -140,12 +148,58 @@ def render_partner_viewer() -> None:
                 render_sent_recording_controls(partner, suggestion)
                 render_discard_controls(partner, suggestion)
 
+    with tab_sent_outcomes:
+        render_sent_outcome_controls(partner)
+
     with tab_timeline:
         timeline = format_timeline_items(partner)
         if not timeline:
             st.info("timeline は空です。")
         else:
             st.dataframe(timeline, width="stretch", hide_index=True)
+
+
+def render_partner_notes(partner) -> None:
+    st.subheader("相手別メモ")
+    notes = format_partner_notes(partner)
+    if not notes:
+        st.info("まだメモはありません。返信傾向、反応がよい話題、避けたい誘い方などをlocalに残せます。")
+    else:
+        for note in notes:
+            title = f"{note['index']}. {note['created_at'] or '時刻なし'}"
+            with st.expander(title, expanded=False):
+                st.write(note["text"])
+
+    new_note = st.text_area(
+        "相手別メモを追加",
+        height=100,
+        placeholder="例: 返信は夜が多い。旅行の話題に反応がよい。電話はまだ早そう。",
+        key=f"partner_note_text_{partner.partner_id}",
+    )
+    if new_note.strip():
+        with st.expander("相手別メモ保存プレビュー", expanded=False):
+            preview = build_partner_note_preview(new_note)
+            for warning in preview["warnings"]:
+                st.warning(warning)
+            st.json(preview)
+    confirm = st.checkbox(
+        "個人情報を含めず、相手別メモをlocal保存する",
+        key=f"partner_note_confirm_{partner.partner_id}",
+    )
+    if st.button(
+        "相手別メモを更新",
+        disabled=not (new_note.strip() and confirm),
+        key=f"partner_note_button_{partner.partner_id}",
+    ):
+        try:
+            result = add_partner_note_from_gui(partner.partner_id, new_note, confirmed=confirm)
+        except ValueError as error:
+            st.error(str(error))
+            return
+        for warning in result["warnings"]:
+            st.warning(warning)
+        st.success("相手別メモをlocal保存しました。")
+        st.rerun()
 
 
 def render_generation_controls(partner) -> None:
@@ -257,6 +311,69 @@ def render_sent_recording_controls(partner, suggestion: dict) -> None:
         if result["remaining_pending_suggestions"]:
             st.info("元候補はpendingに残っています。下の候補破棄から未使用候補として整理できます。")
         st.rerun()
+
+
+def render_sent_outcome_controls(partner) -> None:
+    st.subheader("送信結果メモ")
+    sent_suggestions = format_sent_suggestions_for_outcomes(partner)
+    if not sent_suggestions:
+        st.info("送信済みlocal記録はまだありません。実際に手動送信した文だけ、結果メモを残せます。")
+        return
+
+    for suggestion in sent_suggestions:
+        title = f"{suggestion['suggestion_id']} / {suggestion['outcome_status']} / {suggestion['sent_at'] or 'sent_atなし'}"
+        with st.expander(title, expanded=True):
+            st.text_area(
+                "送信文",
+                suggestion["text"],
+                height=100,
+                disabled=True,
+                key=f"sent_text_{partner.partner_id}_{suggestion['suggestion_id']}",
+            )
+            current_index = SENT_OUTCOME_STATUS_OPTIONS.index(suggestion["outcome_status"]) if suggestion["outcome_status"] in SENT_OUTCOME_STATUS_OPTIONS else 0
+            outcome_status = st.selectbox(
+                "結果ステータス",
+                options=SENT_OUTCOME_STATUS_OPTIONS,
+                index=current_index,
+                key=f"outcome_status_{partner.partner_id}_{suggestion['suggestion_id']}",
+            )
+            outcome_memo = st.text_area(
+                "送信結果メモ",
+                value=suggestion["outcome_memo"],
+                height=90,
+                placeholder="例: 旅行の話題は反応よかった。次も広げてよさそう。",
+                key=f"outcome_memo_{partner.partner_id}_{suggestion['suggestion_id']}",
+            )
+            if outcome_memo.strip():
+                with st.expander("送信結果メモ保存プレビュー", expanded=False):
+                    preview = build_sent_outcome_preview(partner, suggestion["suggestion_id"], outcome_status, outcome_memo)
+                    for warning in preview["warnings"]:
+                        st.warning(warning)
+                    st.json(preview)
+            confirm = st.checkbox(
+                "個人情報を含めず、送信結果メモをlocal保存する",
+                key=f"outcome_confirm_{partner.partner_id}_{suggestion['suggestion_id']}",
+            )
+            if st.button(
+                "送信結果メモを更新",
+                disabled=not confirm,
+                key=f"outcome_button_{partner.partner_id}_{suggestion['suggestion_id']}",
+            ):
+                try:
+                    result = update_sent_outcome_from_gui(
+                        partner.partner_id,
+                        suggestion["suggestion_id"],
+                        outcome_status,
+                        outcome_memo,
+                        confirmed=confirm,
+                    )
+                except ValueError as error:
+                    st.error(str(error))
+                    return
+                for warning in result["warnings"]:
+                    st.warning(warning)
+                st.success("送信結果メモをlocal保存しました。")
+                st.rerun()
 
 
 def render_discard_controls(partner, suggestion: dict) -> None:

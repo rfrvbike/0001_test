@@ -12,7 +12,7 @@ from src.conversation_planner import estimate_partner_temperature
 from src.loaders import load_user_profile
 from src.models import ConversationTurn, GenerationRequest, PartnerNote, PartnerRecord, TargetProfile
 from src.partner_store import list_partners, load_partner
-from src.partner_manager import create_partner_from_target_profile, save_updated_partner
+from src.partner_manager import add_partner_note, create_partner_from_target_profile, save_updated_partner
 from src.real_profile_manager import (
     create_real_profile,
     detect_privacy_warnings,
@@ -109,6 +109,16 @@ GENERATION_TONE_OPTIONS = [
     "少し大人っぽいが控えめ",
 ]
 
+SENT_OUTCOME_STATUS_OPTIONS = [
+    "未確認",
+    "返信あり",
+    "返信なし",
+    "反応よかった",
+    "話題が広がった",
+    "微妙だった",
+    "その他",
+]
+
 PROFILE_SAFETY_PATTERNS = {
     "メールアドレス": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
     "電話番号": re.compile(r"(?:\+?\d[\d -]{8,}\d)"),
@@ -194,6 +204,113 @@ def format_pending_suggestions(partner: PartnerRecord) -> list[dict[str, Any]]:
         }
         for suggestion in get_pending_suggestions(partner)
     ]
+
+
+def format_partner_notes(partner: PartnerRecord) -> list[dict[str, str]]:
+    return [
+        {
+            "index": str(index),
+            "created_at": note.created_at or "",
+            "text": note.text,
+        }
+        for index, note in enumerate(partner.notes, start=1)
+        if note.text.strip()
+    ]
+
+
+def build_partner_note_preview(text: str) -> dict[str, Any]:
+    text = text.strip()
+    warnings = detect_privacy_warnings([text]) if text else []
+    return {
+        "保存先": "partner.notes",
+        "メモ": text or "-",
+        "warnings": warnings,
+        "local_save_only": True,
+        "auto_send": False,
+    }
+
+
+def add_partner_note_from_gui(partner_id: str, text: str, confirmed: bool) -> dict[str, Any]:
+    text = text.strip()
+    if not confirmed:
+        raise ValueError("確認チェックを入れてください。")
+    if not text:
+        raise ValueError("相手別メモを入力してください。")
+    partner = load_partner(partner_id)
+    if partner.status == "archived":
+        raise ValueError("archivedのpartnerにはメモを追加できません。")
+    warnings = detect_privacy_warnings([text])
+    add_partner_note(partner, text)
+    updated = load_partner(partner_id)
+    return {
+        "partner_id": partner_id,
+        "notes_count": len(updated.notes),
+        "warnings": warnings,
+    }
+
+
+def format_sent_suggestions_for_outcomes(partner: PartnerRecord) -> list[dict[str, Any]]:
+    sent = [suggestion for suggestion in partner.pending_suggestions if suggestion.status == "sent"]
+    return [
+        {
+            "suggestion_id": suggestion.suggestion_id,
+            "purpose": suggestion.purpose,
+            "sent_at": suggestion.sent_at or "",
+            "text": suggestion.text,
+            "outcome_status": suggestion.outcome_status or "未確認",
+            "outcome_memo": suggestion.outcome_memo or "",
+            "outcome_updated_at": suggestion.outcome_updated_at or "",
+        }
+        for suggestion in sent
+    ]
+
+
+def build_sent_outcome_preview(partner: PartnerRecord, suggestion_id: str, outcome_status: str, outcome_memo: str = "") -> dict[str, Any]:
+    suggestion = _find_sent_suggestion(partner, suggestion_id)
+    outcome_status = outcome_status if outcome_status in SENT_OUTCOME_STATUS_OPTIONS else "未確認"
+    outcome_memo = outcome_memo.strip()
+    warnings = detect_privacy_warnings([outcome_memo])
+    return {
+        "partner_id": partner.partner_id,
+        "suggestion_id": suggestion.suggestion_id,
+        "送信文": suggestion.text,
+        "結果ステータス": outcome_status,
+        "結果メモ": outcome_memo or "-",
+        "warnings": warnings,
+        "local_save_only": True,
+        "auto_send": False,
+    }
+
+
+def update_sent_outcome_from_gui(
+    partner_id: str,
+    suggestion_id: str,
+    outcome_status: str,
+    outcome_memo: str = "",
+    confirmed: bool = False,
+) -> dict[str, Any]:
+    if not confirmed:
+        raise ValueError("確認チェックを入れてください。")
+    if outcome_status not in SENT_OUTCOME_STATUS_OPTIONS:
+        raise ValueError(f"Invalid outcome status: {outcome_status}")
+    partner = load_partner(partner_id)
+    if partner.status == "archived":
+        raise ValueError("archivedのpartnerには送信結果メモを追加できません。")
+    suggestion = _find_sent_suggestion(partner, suggestion_id)
+    outcome_memo = outcome_memo.strip()
+    warnings = detect_privacy_warnings([outcome_memo])
+    suggestion.outcome_status = outcome_status
+    suggestion.outcome_memo = outcome_memo
+    suggestion.outcome_updated_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    add_activity_event(partner, "sent_outcome_updated", f"{suggestion_id} 結果: {outcome_status}", suggestion_id, suggestion.outcome_updated_at)
+    save_updated_partner(partner)
+    return {
+        "partner_id": partner_id,
+        "suggestion_id": suggestion_id,
+        "outcome_status": outcome_status,
+        "outcome_memo": outcome_memo,
+        "warnings": warnings,
+    }
 
 
 def format_timeline_items(partner: PartnerRecord, limit: int = 50) -> list[dict[str, Any]]:
@@ -331,6 +448,8 @@ def build_generation_preflight(partner: PartnerRecord, objectives: list[str] | N
     stage = build_conversation_stage_summary(partner)
     objectives = [item for item in (objectives or []) if item]
     warnings = []
+    partner_notes = _partner_notes_text(partner)
+    recent_outcomes = _recent_outcome_summaries(partner)
     if any("電話" in item for item in objectives) and stage["round_count"] < 2:
         warnings.append("電話提案はまだ早い可能性があります。2から3往復後で、相手の反応が良い場合だけ検討してください。")
     if any("会う" in item for item in objectives) and stage["round_count"] < 3:
@@ -339,6 +458,16 @@ def build_generation_preflight(partner: PartnerRecord, objectives: list[str] | N
         warnings.append("LINE交換提案は唐突になりやすいため注意してください。LINE IDそのものは保存しないでください。")
     if (any("大人っぽい" in item for item in objectives) or "大人っぽい" in tone) and stage["round_count"] < 2:
         warnings.append("大人っぽい雰囲気は距離が近すぎる印象になりやすいため、初回や1往復目では控えめにしてください。")
+    if partner_notes:
+        note_text = partner_notes.lower()
+        if any("電話" in item for item in objectives) and "電話" in partner_notes and any(word in partner_notes for word in ["早", "まだ", "控え"]):
+            warnings.append("相手別メモ上、電話はまだ早そうです。電話提案を送る前に温度感を確認してください。")
+        if any("LINE" in item for item in objectives) and "LINE" in partner_notes and any(word in partner_notes for word in ["早", "まだ", "控え"]):
+            warnings.append("相手別メモ上、LINE交換はまだ早そうです。IDそのものは保存しないでください。")
+        if "旅行" in partner_notes and not any("電話" in item or "会う" in item or "LINE" in item for item in objectives):
+            warnings.append("相手別メモに旅行の反応が良い記録があります。自然な範囲で旅行話題を広げる候補が合いそうです。")
+        if "night" in note_text or "夜" in partner_notes:
+            warnings.append("相手別メモに夜の返信傾向があります。送る時間帯はユーザーが手動で判断してください。")
     return {
         "partner_id": partner.partner_id,
         "generation_mode": get_generation_mode_for_partner(partner),
@@ -346,6 +475,12 @@ def build_generation_preflight(partner: PartnerRecord, objectives: list[str] | N
         "tone": tone or "自然",
         "place_hint": place_hint.strip() or "-",
         "stage": stage,
+        "partner_notes": {
+            "has_notes": bool(partner_notes),
+            "count": len([note for note in partner.notes if note.text.strip()]),
+            "summary": _truncate_for_display(partner_notes, 240) or "-",
+        },
+        "recent_sent_outcomes": recent_outcomes or ["-"],
         "warnings": warnings,
         "local_save_only": True,
         "auto_send": False,
@@ -393,7 +528,9 @@ def generate_suggestion_variants_for_gui(
                 "objective": objective,
                 "tone": tone or "自然",
                 "use_case": _variant_use_case(index),
-                "safety_notes": _candidate_safety_notes(text, objective),
+                "partner_notes": _truncate_for_display(_partner_notes_text(partner), 240) or "-",
+                "recent_sent_outcomes": _recent_outcome_summaries(partner),
+                "safety_notes": _candidate_safety_notes(text, objective, partner),
             }
         )
     partner.analysis.partner_temperature = result.partner_temperature
@@ -412,6 +549,8 @@ def generate_suggestion_variants_for_gui(
         "variants": variants,
         "stage": build_conversation_stage_summary(partner),
         "preflight": build_generation_preflight(partner, selected_objectives, tone, place_hint),
+        "partner_notes": _truncate_for_display(_partner_notes_text(partner), 240) or "-",
+        "recent_sent_outcomes": _recent_outcome_summaries(partner),
     }
 
 
@@ -1019,7 +1158,7 @@ def _variant_use_case(index: int) -> str:
     return ["候補A: 一番無難。迷ったらこれ。", "候補B: 少し距離を縮める用。", "候補C: 相手の反応が良いとき用。"][index % 3]
 
 
-def _candidate_safety_notes(text: str, objective: str) -> list[str]:
+def _candidate_safety_notes(text: str, objective: str, partner: PartnerRecord | None = None) -> list[str]:
     notes = ["自動送信ではありません。送信前に人間が確認してください。"]
     if "電話" in objective or "会う" in objective or "LINE" in objective:
         notes.append("会話の温度感が低い場合は送らないでください。")
@@ -1027,6 +1166,41 @@ def _candidate_safety_notes(text: str, objective: str) -> list[str]:
         notes.append("LINE IDそのものは保存しないでください。")
     if "大人っぽい" in objective:
         notes.append("下ネタや身体的表現に寄せず、控えめにしてください。")
+    if partner:
+        partner_notes = _partner_notes_text(partner)
+        if "旅行" in partner_notes:
+            notes.append("相手別メモに旅行話題の反応記録があります。無理なく広げられるか確認してください。")
+        if "電話" in objective and "電話" in partner_notes and any(word in partner_notes for word in ["早", "まだ", "控え"]):
+            notes.append("相手別メモ上、電話はまだ早そうです。")
     if text.count("？") + text.count("?") > 1:
         notes.append("質問が複数あります。1つに減らすと自然です。")
     return notes
+
+
+def _find_sent_suggestion(partner: PartnerRecord, suggestion_id: str):
+    for suggestion in partner.pending_suggestions:
+        if suggestion.suggestion_id == suggestion_id and suggestion.status == "sent":
+            return suggestion
+    raise ValueError(f"sent suggestion not found: {suggestion_id}")
+
+
+def _partner_notes_text(partner: PartnerRecord) -> str:
+    return "\n".join(note.text.strip() for note in partner.notes if note.text.strip())
+
+
+def _recent_outcome_summaries(partner: PartnerRecord, limit: int = 3) -> list[str]:
+    sent = [suggestion for suggestion in partner.pending_suggestions if suggestion.status == "sent"]
+    summaries = []
+    for suggestion in sent[-limit:]:
+        status = suggestion.outcome_status or "未確認"
+        memo = suggestion.outcome_memo.strip()
+        detail = f"{suggestion.suggestion_id}: {status}"
+        if memo:
+            detail += f" / {_truncate_for_display(memo, 80)}"
+        summaries.append(detail)
+    return summaries
+
+
+def _truncate_for_display(text: str, max_length: int) -> str:
+    compact = " ".join(text.split())
+    return compact if len(compact) <= max_length else compact[: max_length - 3] + "..."

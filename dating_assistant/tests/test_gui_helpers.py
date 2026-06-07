@@ -12,8 +12,10 @@ from gui_helpers import (
     build_generation_preflight,
     build_discard_suggestion_preview,
     build_mark_sent_preview,
+    build_partner_note_preview,
     build_profile_form_from_paste,
     build_profile_paste_preview,
+    build_sent_outcome_preview,
     build_partner_summary,
     build_conversation_import_preview,
     build_profile_save_preview,
@@ -26,7 +28,9 @@ from gui_helpers import (
     detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
     format_conversation_history,
+    format_partner_notes,
     format_pending_suggestions,
+    format_sent_suggestions_for_outcomes,
     format_timeline_items,
     generate_suggestion_variants_for_gui,
     generate_suggestion_for_gui,
@@ -45,10 +49,13 @@ from gui_helpers import (
     real_profile_exists,
     save_partner_from_profile,
     save_real_profile_from_form,
+    SENT_OUTCOME_STATUS_OPTIONS,
+    add_partner_note_from_gui,
+    update_sent_outcome_from_gui,
     validate_imported_turns,
     validate_profile_form,
 )
-from src.models import ActivityEvent, ConversationTurn, MessageState, PartnerProfile, PartnerRecord, PendingSuggestion
+from src.models import ActivityEvent, ConversationTurn, MessageState, PartnerNote, PartnerProfile, PartnerRecord, PendingSuggestion
 from src.partner_store import load_partner, save_partner
 
 
@@ -138,6 +145,65 @@ class GuiHelperTests(unittest.TestCase):
         partner = PartnerRecord(partner_id="partner_001", display_name="sample", status="chatting")
 
         self.assertEqual(build_partner_label(partner), "partner_001 / sample / chatting")
+
+    def test_partner_notes_can_be_saved_loaded_and_warn_on_privacy_words(self):
+        partner = PartnerRecord(partner_id="partner_001", display_name="sample", status="chatting")
+        save_partner(partner)
+
+        preview = build_partner_note_preview("旅行の話題に反応がよい。LINE交換はまだ早そう。")
+        result = add_partner_note_from_gui("partner_001", "旅行の話題に反応がよい。電話はまだ早そう。", confirmed=True)
+        loaded = load_partner("partner_001")
+        notes = format_partner_notes(loaded)
+
+        self.assertTrue(preview["warnings"])
+        self.assertEqual(result["notes_count"], 1)
+        self.assertEqual(notes[0]["text"], "旅行の話題に反応がよい。電話はまだ早そう。")
+        self.assertEqual(loaded.conversation, [])
+        self.assertEqual(loaded.pending_suggestions, [])
+
+    def test_partner_notes_empty_state_and_generation_preflight_reference_notes(self):
+        partner = PartnerRecord(partner_id="partner_001", display_name="sample", status="chatting")
+        self.assertEqual(format_partner_notes(partner), [])
+
+        partner.notes.append(PartnerNote("返信は夜が多い。旅行の話題に反応がよい。電話はまだ早そう。", "2026-06-07T10:00:00+09:00"))
+        preflight = build_generation_preflight(partner, ["電話に誘う"], "自然", "")
+        warnings = "\n".join(preflight["warnings"])
+
+        self.assertTrue(preflight["partner_notes"]["has_notes"])
+        self.assertIn("旅行", preflight["partner_notes"]["summary"])
+        self.assertIn("電話はまだ早そう", warnings)
+
+    def test_sent_outcome_memo_can_be_saved_loaded_and_shown_in_preflight(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            pending_suggestions=[
+                PendingSuggestion(
+                    "suggestion_001",
+                    "reply",
+                    "旅行の話、楽しそうですね。",
+                    "2026-06-07T10:00:00+09:00",
+                    status="sent",
+                    sent_at="2026-06-07T10:01:00+09:00",
+                )
+            ],
+        )
+        save_partner(partner)
+
+        preview = build_sent_outcome_preview(partner, "suggestion_001", "話題が広がった", "旅行の話題は反応よかった。")
+        result = update_sent_outcome_from_gui("partner_001", "suggestion_001", "話題が広がった", "旅行の話題は反応よかった。", confirmed=True)
+        loaded = load_partner("partner_001")
+        outcomes = format_sent_suggestions_for_outcomes(loaded)
+        preflight = build_generation_preflight(loaded, ["質問を1つ入れる"], "自然", "")
+
+        self.assertIn("話題が広がった", SENT_OUTCOME_STATUS_OPTIONS)
+        self.assertEqual(preview["結果ステータス"], "話題が広がった")
+        self.assertEqual(result["outcome_status"], "話題が広がった")
+        self.assertEqual(outcomes[0]["outcome_memo"], "旅行の話題は反応よかった。")
+        self.assertIn("suggestion_001: 話題が広がった", preflight["recent_sent_outcomes"][0])
+        self.assertEqual(len(loaded.conversation), 0)
+        self.assertEqual(loaded.pending_suggestions[0].status, "sent")
 
     def test_profile_form_builds_real_profile_data(self):
         form = {
