@@ -580,13 +580,15 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(len(result["variants"]), 3)
         self.assertEqual(len([item for item in stored.pending_suggestions if item.status == "pending"]), 3)
         self.assertTrue(all(item.purpose == "reply" for item in stored.pending_suggestions))
-        self.assertEqual([item["use_case"].split(":")[0] for item in result["variants"]], ["候補A", "候補B", "候補C"])
+        self.assertEqual([item["title"].split(":")[0] for item in result["variants"]], ["候補A", "候補B", "候補C"])
         self.assertIn("stage", result)
         self.assertIn("conversation_stage", result)
         self.assertIn("temperature", result)
         self.assertIn("next_recommendation", result)
         self.assertTrue(all("conversation_stage" in item for item in result["variants"]))
         self.assertTrue(all("temperature" in item for item in result["variants"]))
+        self.assertTrue(all("aim" in item for item in result["variants"]))
+        self.assertTrue(all("quality_check" in item for item in result["variants"]))
 
     def test_generation_preflight_emphasizes_early_risky_objectives(self):
         partner = PartnerRecord(
@@ -618,6 +620,101 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(preflight["conversation_stage"], "1往復目")
         self.assertIn("action_judgements", preflight)
         self.assertFalse(preflight["auto_send"])
+
+    def test_first_message_variants_do_not_include_invites_or_line_exchange(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="new_profile",
+            profile=PartnerProfile(profile_text="カフェと映画が好きです。", hobbies=["カフェ", "映画"]),
+        )
+        save_partner(partner)
+
+        result = generate_suggestion_variants_for_gui(
+            "partner_001",
+            ["電話に誘う", "会う提案をする", "LINE交換を提案する"],
+            "自然",
+            "",
+        )
+        texts = "\n".join(item["text"] for item in result["variants"])
+
+        self.assertNotIn("電話", texts)
+        self.assertNotIn("LINE", texts)
+        self.assertNotIn("お茶でも", texts)
+        self.assertTrue(all(item["text"].count("？") <= 1 for item in result["variants"]))
+        self.assertTrue(all("品質" not in item["text"] for item in result["variants"]))
+        self.assertEqual([item["title"].split(":")[0] for item in result["variants"]], ["候補A", "候補B", "候補C"])
+
+    def test_early_phone_objective_uses_safe_reply_and_quality_warning(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            profile=PartnerProfile(profile_text="旅行が好きです。", hobbies=["旅行"]),
+            conversation=[ConversationTurn("partner", "旅行好きです", "2026-06-07T10:00:00+09:00")],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+        save_partner(partner)
+
+        result = generate_suggestion_variants_for_gui("partner_001", ["電話に誘う"], "自然", "")
+        variant = result["variants"][0]
+
+        self.assertNotIn("電話で話して", variant["text"])
+        self.assertTrue(any("電話に誘うはまだ早い" in item for item in variant["quality_check"]))
+        self.assertTrue(any("電話に誘う: まだ早い" in item for item in variant["safety_notes"]))
+
+    def test_phone_meet_line_and_adult_candidates_are_soft_when_allowed(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            profile=PartnerProfile(profile_text="カフェと旅行が好きです。", hobbies=["カフェ", "旅行"]),
+            conversation=[
+                ConversationTurn("partner", "旅行好きですか？", "2026-06-07T10:00:00+09:00"),
+                ConversationTurn("user", "好きです", "2026-06-07T10:01:00+09:00"),
+                ConversationTurn("partner", "自然が多い場所が好きです", "2026-06-07T10:02:00+09:00"),
+                ConversationTurn("user", "いいですね", "2026-06-07T10:03:00+09:00"),
+                ConversationTurn("partner", "カフェもよく行きますか？", "2026-06-07T10:04:00+09:00"),
+                ConversationTurn("user", "行きます", "2026-06-07T10:05:00+09:00"),
+                ConversationTurn("partner", "話しやすいです", "2026-06-07T10:06:00+09:00"),
+                ConversationTurn("user", "自分もです", "2026-06-07T10:07:00+09:00"),
+                ConversationTurn("partner", "また話したいです", "2026-06-07T10:08:00+09:00"),
+            ],
+            sent_records=[
+                SentRecord(
+                    sent_id="sent_generated_000001",
+                    source_type="generated_suggestion",
+                    text="旅行の話題",
+                    sent_at="2026-06-07T10:03:00+09:00",
+                    outcome_status="反応よかった",
+                    outcome_memo="自然に話が続いた",
+                )
+            ],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+        save_partner(partner)
+
+        phone = generate_suggestion_variants_for_gui("partner_001", ["電話に誘う"], "自然", "")["variants"][0]["text"]
+        partner = load_partner("partner_001")
+        partner.pending_suggestions.clear()
+        save_partner(partner, allow_overwrite=True)
+        meet = generate_suggestion_variants_for_gui("partner_001", ["会う提案をする"], "自然", "")["variants"][0]["text"]
+        partner = load_partner("partner_001")
+        partner.pending_suggestions.clear()
+        save_partner(partner, allow_overwrite=True)
+        line = generate_suggestion_variants_for_gui("partner_001", ["LINE交換を提案する"], "自然", "")["variants"][0]["text"]
+        partner = load_partner("partner_001")
+        partner.pending_suggestions.clear()
+        save_partner(partner, allow_overwrite=True)
+        adult = generate_suggestion_variants_for_gui("partner_001", ["少し大人っぽい雰囲気にする"], "自然", "")["variants"][0]["text"]
+
+        self.assertIn("10分くらい", phone)
+        self.assertIn("無理なければ", phone)
+        self.assertTrue(any(word in meet for word in ["お茶", "ランチ"]))
+        self.assertIn("もちろんこのままアプリでも大丈夫", line)
+        self.assertNotIn("LINE教えて", line)
+        self.assertNotIn("ホテル", adult)
+        self.assertNotIn("大人の関係", adult)
 
     def test_conversation_stage_summary_changes_by_turn_count_and_reply_wait(self):
         first = PartnerRecord(partner_id="partner_001", display_name="first", status="new_profile")

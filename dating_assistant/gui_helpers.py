@@ -562,7 +562,9 @@ def generate_suggestion_variants_for_gui(
     for index in range(3):
         base = base_candidates[index % len(base_candidates)]
         objective = selected_objectives[index % len(selected_objectives)] if selected_objectives else "質問を1つ入れる"
-        text = _shape_candidate_for_objective(base, objective, tone, place_hint, mode, index)
+        text = _shape_candidate_for_objective(base, objective, tone, place_hint, mode, index, partner, stage)
+        quality_check = _candidate_quality_check(text, objective, partner, stage)
+        metadata = _variant_metadata(index, objective, stage, quality_check)
         suggestion = add_suggestion(
             partner,
             purpose="first" if mode == "first" else "reply",
@@ -577,13 +579,17 @@ def generate_suggestion_variants_for_gui(
                 "purpose": suggestion.purpose,
                 "objective": objective,
                 "tone": tone or "自然",
-                "use_case": _variant_use_case(index, stage),
+                "title": metadata["title"],
+                "use_case": metadata["use_case"],
+                "aim": metadata["aim"],
                 "conversation_stage": stage["conversation_stage"],
                 "temperature": stage["temperature"],
+                "compatibility": metadata["compatibility"],
                 "next_recommendation": stage["next_recommendation"],
                 "partner_notes": _truncate_for_display(_partner_notes_text(partner), 240) or "-",
                 "recent_sent_outcomes": _recent_outcome_summaries(partner),
                 "safety_notes": _candidate_safety_notes(text, objective, partner),
+                "quality_check": quality_check,
             }
         )
     partner.analysis.partner_temperature = result.partner_temperature
@@ -1191,29 +1197,115 @@ def _unique_candidates(candidates: list[str]) -> list[str]:
     return unique or ["はじめまして。プロフィールを見て、話してみたいなと思いました。休日はどんな過ごし方が多いですか？"]
 
 
-def _shape_candidate_for_objective(base: str, objective: str, tone: str, place_hint: str, mode: str, index: int) -> str:
+def _shape_candidate_for_objective(
+    base: str,
+    objective: str,
+    tone: str,
+    place_hint: str,
+    mode: str,
+    index: int,
+    partner: PartnerRecord | None = None,
+    stage: dict[str, Any] | None = None,
+) -> str:
     place = place_hint.strip()
+    stage = stage or (build_conversation_stage_summary(partner) if partner else {})
+    if mode == "first":
+        return _first_message_variant(partner, base, objective, tone, index)
+    judgement = _judgement_for_objective(objective, stage.get("action_judgements", {})) if stage else None
+    if judgement and judgement["status"] in {"まだ早い", "非推奨"}:
+        return _safe_reply_variant(partner, base, objective, tone, index)
     if "電話" in objective:
-        return "メッセージだと少し伝わりにくいので、タイミングが合えば短く電話で話してみませんか？"
+        return _trim_for_gui("メッセージだと少し伝わりにくいところもあるので、タイミング合えば今度10分くらい軽く話してみませんか？無理なければで大丈夫です。")
     if "LINE" in objective:
-        return "このままアプリでも大丈夫ですが、話しやすければLINEに移っても大丈夫です。無理なければで大丈夫です。"
+        return _trim_for_gui("アプリだと見落としがちなら、話しやすい方に移しても大丈夫です。もちろんこのままアプリでも大丈夫です。")
     if "場所" in objective and place:
-        return f"話していて雰囲気が合いそうだなと思いました。よかったら今度、{place}あたりで軽くお茶でも行けたら嬉しいです。"
+        return _trim_for_gui(f"話していて雰囲気が合いそうだなと思いました。もし予定合えば、{place}あたりで短めにお茶かランチでもどうですか？")
     if "会う" in objective:
-        return "話していて雰囲気が合いそうだなと思いました。よかったら今度、軽くお茶でも行けたら嬉しいです。"
-    if "自分の紹介" in objective:
-        return _trim_for_gui(f"{base} 自分も近い雰囲気の話題は好きなので、ゆるく話せたら嬉しいです。")
-    if "ユーモア" in objective or "ユーモア" in tone:
-        return _trim_for_gui(f"{base} ちょっとだけ気になって、つい聞きたくなりました。")
+        return _trim_for_gui("話していて雰囲気が合いそうだなと思いました。タイミング合えば、今度軽くお茶でも行けたら嬉しいです。")
     if "大人" in objective or "大人" in tone:
-        return _trim_for_gui(base.replace("嬉しいです。", "嬉しいです。落ち着いて話せる感じもいいなと思いました。"))
+        return _trim_for_gui("やり取りしていて、落ち着いて話せそうな感じがしてちょっと気になっています。無理なく話せるペースで続けられたら嬉しいです。")
+    if "自分の紹介" in objective:
+        return _safe_reply_variant(partner, base, objective, tone, index, include_self=True)
+    if "ユーモア" in objective or "ユーモア" in tone:
+        return _trim_for_gui(f"{_safe_reply_variant(partner, base, objective, tone, index)} ちょっと気になって聞いてみたくなりました。")
     if "短め" in tone:
         return _trim_for_gui(base, 90)
     if index == 1:
-        return _trim_for_gui(base.replace("気になりました", "印象に残りました"))
+        return _safe_reply_variant(partner, base, objective, tone, index, include_self=True)
     if index == 2:
-        return _trim_for_gui(base.replace("最近", "休日は"))
-    return _trim_for_gui(base)
+        return _safe_reply_variant(partner, base, objective, tone, index, bridge=True)
+    return _safe_reply_variant(partner, base, objective, tone, index)
+
+
+def _first_message_variant(partner: PartnerRecord | None, base: str, objective: str, tone: str, index: int) -> str:
+    hook = _profile_hook_for_candidate(partner)
+    if index == 0:
+        return _trim_for_gui(f"はじめまして。{hook}が印象に残りました。休日はそのあたりで過ごすことが多いですか？", 120)
+    if index == 1:
+        return _trim_for_gui(f"はじめまして。{hook}の雰囲気が自然で、話してみたいなと思いました。最近もよく楽しんでいますか？", 120)
+    return _trim_for_gui(f"はじめまして。{hook}の話、少し気になりました。気軽に話せたら嬉しいです。", 100)
+
+
+def _safe_reply_variant(
+    partner: PartnerRecord | None,
+    base: str,
+    objective: str,
+    tone: str,
+    index: int,
+    include_self: bool = False,
+    bridge: bool = False,
+) -> str:
+    latest = _latest_partner_text(partner)
+    hook = _conversation_hook_for_candidate(partner) or _profile_hook_for_candidate(partner)
+    reaction = _reaction_for_latest(latest)
+    if include_self:
+        return _trim_for_gui(f"{reaction} 自分も{hook}みたいな話は好きなので、ゆるく聞いてみたくなりました。最近だとどんな感じが多いですか？", 135)
+    if bridge:
+        return _trim_for_gui(f"{reaction} {hook}の話、もう少し聞いてみたいです。無理なく話しやすいところからで大丈夫です。", 120)
+    if index == 0:
+        return _trim_for_gui(f"{reaction} {hook}の感じ、自然でいいですね。最近もそういう時間は作れていますか？", 120)
+    if index == 1:
+        return _trim_for_gui(f"{reaction} 自分も少し近いところがあるので、聞いていて話しやすいです。休日はそのあたりが多いですか？", 130)
+    return _trim_for_gui(f"{reaction} その話、もう少し聞いてみたいです。特に印象に残っていることはありますか？", 115)
+
+
+def _profile_hook_for_candidate(partner: PartnerRecord | None) -> str:
+    if not partner:
+        return "プロフィールの雰囲気"
+    profile = partner.profile
+    candidates = list(profile.hobbies)
+    text = " ".join([profile.profile_text or "", profile.free_notes or "", " ".join(profile.photos_memo or [])])
+    for keyword in ["カフェ", "映画", "旅行", "ご飯", "食べ物", "自然", "散歩", "音楽", "料理", "写真"]:
+        if keyword in text and keyword not in candidates:
+            candidates.append(keyword)
+    return candidates[0] if candidates else "プロフィールの雰囲気"
+
+
+def _conversation_hook_for_candidate(partner: PartnerRecord | None) -> str:
+    text = _latest_partner_text(partner)
+    for keyword in ["カフェ", "映画", "旅行", "ご飯", "食べ物", "自然", "散歩", "仕事", "休日", "音楽", "料理"]:
+        if keyword in text:
+            return keyword
+    return ""
+
+
+def _latest_partner_text(partner: PartnerRecord | None) -> str:
+    if not partner:
+        return ""
+    partner_turns = [turn.text.strip() for turn in partner.conversation if turn.speaker == "partner" and turn.text.strip()]
+    return partner_turns[-1] if partner_turns else ""
+
+
+def _reaction_for_latest(text: str) -> str:
+    if not text:
+        return "ありがとうございます。"
+    if "仕事" in text:
+        return "それはお疲れさまです。"
+    if any(word in text for word in ["好き", "楽しい", "よく", "行きます"]):
+        return "いいですね。"
+    if len(text) <= 8:
+        return "返信ありがとうございます。"
+    return "そうなんですね。"
 
 
 def _trim_for_gui(text: str, max_len: int = 160) -> str:
@@ -1230,6 +1322,69 @@ def _variant_use_case(index: int, stage: dict[str, Any] | None = None) -> str:
         f"候補B: 少し距離を縮める用。温度感: {temperature}。",
         f"候補C: 次につなげる用。{stage.get('next_recommendation', '送信前に確認してください')}",
     ][index % 3]
+
+
+def _variant_metadata(index: int, objective: str, stage: dict[str, Any], quality_check: list[str]) -> dict[str, str]:
+    stage_label = stage.get("conversation_stage") or "現在の会話"
+    temperature = stage.get("temperature") or "不明"
+    if index % 3 == 0:
+        title = "一番無難"
+        use_case = "迷ったらこれ"
+        aim = "相手の話題に軽く触れて、返信しやすい1問に絞る"
+    elif index % 3 == 1:
+        title = "少し親しみやすい"
+        use_case = "相手が明るい雰囲気なら"
+        aim = "自分の話を少しだけ混ぜて、会話を広げる"
+    else:
+        title = "少し距離を縮める"
+        use_case = "温度感が普通以上のとき"
+        aim = "次につながる一言を入れる。早い段階では誘いすぎない"
+    risky_note = " / 注意あり" if any("注意" in item or "まだ早い" in item for item in quality_check) else ""
+    return {
+        "title": f"候補{chr(ord('A') + index % 3)}: {title}",
+        "use_case": f"{use_case}{risky_note}",
+        "aim": aim,
+        "compatibility": f"会話ステージ: {stage_label} / 温度感: {temperature}",
+    }
+
+
+def _candidate_quality_check(text: str, objective: str, partner: PartnerRecord | None, stage: dict[str, Any] | None = None) -> list[str]:
+    checks: list[str] = []
+    question_count = text.count("？") + text.count("?")
+    if len(text) <= 130:
+        checks.append("長さ: OK")
+    else:
+        checks.append("長さ: 注意。少し長めです")
+    if question_count <= 1:
+        checks.append("質問数: OK")
+    else:
+        checks.append("質問数: 注意。質問は1つまでが自然です")
+    praise_count = sum(text.count(word) for word in ["素敵", "かわいい", "綺麗", "美人", "すごい", "嬉しい"])
+    if praise_count <= 1:
+        checks.append("褒め方: OK")
+    else:
+        checks.append("褒め方: 注意。褒めすぎに見える可能性があります")
+    if any(template in text for template in ["プロフィール見ました", "共通点があります", "共通点があって嬉しい"]):
+        checks.append("テンプレ感: 注意。少しAIっぽく見える可能性があります")
+    else:
+        checks.append("テンプレ感: OK")
+    if any(word in text for word in ["電話番号", "ID送って", "LINE教えて", "住所", "メール"]):
+        checks.append("個人情報: 注意。個人情報を聞かないでください")
+    else:
+        checks.append("個人情報: OK")
+    if any(word in text for word in ["ホテル", "自宅", "家来る", "泊まり", "体", "身体", "エロ", "大人の関係"]):
+        checks.append("大人っぽさ: 注意。露骨な表現は避けてください")
+    else:
+        checks.append("大人っぽさ: OK")
+    if stage:
+        judgement = _judgement_for_objective(objective, stage.get("action_judgements", {}))
+        if judgement and judgement["status"] in {"まだ早い", "非推奨"}:
+            checks.append(f"会話ステージ: 注意。{objective}は{judgement['status']}です")
+        elif judgement and judgement["status"] == "控えめなら可":
+            checks.append(f"会話ステージ: 控えめなら可。{judgement['reason']}")
+        else:
+            checks.append("会話ステージ: OK")
+    return checks
 
 
 def _candidate_safety_notes(text: str, objective: str, partner: PartnerRecord | None = None) -> list[str]:
@@ -1279,7 +1434,9 @@ def _build_temperature_summary(
     if "電話" in partner_notes and any(word in partner_notes for word in ["早", "まだ", "控え"]):
         reasons.append("相手別メモに電話はまだ早そうとある")
 
-    if any(reason in reasons for reason in ["送信結果メモで反応がよい記録がある", "相手から質問が返ってきている"]) and raw_temperature in {"good", "very_good", "normal"}:
+    if "送信結果メモで反応がよい記録がある" in reasons:
+        label = "高め"
+    elif "相手から質問が返ってきている" in reasons and raw_temperature in {"good", "very_good", "normal"}:
         label = "高め"
     elif "短文が続いている" in reasons or raw_temperature == "low":
         label = "低め"

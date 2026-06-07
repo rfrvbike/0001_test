@@ -266,7 +266,10 @@ def render_generation_controls(partner) -> None:
             return
         st.success("3候補をpending_suggestionsへ保存しました。")
         for variant in generated["variants"]:
-            with st.expander(f"{variant['use_case']} / {variant['objective']} / {variant['suggestion_id']}", expanded=True):
+            with st.expander(f"{variant['title']} / {variant['suggestion_id']}", expanded=True):
+                st.write(f"**使いどころ:** {variant['use_case']}")
+                st.write(f"**狙い:** {variant['aim']}")
+                st.write(f"**会話ステージとの相性:** {variant['compatibility']}")
                 st.text_area(
                     "候補本文",
                     variant["text"],
@@ -274,6 +277,9 @@ def render_generation_controls(partner) -> None:
                     disabled=True,
                     key=f"generated_{variant['suggestion_id']}",
                 )
+                st.write("**品質チェック:**")
+                for check in variant["quality_check"]:
+                    st.write(f"- {check}")
                 st.write("注意: " + " / ".join(variant["safety_notes"]))
         st.info("実際に手動送信した後、pending_suggestions欄から送信済みとしてlocal記録できます。")
 
