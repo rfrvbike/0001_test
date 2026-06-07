@@ -420,33 +420,54 @@ def build_conversation_stage_summary(partner: PartnerRecord) -> dict[str, Any]:
     user_turns = [turn for turn in partner.conversation if turn.speaker == "user"]
     round_count = min(len(partner_turns), len(user_turns))
     latest_partner = partner_turns[-1].text if partner_turns else ""
-    temperature = estimate_partner_temperature(partner.conversation) if partner.conversation else "unknown"
+    raw_temperature = estimate_partner_temperature(partner.conversation) if partner.conversation else "unknown"
+    partner_notes = _partner_notes_text(partner)
+    outcome_summaries = _recent_outcome_summaries(partner)
+    temperature, temperature_reasons = _build_temperature_summary(partner, raw_temperature, partner_notes, outcome_summaries)
     if not partner.conversation:
         stage = "初回前"
         next_step = "プロフィールに触れた初回候補を作る"
     elif partner.message_state.awaiting_partner_reply:
-        stage = "返信待ち"
-        next_step = "相手の返信を待つ"
+        stage = "初回送信済み・返信待ち" if round_count == 0 else "一旦保留"
+        next_step = "今は追撃せず、返信待ちがよさそうです"
     elif round_count <= 1:
         stage = "1往復目"
-        next_step = "共感と軽い質問で会話を続ける"
+        next_step = "今回は「共感・リアクション重視」＋「質問を1つ」がよさそうです"
     elif round_count == 2:
         stage = "2往復目"
-        next_step = "温度感を見ながら話題を少し広げる"
-    elif temperature in {"good", "very_good"}:
-        stage = "3往復目以降"
-        next_step = "電話や軽い会う提案を検討してもよい"
+        next_step = "今回は「相手の趣味を広げる」が自然です"
+    elif temperature == "高め" and round_count >= 3:
+        stage = "電話提案を検討してよさそう"
+        next_step = "相手の反応が良いので、控えめな電話提案を検討してもよさそうです"
+    elif temperature in {"高め", "普通"} and round_count >= 4:
+        stage = "会う提案を検討してよさそう"
+        next_step = "会う提案より先に、短めの電話提案や軽い確認が自然です"
+    elif temperature == "低め":
+        stage = "相手の反応が薄い"
+        next_step = "まだ電話や会う提案は避け、短く返しやすい雑談が安全です"
+    elif round_count >= 3:
+        stage = "雑談継続がよさそう"
+        next_step = "急いで誘わず、もう1往復雑談を続けるのが安全です"
     else:
-        stage = "まだ雑談継続"
-        next_step = "急いで誘わず、もう少し会話を続ける"
+        stage = "判定不能"
+        next_step = "相手の返信内容をもう少し見てから判断します"
+    action_judgements = _build_action_judgements(round_count, temperature, partner_notes, outcome_summaries, partner)
+    cautions = _build_guidance_cautions(action_judgements, partner_notes, outcome_summaries)
     return {
         "stage": stage,
+        "conversation_stage": stage,
         "round_count": round_count,
-        "partner_temperature": temperature,
+        "partner_temperature": raw_temperature,
+        "temperature": temperature,
+        "temperature_reasons": temperature_reasons,
         "latest_partner_message": latest_partner or "-",
         "next_recommendation": next_step,
-        "phone_suggestion": "2から3往復後で反応が良い場合のみ検討",
-        "meet_suggestion": "電話後または十分に自然な会話後に軽く検討",
+        "caution_points": cautions,
+        "action_judgements": action_judgements,
+        "phone_suggestion": action_judgements["電話に誘う"]["status"],
+        "meet_suggestion": action_judgements["会う提案をする"]["status"],
+        "line_exchange": action_judgements["LINE交換を提案する"],
+        "adult_topic": action_judgements["少し大人っぽい雰囲気にする"],
     }
 
 
@@ -456,6 +477,7 @@ def build_generation_preflight(partner: PartnerRecord, objectives: list[str] | N
     warnings = []
     partner_notes = _partner_notes_text(partner)
     recent_outcomes = _recent_outcome_summaries(partner)
+    action_judgements = stage["action_judgements"]
     if any("電話" in item for item in objectives) and stage["round_count"] < 2:
         warnings.append("電話提案はまだ早い可能性があります。2から3往復後で、相手の反応が良い場合だけ検討してください。")
     if any("会う" in item for item in objectives) and stage["round_count"] < 3:
@@ -474,6 +496,16 @@ def build_generation_preflight(partner: PartnerRecord, objectives: list[str] | N
             warnings.append("相手別メモに旅行の反応が良い記録があります。自然な範囲で旅行話題を広げる候補が合いそうです。")
         if "night" in note_text or "夜" in partner_notes:
             warnings.append("相手別メモに夜の返信傾向があります。送る時間帯はユーザーが手動で判断してください。")
+    for objective in objectives:
+        judgement = _judgement_for_objective(objective, action_judgements)
+        if not judgement:
+            continue
+        status = judgement["status"]
+        reason = judgement["reason"]
+        if status in {"まだ早い", "非推奨"}:
+            warnings.append(f"{objective}: {status}。{reason}")
+        elif status == "控えめなら可":
+            warnings.append(f"{objective}: {status}。送る場合は相手が断りやすい短い文にしてください。")
     return {
         "partner_id": partner.partner_id,
         "generation_mode": get_generation_mode_for_partner(partner),
@@ -481,6 +513,16 @@ def build_generation_preflight(partner: PartnerRecord, objectives: list[str] | N
         "tone": tone or "自然",
         "place_hint": place_hint.strip() or "-",
         "stage": stage,
+        "conversation_stage": stage["conversation_stage"],
+        "temperature": {
+            "label": stage["temperature"],
+            "reasons": stage["temperature_reasons"],
+        },
+        "next_recommendation": stage["next_recommendation"],
+        "caution_points": stage["caution_points"],
+        "action_judgements": action_judgements,
+        "line_exchange": stage["line_exchange"],
+        "adult_topic": stage["adult_topic"],
         "partner_notes": {
             "has_notes": bool(partner_notes),
             "count": len([note for note in partner.notes if note.text.strip()]),
@@ -515,6 +557,8 @@ def generate_suggestion_variants_for_gui(
     base_candidates = _unique_candidates([result.best_message, *result.message_candidates])
     variants = []
     selected_objectives = [item for item in (objectives or []) if item]
+    preflight = build_generation_preflight(partner, selected_objectives, tone, place_hint)
+    stage = preflight["stage"]
     for index in range(3):
         base = base_candidates[index % len(base_candidates)]
         objective = selected_objectives[index % len(selected_objectives)] if selected_objectives else "質問を1つ入れる"
@@ -533,7 +577,10 @@ def generate_suggestion_variants_for_gui(
                 "purpose": suggestion.purpose,
                 "objective": objective,
                 "tone": tone or "自然",
-                "use_case": _variant_use_case(index),
+                "use_case": _variant_use_case(index, stage),
+                "conversation_stage": stage["conversation_stage"],
+                "temperature": stage["temperature"],
+                "next_recommendation": stage["next_recommendation"],
                 "partner_notes": _truncate_for_display(_partner_notes_text(partner), 240) or "-",
                 "recent_sent_outcomes": _recent_outcome_summaries(partner),
                 "safety_notes": _candidate_safety_notes(text, objective, partner),
@@ -550,11 +597,15 @@ def generate_suggestion_variants_for_gui(
     elif partner.status in {"new_profile", "first_message_sent", "first_message_suggested"}:
         partner.status = "chatting"
     save_updated_partner(partner)
+    saved_stage = build_conversation_stage_summary(partner)
     return {
         "mode": mode,
         "variants": variants,
-        "stage": build_conversation_stage_summary(partner),
+        "stage": saved_stage,
         "preflight": build_generation_preflight(partner, selected_objectives, tone, place_hint),
+        "conversation_stage": saved_stage["conversation_stage"],
+        "temperature": saved_stage["temperature"],
+        "next_recommendation": saved_stage["next_recommendation"],
         "partner_notes": _truncate_for_display(_partner_notes_text(partner), 240) or "-",
         "recent_sent_outcomes": _recent_outcome_summaries(partner),
     }
@@ -1169,8 +1220,16 @@ def _trim_for_gui(text: str, max_len: int = 160) -> str:
     return text if len(text) <= max_len else text[: max_len - 1] + "…"
 
 
-def _variant_use_case(index: int) -> str:
-    return ["候補A: 一番無難。迷ったらこれ。", "候補B: 少し距離を縮める用。", "候補C: 相手の反応が良いとき用。"][index % 3]
+def _variant_use_case(index: int, stage: dict[str, Any] | None = None) -> str:
+    if not stage:
+        return ["候補A: 一番無難。迷ったらこれ。", "候補B: 少し距離を縮める用。", "候補C: 相手の反応が良いとき用。"][index % 3]
+    stage_label = stage.get("conversation_stage") or stage.get("stage") or "現在の会話"
+    temperature = stage.get("temperature") or "不明"
+    return [
+        f"候補A: 一番無難。{stage_label}向け。",
+        f"候補B: 少し距離を縮める用。温度感: {temperature}。",
+        f"候補C: 次につなげる用。{stage.get('next_recommendation', '送信前に確認してください')}",
+    ][index % 3]
 
 
 def _candidate_safety_notes(text: str, objective: str, partner: PartnerRecord | None = None) -> list[str]:
@@ -1182,6 +1241,10 @@ def _candidate_safety_notes(text: str, objective: str, partner: PartnerRecord | 
     if "大人っぽい" in objective:
         notes.append("下ネタや身体的表現に寄せず、控えめにしてください。")
     if partner:
+        stage = build_conversation_stage_summary(partner)
+        judgement = _judgement_for_objective(objective, stage["action_judgements"])
+        if judgement and judgement["status"] in {"まだ早い", "非推奨", "控えめなら可"}:
+            notes.append(f"{objective}: {judgement['status']}。{judgement['reason']}")
         partner_notes = _partner_notes_text(partner)
         if "旅行" in partner_notes:
             notes.append("相手別メモに旅行話題の反応記録があります。無理なく広げられるか確認してください。")
@@ -1190,6 +1253,156 @@ def _candidate_safety_notes(text: str, objective: str, partner: PartnerRecord | 
     if text.count("？") + text.count("?") > 1:
         notes.append("質問が複数あります。1つに減らすと自然です。")
     return notes
+
+
+def _build_temperature_summary(
+    partner: PartnerRecord,
+    raw_temperature: str,
+    partner_notes: str,
+    outcome_summaries: list[str],
+) -> tuple[str, list[str]]:
+    partner_turns = [turn for turn in partner.conversation if turn.speaker == "partner"]
+    reasons: list[str] = []
+    if not partner.conversation:
+        return "不明", ["会話履歴がまだありません"]
+    if partner.message_state.awaiting_partner_reply:
+        reasons.append("直近で返信待ち")
+    if any(_has_question(turn.text) for turn in partner_turns):
+        reasons.append("相手から質問が返ってきている")
+    if any(len(turn.text.strip()) >= 18 for turn in partner_turns[-3:]):
+        reasons.append("相手の返信が一定量ある")
+    if sum(1 for turn in partner_turns[-3:] if len(turn.text.strip()) <= 8) >= 2:
+        reasons.append("短文が続いている")
+    outcome_text = "\n".join(outcome_summaries)
+    if any(word in outcome_text for word in ["反応よかった", "話題が広がった", "返信あり"]):
+        reasons.append("送信結果メモで反応がよい記録がある")
+    if "電話" in partner_notes and any(word in partner_notes for word in ["早", "まだ", "控え"]):
+        reasons.append("相手別メモに電話はまだ早そうとある")
+
+    if any(reason in reasons for reason in ["送信結果メモで反応がよい記録がある", "相手から質問が返ってきている"]) and raw_temperature in {"good", "very_good", "normal"}:
+        label = "高め"
+    elif "短文が続いている" in reasons or raw_temperature == "low":
+        label = "低め"
+    elif raw_temperature in {"good", "very_good", "normal"}:
+        label = "普通"
+    else:
+        label = "不明"
+    return label, reasons or ["明確な判断材料はまだ少ない"]
+
+
+def _judgement_for_objective(objective: str, action_judgements: dict[str, dict[str, str]]) -> dict[str, str] | None:
+    if "電話" in objective:
+        return action_judgements.get("電話に誘う")
+    if "場所" in objective:
+        return action_judgements.get("場所を指定して会う提案をする")
+    if "会う" in objective:
+        return action_judgements.get("会う提案をする")
+    if "LINE" in objective:
+        return action_judgements.get("LINE交換を提案する")
+    if "大人" in objective:
+        return action_judgements.get("少し大人っぽい雰囲気にする")
+    if "恋愛" in objective:
+        return action_judgements.get("恋愛観に軽く触れる")
+    return None
+
+
+def _build_action_judgements(
+    round_count: int,
+    temperature: str,
+    partner_notes: str,
+    outcome_summaries: list[str],
+    partner: PartnerRecord,
+) -> dict[str, dict[str, str]]:
+    judgement = {
+        "電話に誘う": _judge_phone(round_count, temperature, partner_notes),
+        "会う提案をする": _judge_meet(round_count, temperature, partner_notes),
+        "場所を指定して会う提案をする": _judge_specific_place(round_count, temperature, partner_notes),
+        "LINE交換を提案する": _judge_line(round_count, temperature, partner_notes),
+        "少し大人っぽい雰囲気にする": _judge_adult_topic(round_count, temperature, partner_notes),
+        "恋愛観に軽く触れる": _judge_romance_topic(round_count, temperature),
+    }
+    outcome_text = "\n".join(outcome_summaries)
+    if any(word in outcome_text for word in ["反応よかった", "話題が広がった"]):
+        judgement["次に広げる話題"] = {
+            "status": "OK",
+            "reason": "送信結果メモで反応が良い記録があるため、同じ話題を自然に広げるのがよさそうです。",
+        }
+    if partner.message_state.awaiting_partner_reply:
+        for value in judgement.values():
+            value["status"] = "非推奨"
+            value["reason"] = "直近で返信待ちのため、今は追撃せず待つ方が安全です。"
+    return judgement
+
+
+def _judge_phone(round_count: int, temperature: str, partner_notes: str) -> dict[str, str]:
+    if "電話" in partner_notes and any(word in partner_notes for word in ["早", "まだ", "控え"]):
+        return {"status": "非推奨", "reason": "相手別メモに電話はまだ早そうとあります。"}
+    if round_count < 2:
+        return {"status": "まだ早い", "reason": "まだ1往復目以下なので、電話提案は早い可能性があります。"}
+    if temperature == "高め":
+        return {"status": "控えめなら可", "reason": "相手から質問や良い反応があり、短く断りやすい形なら検討できます。"}
+    return {"status": "まだ早い", "reason": "温度感が十分に高いとは言えないため、もう1往復雑談が安全です。"}
+
+
+def _judge_meet(round_count: int, temperature: str, partner_notes: str) -> dict[str, str]:
+    if round_count < 3:
+        return {"status": "まだ早い", "reason": "まだ3往復未満なので、会う提案は早い可能性があります。"}
+    if "会う" in partner_notes and any(word in partner_notes for word in ["早", "まだ", "控え"]):
+        return {"status": "非推奨", "reason": "相手別メモに会う提案はまだ早そうとあります。"}
+    if temperature == "高め":
+        return {"status": "控えめなら可", "reason": "会話が続いているため、軽く断りやすい提案なら検討できます。"}
+    return {"status": "まだ早い", "reason": "会う提案より先に、趣味や日常の話題をもう少し続けるのが安全です。"}
+
+
+def _judge_specific_place(round_count: int, temperature: str, partner_notes: str) -> dict[str, str]:
+    base = _judge_meet(round_count, temperature, partner_notes)
+    if base["status"] in {"まだ早い", "非推奨"}:
+        return base
+    return {"status": "控えめなら可", "reason": "場所指定は圧が出やすいため、相手が断りやすい軽い候補に留めてください。"}
+
+
+def _judge_line(round_count: int, temperature: str, partner_notes: str) -> dict[str, str]:
+    if "LINE" in partner_notes and any(word in partner_notes for word in ["早", "まだ", "控え"]):
+        return {"status": "非推奨", "reason": "相手別メモにLINE交換はまだ早そうとあります。"}
+    if round_count < 4:
+        return {"status": "まだ早い", "reason": "LINE交換は個人情報に近いため、十分に会話が続いてからにしてください。"}
+    if temperature == "高め":
+        return {"status": "控えめなら可", "reason": "会話が続いている場合のみ、相手が断りやすい聞き方で検討できます。"}
+    return {"status": "まだ早い", "reason": "温度感が高いとは言えないため、LINE交換は急がない方が安全です。"}
+
+
+def _judge_adult_topic(round_count: int, temperature: str, partner_notes: str) -> dict[str, str]:
+    if round_count < 2:
+        return {"status": "まだ早い", "reason": "初回や1往復目では距離が近すぎる印象になりやすいです。"}
+    if "大人" in partner_notes and any(word in partner_notes for word in ["控え", "早", "まだ"]):
+        return {"status": "控えめなら可", "reason": "相手別メモ上、控えめな恋愛感に留めるのが安全です。"}
+    if temperature == "高め":
+        return {"status": "控えめなら可", "reason": "下ネタや身体的表現を避け、軽い恋愛観に留めるなら検討できます。"}
+    return {"status": "まだ早い", "reason": "露骨な性的表現、身体の部位、ホテルや自宅の誘いは避けてください。"}
+
+
+def _judge_romance_topic(round_count: int, temperature: str) -> dict[str, str]:
+    if round_count < 2:
+        return {"status": "まだ早い", "reason": "初回や1往復目では重く見えやすいため、日常話題を優先してください。"}
+    if temperature in {"高め", "普通"}:
+        return {"status": "控えめなら可", "reason": "軽い恋愛観に触れる程度なら、質問は1つに絞ってください。"}
+    return {"status": "まだ早い", "reason": "温度感が低めなので、恋愛観より返しやすい雑談が安全です。"}
+
+
+def _build_guidance_cautions(action_judgements: dict[str, dict[str, str]], partner_notes: str, outcome_summaries: list[str]) -> list[str]:
+    cautions = []
+    for action, judgement in action_judgements.items():
+        if judgement["status"] in {"まだ早い", "非推奨"} and action in {"電話に誘う", "会う提案をする", "LINE交換を提案する"}:
+            cautions.append(f"{action}: {judgement['status']}。{judgement['reason']}")
+    if "旅行" in partner_notes:
+        cautions.append("相手別メモに旅行話題の反応記録があります。無理なく広げられるか確認してください。")
+    if any("微妙" in item for item in outcome_summaries):
+        cautions.append("最近の送信結果に微妙だった記録があります。短く返しやすい文を優先してください。")
+    return cautions or ["強い誘いは避け、相手が返しやすい文にしてください。"]
+
+
+def _has_question(text: str) -> bool:
+    return "?" in text or "？" in text or any(word in text for word in ["ですか", "ますか", "どう", "何", "どこ"])
 
 
 def _find_sent_suggestion(partner: PartnerRecord, suggestion_id: str):

@@ -232,9 +232,25 @@ def render_generation_controls(partner) -> None:
         )
     preflight = build_generation_preflight(partner, objectives, tone, place_hint)
     with st.expander("生成前チェック", expanded=True):
+        st.markdown(f"**会話ステージ:** {preflight['conversation_stage']}")
+        st.markdown(f"**温度感:** {preflight['temperature']['label']}")
+        for reason in preflight["temperature"]["reasons"]:
+            st.markdown(f"- {reason}")
+        st.markdown(f"**次の一手おすすめ:** {preflight['next_recommendation']}")
+        st.markdown("**注意すべき点**")
+        for caution in preflight["caution_points"]:
+            st.markdown(f"- {caution}")
+        st.markdown("**誘い系アクションの可否**")
+        action_rows = [
+            {"action": action, "status": judgement["status"], "reason": judgement["reason"]}
+            for action, judgement in preflight["action_judgements"].items()
+            if action in {"電話に誘う", "会う提案をする", "場所を指定して会う提案をする", "LINE交換を提案する", "少し大人っぽい雰囲気にする", "恋愛観に軽く触れる"}
+        ]
+        st.dataframe(action_rows, width="stretch", hide_index=True)
         for warning in preflight["warnings"]:
             st.warning(warning)
-        st.json(preflight)
+        with st.expander("詳細データ", expanded=False):
+            st.json(preflight)
     st.caption("候補生成はlocalのpending_suggestionsへ保存するだけです。自動送信ではありません。")
     confirm = st.checkbox("自動送信ではないことを確認し、候補をlocal保存する", key=f"generate_confirm_{partner.partner_id}")
     if st.button(button_label, disabled=not (can_generate_suggestion(partner) and confirm), key=f"generate_button_{partner.partner_id}"):

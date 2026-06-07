@@ -8,6 +8,7 @@ from gui_helpers import (
     append_conversation_turns_to_partner,
     build_partner_label,
     build_partner_creation_preview,
+    build_conversation_stage_summary,
     build_generation_status_message,
     build_generation_preflight,
     build_discard_suggestion_preview,
@@ -581,6 +582,11 @@ class GuiHelperTests(unittest.TestCase):
         self.assertTrue(all(item.purpose == "reply" for item in stored.pending_suggestions))
         self.assertEqual([item["use_case"].split(":")[0] for item in result["variants"]], ["候補A", "候補B", "候補C"])
         self.assertIn("stage", result)
+        self.assertIn("conversation_stage", result)
+        self.assertIn("temperature", result)
+        self.assertIn("next_recommendation", result)
+        self.assertTrue(all("conversation_stage" in item for item in result["variants"]))
+        self.assertTrue(all("temperature" in item for item in result["variants"]))
 
     def test_generation_preflight_emphasizes_early_risky_objectives(self):
         partner = PartnerRecord(
@@ -607,7 +613,104 @@ class GuiHelperTests(unittest.TestCase):
         self.assertIn("会う提案はまだ早い", warnings)
         self.assertIn("LINE交換提案は唐突", warnings)
         self.assertIn("大人っぽい雰囲気", warnings)
+        self.assertEqual(preflight["line_exchange"]["status"], "まだ早い")
+        self.assertEqual(preflight["adult_topic"]["status"], "まだ早い")
+        self.assertEqual(preflight["conversation_stage"], "1往復目")
+        self.assertIn("action_judgements", preflight)
         self.assertFalse(preflight["auto_send"])
+
+    def test_conversation_stage_summary_changes_by_turn_count_and_reply_wait(self):
+        first = PartnerRecord(partner_id="partner_001", display_name="first", status="new_profile")
+        one_round = PartnerRecord(
+            partner_id="partner_002",
+            display_name="one_round",
+            status="chatting",
+            conversation=[
+                ConversationTurn("partner", "カフェも好きですか？", "2026-06-07T10:00:00+09:00"),
+                ConversationTurn("user", "好きです", "2026-06-07T10:01:00+09:00"),
+                ConversationTurn("partner", "休日によく行きます", "2026-06-07T10:02:00+09:00"),
+            ],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+        waiting = PartnerRecord(
+            partner_id="partner_003",
+            display_name="waiting",
+            status="chatting",
+            conversation=[
+                ConversationTurn("partner", "カフェ好きです", "2026-06-07T10:00:00+09:00"),
+                ConversationTurn("user", "おすすめありますか？", "2026-06-07T10:01:00+09:00"),
+            ],
+            message_state=MessageState(awaiting_partner_reply=True),
+        )
+
+        self.assertEqual(build_conversation_stage_summary(first)["conversation_stage"], "初回前")
+        self.assertEqual(build_conversation_stage_summary(one_round)["conversation_stage"], "1往復目")
+        self.assertEqual(build_conversation_stage_summary(waiting)["conversation_stage"], "一旦保留")
+
+    def test_temperature_reason_uses_partner_question(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            conversation=[ConversationTurn("partner", "映画も好きですか？", "2026-06-07T10:00:00+09:00")],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+
+        summary = build_conversation_stage_summary(partner)
+
+        self.assertIn("相手から質問が返ってきている", summary["temperature_reasons"])
+        self.assertEqual(summary["temperature"], "高め")
+
+    def test_partner_note_can_block_phone_judgement(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            conversation=[
+                ConversationTurn("partner", "カフェ好きですか？", "2026-06-07T10:00:00+09:00"),
+                ConversationTurn("user", "好きです", "2026-06-07T10:01:00+09:00"),
+                ConversationTurn("partner", "おすすめ知りたいです", "2026-06-07T10:02:00+09:00"),
+            ],
+            notes=[PartnerNote("電話はまだ早そう。旅行の話題は反応がよい。", "2026-06-07T10:03:00+09:00")],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+
+        preflight = build_generation_preflight(partner, ["電話に誘う"], "自然", "")
+        warnings = "\n".join(preflight["warnings"])
+
+        self.assertEqual(preflight["action_judgements"]["電話に誘う"]["status"], "非推奨")
+        self.assertIn("相手別メモ上、電話はまだ早そう", warnings)
+
+    def test_sent_outcome_improves_temperature_reason(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            conversation=[
+                ConversationTurn("partner", "旅行も好きです", "2026-06-07T10:00:00+09:00"),
+                ConversationTurn("user", "いいですね", "2026-06-07T10:01:00+09:00"),
+                ConversationTurn("partner", "自然が多い場所が好きです", "2026-06-07T10:02:00+09:00"),
+            ],
+            sent_records=[
+                SentRecord(
+                    sent_id="sent_generated_suggestion_001",
+                    source_type="generated_suggestion",
+                    text="旅行の話題",
+                    sent_at="2026-06-07T10:01:00+09:00",
+                    source_suggestion_id="suggestion_001",
+                    outcome_status="反応よかった",
+                    outcome_memo="旅行の話題は反応よかった",
+                )
+            ],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+
+        summary = build_conversation_stage_summary(partner)
+        preflight = build_generation_preflight(partner, ["質問を1つ入れる"], "自然", "")
+
+        self.assertIn("送信結果メモで反応がよい記録がある", summary["temperature_reasons"])
+        self.assertEqual(summary["temperature"], "高め")
+        self.assertIn("sent_generated_suggestion_001: 反応よかった", preflight["recent_sent_outcomes"][0])
 
     def test_mark_sent_requires_pending_suggestion_and_confirmation(self):
         partner = PartnerRecord(
