@@ -562,7 +562,7 @@ def render_partner_creation() -> None:
             return
         partner = save_partner_from_profile(label, display_name=display_name, app_name=app_name, source_memo=source_memo)
         st.success(f"保存しました: {partner.partner_id}")
-        st.info("返信候補生成とmark-sentは次作業以降で追加します。")
+        st.info("作成後はpartnerビューでpartnerを選び、会話履歴、相手別メモ、生成前チェック、3候補生成へ進めます。")
 
 
 def render_conversation_import() -> None:
@@ -614,7 +614,7 @@ def render_conversation_import() -> None:
             return
         updated = append_conversation_turns_to_partner(partner.partner_id, turns)
         st.success(f"保存しました: {updated.partner_id} に {len(turns)} turn 追加")
-        st.info("返信候補生成とmark-sentは次作業以降で追加します。")
+        st.info("保存後はpartnerビューで生成前チェックを確認し、3候補生成へ進めます。実際の送信はユーザー本人が手動で行います。")
 
 
 def _normalize_conversation_labels(text: str, user_label: str, partner_label: str) -> str:
