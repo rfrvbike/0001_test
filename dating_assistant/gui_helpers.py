@@ -178,6 +178,34 @@ def build_partner_summary(partner: PartnerRecord) -> dict[str, Any]:
     }
 
 
+def build_partner_operational_display(partner: PartnerRecord) -> dict[str, Any]:
+    summary = build_partner_summary(partner)
+    stage = build_conversation_stage_summary(partner)
+    pending_count = summary["pending_suggestions_count"]
+    message_state = partner.message_state
+    return {
+        "basic": [
+            {"label": "partner_id", "value": summary["partner_id"]},
+            {"label": "表示名", "value": summary["display_name"]},
+            {"label": "状態", "value": summary["status"] or "未設定"},
+            {"label": "温度感", "value": stage["temperature"] or "未設定"},
+        ],
+        "conversation": [
+            {"label": "最終送信", "value": "あり" if message_state.last_user_message or message_state.last_sent_at else "なし"},
+            {"label": "最終返信", "value": "あり" if message_state.last_partner_message or message_state.last_received_at else "なし"},
+            {"label": "返信待ち", "value": "はい" if message_state.awaiting_partner_reply else "いいえ"},
+            {"label": "こちらの対応待ち", "value": "はい" if message_state.awaiting_user_action else "いいえ"},
+            {"label": "未送信候補", "value": "あり" if pending_count else "なし"},
+            {"label": "会話ステージ", "value": stage["conversation_stage"] or "未設定"},
+            {"label": "次の一手", "value": message_state.next_action or stage["next_recommendation"] or "未設定"},
+        ],
+        "detail": {
+            "message_state": asdict(message_state),
+            "conversation_stage": stage,
+        },
+    }
+
+
 def format_conversation_history(partner: PartnerRecord) -> list[dict[str, Any]]:
     rows = []
     for index, turn in enumerate(partner.conversation, start=1):
@@ -1125,6 +1153,22 @@ def validate_imported_turns(turns: list[dict[str, Any]], warnings: list[str] | N
 
 def detect_conversation_safety_warnings(text: str) -> list[str]:
     return detect_profile_safety_warnings({"conversation": text})
+
+
+def build_conversation_import_failure_guidance() -> dict[str, list[str]]:
+    return {
+        "考えられる理由": [
+            "自分/相手のラベルが一致していない",
+            "発言が1件も検出できない",
+            "空行や記号だけになっている",
+            "スクリーンショット画像のままで、テキスト化されていない",
+        ],
+        "対処": [
+            "「自分:」「相手:」の形式で貼り付けてください",
+            "ラベル欄に入力した名前と、貼り付け本文のラベルを合わせてください",
+            "解析できない場合は、1発言ずつ手動追加してください",
+        ],
+    }
 
 
 def build_conversation_import_preview(partner: PartnerRecord, turns: list[dict[str, Any]], warnings: list[str]) -> dict[str, Any]:

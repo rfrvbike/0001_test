@@ -19,6 +19,8 @@ from gui_helpers import (
     build_sent_outcome_preview,
     build_partner_summary,
     build_conversation_import_preview,
+    build_conversation_import_failure_guidance,
+    build_partner_operational_display,
     build_profile_display_sections,
     build_profile_save_preview,
     build_real_profile_summary_for_gui,
@@ -109,6 +111,26 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(summary["next_action"], "候補確認待ち")
         self.assertEqual(summary["pending_suggestions_count"], 1)
         self.assertFalse(summary["message_state"]["awaiting_partner_reply"])
+
+    def test_partner_operational_display_uses_japanese_labels_without_raw_message_state(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            profile=PartnerProfile(profile_text="カフェが好きです。", hobbies=["カフェ"]),
+            conversation=[ConversationTurn("partner", "カフェ好きです", "2026-06-07T10:00:00+09:00")],
+            message_state=MessageState(awaiting_user_action=True, next_action="返信候補を確認して送る"),
+        )
+        partner.analysis.partner_temperature = "normal"
+
+        display = build_partner_operational_display(partner)
+
+        self.assertIn({"label": "表示名", "value": "sample"}, display["basic"])
+        self.assertIn({"label": "こちらの対応待ち", "value": "はい"}, display["conversation"])
+        self.assertIn({"label": "未送信候補", "value": "なし"}, display["conversation"])
+        self.assertNotIn("message_state", display["basic"])
+        self.assertNotIn("awaiting_user_action", str(display["basic"]))
+        self.assertIn("message_state", display["detail"])
 
     def test_format_conversation_and_pending_suggestions_for_display(self):
         partner = PartnerRecord(
@@ -356,11 +378,14 @@ class GuiHelperTests(unittest.TestCase):
     def test_conversation_import_detects_safety_warnings_and_empty_input(self):
         warnings = detect_conversation_safety_warnings("LINEと sample@example.com と 090-1234-5678")
         empty_turns, empty_warnings = parse_conversation_paste("")
+        guidance = build_conversation_import_failure_guidance()
 
         self.assertIn("LINE", warnings)
         self.assertIn("メールアドレス", warnings)
         self.assertIn("電話番号", warnings)
         self.assertIn("会話履歴を解析できませんでした。", validate_imported_turns(empty_turns, empty_warnings))
+        self.assertIn("自分/相手のラベルが一致していない", guidance["考えられる理由"])
+        self.assertIn("1発言ずつ手動追加してください", guidance["対処"][-1])
 
     def test_append_conversation_turns_to_partner_keeps_existing_history(self):
         save_partner(

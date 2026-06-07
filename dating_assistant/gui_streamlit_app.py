@@ -15,12 +15,14 @@ from gui_helpers import (
     build_partner_label,
     build_partner_summary,
     build_conversation_import_preview,
+    build_conversation_import_failure_guidance,
     build_partner_creation_preview,
     build_generation_status_message,
     build_discard_suggestion_preview,
     build_generation_preflight,
     build_mark_sent_preview,
     build_partner_note_preview,
+    build_partner_operational_display,
     build_profile_form_from_paste,
     build_profile_paste_preview,
     build_profile_save_preview,
@@ -104,17 +106,21 @@ def render_partner_viewer() -> None:
     partner = load_partner_for_view(labels[selected_label])
 
     summary = build_partner_summary(partner)
+    status_display = build_partner_operational_display(partner)
     st.subheader("状態")
     cols = st.columns(4)
     cols[0].metric("partner_id", summary["partner_id"])
-    cols[1].metric("status", summary["status"])
-    cols[2].metric("temperature", summary["partner_temperature"])
-    cols[3].metric("pending", summary["pending_suggestions_count"])
+    cols[1].metric("状態", summary["status"])
+    cols[2].metric("温度感", status_display["basic"][3]["value"])
+    cols[3].metric("未送信候補", summary["pending_suggestions_count"])
 
-    st.write(f"**display_name:** {summary['display_name']}")
-    st.write(f"**next_action:** {summary['next_action']}")
-    with st.expander("message_state", expanded=True):
-        st.json(summary["message_state"])
+    with st.container(border=True):
+        st.markdown("**基本情報**")
+        _render_summary_rows(status_display["basic"])
+        st.markdown("**会話状態**")
+        _render_summary_rows(status_display["conversation"])
+    with st.expander("状態の詳細JSONを表示", expanded=False):
+        st.json(status_display["detail"])
 
     render_partner_notes(partner)
     render_generation_controls(partner)
@@ -449,24 +455,29 @@ def render_profile_registration() -> None:
     st.subheader("プロフィール登録")
 
     with st.form("profile_registration_form"):
-        st.info("まずここにプロフィール文、趣味、写真の印象メモをまとめて貼り付けます。下の入力欄は不足分や修正だけに使います。")
+        st.markdown("### まずここにプロフィールを貼り付け")
+        st.info(
+            "アプリのプロフィール文、趣味、写真を見て分かる印象メモ、会話に使えそうな情報をまとめて貼り付けます。"
+            "下の入力欄は、自動抽出できなかった項目だけ補助的に使います。"
+        )
         profile_paste = st.text_area(
             "プロフィール情報まとめ貼り付け欄",
-            height=280,
+            height=320,
             help="マッチングアプリ上のプロフィール文、自己紹介、趣味、エリア、年齢、写真の印象メモなどをまとめて貼り付けます。画像そのものは保存しません。",
         )
         st.caption("スクリーンショット画像や顔写真そのものは保存しません。読み取ったテキストとメモだけを貼り付けてください。")
-        st.markdown("**不足分・修正欄**")
-        label = st.text_input("label", help="英数字・ハイフン・アンダースコアのみ")
-        display_name = st.text_input("display_name")
-        app_name = st.text_input("app_name")
-        age = st.number_input("age", min_value=18, max_value=120, value=None, step=1)
-        area = st.text_input("area")
-        profile_text = st.text_area("profile_text", height=160)
-        photo_memo = st.text_area("photo_memo", height=100)
-        interests = st.text_area("interests", height=80, help="改行、カンマ、読点で区切れます")
-        avoid_topics = st.text_area("avoid_topics", height=80, help="改行、カンマ、読点で区切れます")
-        notes = st.text_area("notes", height=100)
+        with st.expander("不足分・修正欄", expanded=False):
+            st.caption("自動抽出できなかった項目だけ、必要に応じて修正してください。")
+            label = st.text_input("label", help="英数字・ハイフン・アンダースコアのみ")
+            display_name = st.text_input("display_name")
+            app_name = st.text_input("app_name")
+            age = st.number_input("age", min_value=18, max_value=120, value=None, step=1)
+            area = st.text_input("area")
+            profile_text = st.text_area("profile_text", height=160)
+            photo_memo = st.text_area("photo_memo", height=100)
+            interests = st.text_area("interests", height=80, help="改行、カンマ、読点で区切れます")
+            avoid_topics = st.text_area("avoid_topics", height=80, help="改行、カンマ、読点で区切れます")
+            notes = st.text_area("notes", height=100)
         confirm_local_save = st.checkbox("保存内容を確認し、local YAMLとして保存する")
         submitted = st.form_submit_button("保存")
 
@@ -485,6 +496,7 @@ def render_profile_registration() -> None:
     pasted_form, paste_warnings = build_profile_form_from_paste(profile_paste)
     form = merge_profile_form_with_paste(form, pasted_form)
 
+    has_profile_input = any(str(value).strip() for value in form.values()) or profile_paste.strip()
     errors = validate_profile_form(form)
     warnings = detect_profile_safety_warnings(form)
     if paste_warnings:
@@ -493,18 +505,21 @@ def render_profile_registration() -> None:
         st.markdown("**貼り付け内容の抽出プレビュー**")
         st.json(build_profile_paste_preview(profile_paste))
         st.info("抽出できなかった項目や違う項目は、不足分・修正欄で直してから保存してください。")
+    elif not submitted:
+        st.info("プロフィールを貼り付けると、保存に必要な項目を確認できます。")
     preview = None
-    if not errors:
+    if has_profile_input and not errors:
         preview = build_profile_save_preview(form)
         st.markdown("**保存プレビュー**")
         st.json(preview)
         if real_profile_exists(preview["保存先label"]):
             errors.append("同じlabelのreal profileが既に存在します。上書きはできません。")
 
-    if errors:
+    if submitted and errors:
         for error in errors:
             st.error(error)
-    if warnings:
+        st.error("保存するには、表示名とプロフィール本文または写真メモが必要です。")
+    if submitted and warnings:
         st.warning("保存前に見直してください: " + " / ".join(warnings))
 
     if submitted:
@@ -619,6 +634,20 @@ def render_conversation_import() -> None:
         return
 
     labels = {build_partner_label(partner): partner.partner_id for partner in partners}
+    st.info("スクリーンショット画像ではなく、読み取ったテキストを貼り付けてください。自動送信ではなくlocalの会話履歴に追加するだけです。")
+    with st.expander("貼り付け例を表示", expanded=True):
+        st.code(
+            "自分:\n"
+            "はじめまして。カフェ好きなんですね。\n\n"
+            "相手:\n"
+            "はい、休日によく行きます。\n\n"
+            "自分:\n"
+            "落ち着いたカフェいいですよね。よく行くエリアありますか？\n\n"
+            "または:\n"
+            "自分：はじめまして。カフェ好きなんですね。\n"
+            "相手：はい、休日によく行きます。",
+            language="text",
+        )
     with st.form("conversation_import_form"):
         selected_label = st.selectbox("対象partner選択", options=list(labels.keys()))
         user_label = st.text_input("自分の発話者ラベル", value="自分")
@@ -642,7 +671,12 @@ def render_conversation_import() -> None:
     if turns:
         st.markdown("**保存プレビュー**")
         st.json(build_conversation_import_preview(partner, turns, warnings))
-    if errors:
+    if errors and (submitted or pasted.strip()):
+        st.error("会話履歴を解析できませんでした。")
+        guidance = build_conversation_import_failure_guidance()
+        with st.container(border=True):
+            _render_bullet_items("考えられる理由", guidance["考えられる理由"])
+            _render_bullet_items("対処", guidance["対処"])
         for error in errors:
             st.error(error)
     if safety_warnings:
@@ -660,6 +694,22 @@ def render_conversation_import() -> None:
         updated = append_conversation_turns_to_partner(partner.partner_id, turns)
         st.success(f"保存しました: {updated.partner_id} に {len(turns)} turn 追加")
         st.info("保存後はpartnerビューで生成前チェックを確認し、3候補生成へ進めます。実際の送信はユーザー本人が手動で行います。")
+
+    with st.expander("解析できない場合の手動追加", expanded=bool(errors and (submitted or pasted.strip()))):
+        st.caption("1発言ずつconversation_historyへlocal追加します。自動送信ではありません。")
+        manual_speaker_label = st.selectbox("発言者", options=["自分", "相手"], key="manual_turn_speaker")
+        manual_text = st.text_area("発言本文", height=100, key="manual_turn_text")
+        confirm_manual = st.checkbox("この1発言をlocal会話履歴へ追加する", key="manual_turn_confirm")
+        if st.button("1発言を追加", key="manual_turn_add"):
+            if not manual_text.strip():
+                st.error("発言本文を入力してください。")
+                return
+            if not confirm_manual:
+                st.error("追加前確認チェックを入れてください。")
+                return
+            manual_speaker = "user" if manual_speaker_label == "自分" else "partner"
+            updated = append_conversation_turns_to_partner(partner.partner_id, [{"speaker": manual_speaker, "text": manual_text.strip()}])
+            st.success(f"保存しました: {updated.partner_id} に1 turn追加")
 
 
 def _normalize_conversation_labels(text: str, user_label: str, partner_label: str) -> str:
