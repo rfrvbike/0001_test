@@ -21,7 +21,7 @@ from src.real_profile_manager import (
     load_real_profile,
     validate_real_profile_label,
 )
-from src.suggestion_manager import add_suggestion, get_pending_suggestions
+from src.suggestion_manager import add_suggestion, get_pending_suggestions, mark_suggestion_sent, mark_text_sent
 from src.timeline_builder import build_timeline_events
 
 PROFILE_SAFETY_PATTERNS = {
@@ -204,6 +204,77 @@ def generate_suggestion_for_gui(partner_id: str) -> dict[str, Any]:
         "suggestion_id": suggestion.suggestion_id,
         "text": suggestion.text,
         "status": suggestion.status,
+    }
+
+
+def can_mark_suggestion_sent(partner: PartnerRecord, suggestion_id: str, confirmed: bool = False) -> bool:
+    if partner.status == "archived" or not confirmed:
+        return False
+    return any(suggestion.suggestion_id == suggestion_id and suggestion.status == "pending" for suggestion in partner.pending_suggestions)
+
+
+def build_mark_sent_preview(partner: PartnerRecord, suggestion_id: str | None = None, custom_text: str = "") -> dict[str, Any]:
+    custom_text = custom_text.strip()
+    if suggestion_id:
+        suggestion = next(
+            (item for item in partner.pending_suggestions if item.suggestion_id == suggestion_id and item.status == "pending"),
+            None,
+        )
+        if suggestion is None:
+            raise ValueError(f"pending suggestion not found: {suggestion_id}")
+        text = suggestion.text
+        source = f"suggestion_id: {suggestion_id}"
+        remaining_note = "-"
+    else:
+        if not custom_text:
+            raise ValueError("実際に送信した文を入力してください。")
+        text = custom_text
+        source = "custom text"
+        remaining = [item.suggestion_id for item in get_pending_suggestions(partner)]
+        remaining_note = " / ".join(remaining) if remaining else "-"
+    return {
+        "partner_id": partner.partner_id,
+        "record_type": source,
+        "speaker": "user",
+        "text": text,
+        "conversation_history": "user発話を1件追加",
+        "message_state": "相手の返信待ちへ更新",
+        "remaining_pending_suggestions": remaining_note,
+        "local_record_only": True,
+    }
+
+
+def mark_suggestion_sent_from_gui(partner_id: str, suggestion_id: str, confirmed: bool) -> dict[str, Any]:
+    partner = load_partner(partner_id)
+    if not can_mark_suggestion_sent(partner, suggestion_id, confirmed=confirmed):
+        raise ValueError("確認チェックがないか、送信済み記録できるpending suggestionではありません。")
+    suggestion = mark_suggestion_sent(partner, suggestion_id)
+    return {
+        "partner_id": partner.partner_id,
+        "suggestion_id": suggestion.suggestion_id,
+        "text": suggestion.text,
+        "status": suggestion.status,
+        "remaining_pending_suggestions": len(get_pending_suggestions(partner)),
+    }
+
+
+def mark_custom_text_sent_from_gui(partner_id: str, text: str, confirmed: bool) -> dict[str, Any]:
+    text = text.strip()
+    if not confirmed:
+        raise ValueError("確認チェックを入れてください。")
+    if not text:
+        raise ValueError("実際に送信した文を入力してください。")
+    partner = load_partner(partner_id)
+    if partner.status == "archived":
+        raise ValueError("archivedのpartnerには送信済み記録できません。")
+    pending_before = len(get_pending_suggestions(partner))
+    mark_text_sent(partner, text)
+    stored = load_partner(partner_id)
+    return {
+        "partner_id": stored.partner_id,
+        "text": text,
+        "remaining_pending_suggestions": pending_before,
+        "note": "custom textで記録したため、元候補がpendingに残る場合があります。",
     }
 
 

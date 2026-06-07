@@ -254,6 +254,15 @@ last_human_confirmed_action: null
 - `pending_suggestions` が残っている場合、相手返信待ち、archived、情報不足の場合は新規生成を止める。
 - `partner-mark-sent` 相当のボタンは今回追加しない。
 
+### 作業No.109
+
+- pending_suggestions欄に、安全確認付きの送信済み記録UIを追加する。
+- 「この候補を実際に手動送信した」確認チェックがONの場合だけ、送信済み記録ボタンを有効化する。
+- 候補本文をそのまま送った場合は `suggestion_id` 指定相当で記録し、pending suggestionを `sent` に更新する。
+- 修正文を送った場合はcustom text指定相当で会話履歴へuser発話を追加する。元候補がpendingに残る場合があることをGUI上で案内する。
+- この操作はlocal YAMLへの記録のみで、マッチングアプリへの送信、自動送信、外部通信は行わない。
+- 候補破棄ボタンは作業No.110で追加する。
+
 ### Phase 1
 
 - `dating_assistant/gui_app.py` などにStreamlitアプリを追加する。

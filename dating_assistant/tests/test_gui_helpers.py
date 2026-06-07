@@ -8,10 +8,12 @@ from gui_helpers import (
     build_partner_label,
     build_partner_creation_preview,
     build_generation_status_message,
+    build_mark_sent_preview,
     build_partner_summary,
     build_conversation_import_preview,
     build_profile_save_preview,
     can_generate_suggestion,
+    can_mark_suggestion_sent,
     build_real_profile_from_form,
     detect_conversation_safety_warnings,
     detect_duplicate_turn_sequence,
@@ -25,6 +27,8 @@ from gui_helpers import (
     list_real_profiles_for_gui,
     load_real_profile_for_gui,
     load_partner_choices,
+    mark_custom_text_sent_from_gui,
+    mark_suggestion_sent_from_gui,
     parse_conversation_paste,
     real_profile_exists,
     save_partner_from_profile,
@@ -418,6 +422,68 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(reply_result["mode"], "reply")
         self.assertEqual(reply_stored.pending_suggestions[0].purpose, "reply")
         self.assertEqual(reply_stored.message_state.next_action, "返信候補を確認して送る")
+
+    def test_mark_sent_requires_pending_suggestion_and_confirmation(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            pending_suggestions=[PendingSuggestion("suggestion_001", "reply", "送った候補", "2026-06-07T10:00:00+09:00")],
+        )
+        save_partner(partner)
+
+        self.assertFalse(can_mark_suggestion_sent(partner, "suggestion_001", confirmed=False))
+        self.assertTrue(can_mark_suggestion_sent(partner, "suggestion_001", confirmed=True))
+        with self.assertRaises(ValueError):
+            mark_suggestion_sent_from_gui("partner_001", "suggestion_001", confirmed=False)
+
+    def test_mark_suggestion_sent_from_gui_updates_history_state_and_suggestion(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="first_message_suggested",
+            pending_suggestions=[PendingSuggestion("suggestion_001", "first", "送った候補", "2026-06-07T10:00:00+09:00")],
+        )
+        save_partner(partner)
+
+        preview = build_mark_sent_preview(partner, suggestion_id="suggestion_001")
+        result = mark_suggestion_sent_from_gui("partner_001", "suggestion_001", confirmed=True)
+        stored = load_partner("partner_001")
+
+        self.assertEqual(preview["speaker"], "user")
+        self.assertEqual(result["status"], "sent")
+        self.assertEqual(stored.pending_suggestions[0].status, "sent")
+        self.assertEqual(stored.conversation[-1].speaker, "user")
+        self.assertEqual(stored.conversation[-1].text, "送った候補")
+        self.assertTrue(stored.message_state.awaiting_partner_reply)
+        self.assertFalse(stored.message_state.awaiting_user_action)
+        self.assertEqual(stored.status, "first_message_sent")
+
+    def test_mark_custom_text_sent_from_gui_records_text_and_leaves_pending_suggestion(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            pending_suggestions=[PendingSuggestion("suggestion_001", "reply", "元候補", "2026-06-07T10:00:00+09:00")],
+        )
+        save_partner(partner)
+
+        preview = build_mark_sent_preview(partner, custom_text="実際に送った修正文")
+        result = mark_custom_text_sent_from_gui("partner_001", "実際に送った修正文", confirmed=True)
+        stored = load_partner("partner_001")
+
+        self.assertEqual(preview["record_type"], "custom text")
+        self.assertEqual(result["remaining_pending_suggestions"], 1)
+        self.assertEqual(stored.pending_suggestions[0].status, "pending")
+        self.assertEqual(stored.conversation[-1].speaker, "user")
+        self.assertEqual(stored.conversation[-1].text, "実際に送った修正文")
+        self.assertTrue(stored.message_state.awaiting_partner_reply)
+
+    def test_mark_custom_text_requires_confirmation_and_text(self):
+        save_partner(PartnerRecord(partner_id="partner_001", display_name="sample"))
+
+        with self.assertRaises(ValueError):
+            mark_custom_text_sent_from_gui("partner_001", "送った文", confirmed=False)
+        with self.assertRaises(ValueError):
+            mark_custom_text_sent_from_gui("partner_001", "", confirmed=True)
 
 
 if __name__ == "__main__":

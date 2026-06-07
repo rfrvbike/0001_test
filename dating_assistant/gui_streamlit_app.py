@@ -17,8 +17,10 @@ from gui_helpers import (
     build_conversation_import_preview,
     build_partner_creation_preview,
     build_generation_status_message,
+    build_mark_sent_preview,
     build_profile_save_preview,
     can_generate_suggestion,
+    can_mark_suggestion_sent,
     detect_conversation_safety_warnings,
     detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
@@ -34,6 +36,8 @@ from gui_helpers import (
     real_profile_exists,
     save_real_profile_from_form,
     save_partner_from_profile,
+    mark_custom_text_sent_from_gui,
+    mark_suggestion_sent_from_gui,
     validate_imported_turns,
     validate_profile_form,
 )
@@ -120,6 +124,7 @@ def render_partner_viewer() -> None:
                     disabled=True,
                     key=f"suggestion_{suggestion['suggestion_id']}",
                 )
+                render_sent_recording_controls(partner, suggestion)
 
     with tab_timeline:
         timeline = format_timeline_items(partner)
@@ -145,7 +150,58 @@ def render_generation_controls(partner) -> None:
             return
         st.success(f"{generated['suggestion_id']} をpending_suggestionsへ保存しました。")
         st.text_area("生成された候補", generated["text"], height=140, disabled=True, key=f"generated_{generated['suggestion_id']}")
-        st.info("送信済み記録ボタンは次作業以降で追加します。")
+        st.info("実際に手動送信した後、pending_suggestions欄から送信済みとしてlocal記録できます。")
+        st.rerun()
+
+
+def render_sent_recording_controls(partner, suggestion: dict) -> None:
+    suggestion_id = suggestion["suggestion_id"]
+    st.warning(
+        "この操作はlocal記録のみです。マッチングアプリへの送信は行いません。"
+        "実際に送っていない文を送信済みにしないでください。"
+    )
+    confirm = st.checkbox(
+        "私はこの文をマッチングアプリ上で手動送信しました",
+        key=f"mark_sent_confirm_{partner.partner_id}_{suggestion_id}",
+    )
+    with st.expander("送信済み記録プレビュー", expanded=False):
+        st.json(build_mark_sent_preview(partner, suggestion_id=suggestion_id))
+
+    if st.button(
+        "この候補を送信済みとして記録",
+        disabled=not can_mark_suggestion_sent(partner, suggestion_id, confirmed=confirm),
+        key=f"mark_sent_button_{partner.partner_id}_{suggestion_id}",
+    ):
+        try:
+            result = mark_suggestion_sent_from_gui(partner.partner_id, suggestion_id, confirmed=confirm)
+        except ValueError as error:
+            st.error(str(error))
+            return
+        st.success(f"{result['suggestion_id']} を送信済みとしてlocal記録しました。")
+        st.rerun()
+
+    custom_text = st.text_area(
+        "実際に送った文（修正した場合のみ入力）",
+        height=100,
+        key=f"mark_sent_custom_text_{partner.partner_id}_{suggestion_id}",
+    )
+    if custom_text.strip():
+        with st.expander("修正文の送信済み記録プレビュー", expanded=False):
+            st.json(build_mark_sent_preview(partner, custom_text=custom_text))
+        st.info("実際に送信した文を別入力で記録するため、元候補が未使用候補として残る場合があります。")
+    if st.button(
+        "入力文を送信済みとして記録",
+        disabled=not (confirm and custom_text.strip()),
+        key=f"mark_custom_sent_button_{partner.partner_id}_{suggestion_id}",
+    ):
+        try:
+            result = mark_custom_text_sent_from_gui(partner.partner_id, custom_text, confirmed=confirm)
+        except ValueError as error:
+            st.error(str(error))
+            return
+        st.success("入力文を送信済みとしてlocal記録しました。")
+        if result["remaining_pending_suggestions"]:
+            st.info("元候補はpendingに残っています。候補破棄機能は次作業で追加します。")
         st.rerun()
 
 
