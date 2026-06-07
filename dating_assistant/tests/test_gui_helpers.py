@@ -809,6 +809,83 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(summary["temperature"], "高め")
         self.assertIn("sent_generated_suggestion_001: 反応よかった", preflight["recent_sent_outcomes"][0])
 
+    def test_practical_rehearsal_notes_and_outcomes_surface_in_preflight(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            profile=PartnerProfile(profile_text="カフェ、旅行、映画、散歩が好きです。", hobbies=["カフェ", "旅行", "映画"]),
+            conversation=[
+                ConversationTurn("partner", "旅行は京都が好きです。カフェもよく行きます。", "2026-06-07T10:00:00+09:00"),
+                ConversationTurn("user", "京都いいですね。", "2026-06-07T10:01:00+09:00"),
+                ConversationTurn("partner", "落ち着いた雰囲気の場所が好きです。", "2026-06-07T10:02:00+09:00"),
+            ],
+            notes=[
+                PartnerNote("返信は夜が多い。旅行の話題に反応がよい。電話はまだ早そう。大人っぽい話題は控えめがよさそう。", "2026-06-07T10:03:00+09:00")
+            ],
+            sent_records=[
+                SentRecord(
+                    sent_id="sent_generated_000001",
+                    source_type="generated_suggestion",
+                    text="質問多めの文",
+                    sent_at="2026-06-07T10:01:00+09:00",
+                    outcome_status="微妙だった",
+                    outcome_memo="質問多めの文は微妙だった",
+                ),
+                SentRecord(
+                    sent_id="sent_generated_000002",
+                    source_type="generated_suggestion",
+                    text="旅行の話題",
+                    sent_at="2026-06-07T10:02:00+09:00",
+                    outcome_status="反応よかった",
+                    outcome_memo="旅行の話題で返信あり",
+                ),
+            ],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+
+        preflight = build_generation_preflight(partner, ["電話に誘う", "質問を1つ入れる"], "自然", "")
+        cautions = "\n".join(preflight["caution_points"])
+        warnings = "\n".join(preflight["warnings"])
+
+        self.assertIn("旅行話題", cautions)
+        self.assertIn("質問を1つに絞ってください", cautions)
+        self.assertIn("電話はまだ早そう", warnings)
+        self.assertEqual(preflight["action_judgements"]["電話に誘う"]["status"], "非推奨")
+
+    def test_practical_first_and_reply_rehearsal_candidates_are_distinct_and_safe(self):
+        first = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="new_profile",
+            profile=PartnerProfile(
+                profile_text="カフェ、旅行、映画、散歩、食べることが好きです。自然体で落ち着いた雰囲気。",
+                hobbies=["カフェ", "旅行", "映画", "散歩", "食べること"],
+            ),
+        )
+        reply = PartnerRecord(
+            partner_id="partner_002",
+            display_name="sample",
+            status="chatting",
+            profile=first.profile,
+            conversation=[ConversationTurn("partner", "カフェ好きです。休日に行くこと多いです。", "2026-06-07T10:00:00+09:00")],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+        save_partner(first)
+        save_partner(reply)
+
+        first_result = generate_suggestion_variants_for_gui("partner_001", ["電話に誘う", "会う提案をする", "LINE交換を提案する"], "自然", "")
+        reply_result = generate_suggestion_variants_for_gui("partner_002", ["電話に誘う", "会う提案をする", "LINE交換を提案する"], "自然", "")
+
+        first_texts = "\n".join(item["text"] for item in first_result["variants"])
+        self.assertNotIn("電話", first_texts)
+        self.assertNotIn("LINE", first_texts)
+        self.assertNotIn("お茶でも", first_texts)
+        self.assertEqual([item["title"].split(":")[0] for item in first_result["variants"]], ["候補A", "候補B", "候補C"])
+        self.assertEqual(len({item["aim"] for item in first_result["variants"]}), 3)
+        self.assertTrue(all(item["quality_check"] for item in first_result["variants"]))
+        self.assertTrue(any("まだ早い" in "\n".join(item["quality_check"]) for item in reply_result["variants"]))
+
     def test_mark_sent_requires_pending_suggestion_and_confirmation(self):
         partner = PartnerRecord(
             partner_id="partner_001",

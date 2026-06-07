@@ -1555,6 +1555,8 @@ def _build_guidance_cautions(action_judgements: dict[str, dict[str, str]], partn
         cautions.append("相手別メモに旅行話題の反応記録があります。無理なく広げられるか確認してください。")
     if any("微妙" in item for item in outcome_summaries):
         cautions.append("最近の送信結果に微妙だった記録があります。短く返しやすい文を優先してください。")
+    if any("質問多め" in item or "質問が多" in item for item in outcome_summaries):
+        cautions.append("質問が多い文の反応が弱い記録があります。今回は質問を1つに絞ってください。")
     return cautions or ["強い誘いは避け、相手が返しやすい文にしてください。"]
 
 
