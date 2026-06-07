@@ -55,7 +55,7 @@ from gui_helpers import (
     validate_imported_turns,
     validate_profile_form,
 )
-from src.models import ActivityEvent, ConversationTurn, MessageState, PartnerNote, PartnerProfile, PartnerRecord, PendingSuggestion
+from src.models import ActivityEvent, ConversationTurn, MessageState, PartnerNote, PartnerProfile, PartnerRecord, PendingSuggestion, SentRecord
 from src.partner_store import load_partner, save_partner
 
 
@@ -191,19 +191,22 @@ class GuiHelperTests(unittest.TestCase):
         )
         save_partner(partner)
 
-        preview = build_sent_outcome_preview(partner, "suggestion_001", "話題が広がった", "旅行の話題は反応よかった。")
-        result = update_sent_outcome_from_gui("partner_001", "suggestion_001", "話題が広がった", "旅行の話題は反応よかった。", confirmed=True)
+        preview = build_sent_outcome_preview(partner, "legacy_generated_suggestion_001", "話題が広がった", "旅行の話題は反応よかった。")
+        result = update_sent_outcome_from_gui("partner_001", "legacy_generated_suggestion_001", "話題が広がった", "旅行の話題は反応よかった。", confirmed=True)
         loaded = load_partner("partner_001")
         outcomes = format_sent_suggestions_for_outcomes(loaded)
         preflight = build_generation_preflight(loaded, ["質問を1つ入れる"], "自然", "")
 
         self.assertIn("話題が広がった", SENT_OUTCOME_STATUS_OPTIONS)
+        self.assertEqual(preview["sent_id"], "legacy_generated_suggestion_001")
         self.assertEqual(preview["結果ステータス"], "話題が広がった")
         self.assertEqual(result["outcome_status"], "話題が広がった")
+        self.assertEqual(result["source_type"], "generated_suggestion")
         self.assertEqual(outcomes[0]["outcome_memo"], "旅行の話題は反応よかった。")
-        self.assertIn("suggestion_001: 話題が広がった", preflight["recent_sent_outcomes"][0])
+        self.assertIn("legacy_generated_suggestion_001: 話題が広がった", preflight["recent_sent_outcomes"][0])
         self.assertEqual(len(loaded.conversation), 0)
         self.assertEqual(loaded.pending_suggestions[0].status, "sent")
+        self.assertEqual(loaded.sent_records[0].source_suggestion_id, "suggestion_001")
 
     def test_profile_form_builds_real_profile_data(self):
         form = {
@@ -633,8 +636,14 @@ class GuiHelperTests(unittest.TestCase):
         stored = load_partner("partner_001")
 
         self.assertEqual(preview["speaker"], "user")
+        self.assertEqual(preview["source_type"], "generated_suggestion")
         self.assertEqual(result["status"], "sent")
+        self.assertRegex(result["sent_id"], r"^sent_generated_\d{6}$")
+        self.assertEqual(result["source_type"], "generated_suggestion")
         self.assertEqual(stored.pending_suggestions[0].status, "sent")
+        self.assertEqual(stored.sent_records[0].sent_id, result["sent_id"])
+        self.assertEqual(stored.sent_records[0].source_type, "generated_suggestion")
+        self.assertEqual(stored.sent_records[0].source_suggestion_id, "suggestion_001")
         self.assertEqual(stored.conversation[-1].speaker, "user")
         self.assertEqual(stored.conversation[-1].text, "送った候補")
         self.assertTrue(stored.message_state.awaiting_partner_reply)
@@ -654,11 +663,28 @@ class GuiHelperTests(unittest.TestCase):
         stored = load_partner("partner_001")
 
         self.assertEqual(preview["record_type"], "custom text")
+        self.assertEqual(preview["source_type"], "custom_text")
         self.assertEqual(result["remaining_pending_suggestions"], 1)
+        self.assertRegex(result["sent_id"], r"^sent_custom_\d{6}$")
+        self.assertEqual(result["source_type"], "custom_text")
         self.assertEqual(stored.pending_suggestions[0].status, "pending")
+        self.assertEqual(stored.sent_records[0].sent_id, result["sent_id"])
+        self.assertEqual(stored.sent_records[0].source_type, "custom_text")
+        self.assertEqual(stored.sent_records[0].source_suggestion_id, None)
         self.assertEqual(stored.conversation[-1].speaker, "user")
         self.assertEqual(stored.conversation[-1].text, "実際に送った修正文")
         self.assertTrue(stored.message_state.awaiting_partner_reply)
+
+        update = update_sent_outcome_from_gui("partner_001", result["sent_id"], "返信あり", "修正文にも返信あり", confirmed=True)
+        updated = load_partner("partner_001")
+        outcomes = format_sent_suggestions_for_outcomes(updated)
+        preflight = build_generation_preflight(updated, ["質問を1つ入れる"], "自然", "")
+
+        self.assertEqual(update["sent_id"], result["sent_id"])
+        self.assertEqual(outcomes[0]["source_type"], "custom_text")
+        self.assertEqual(outcomes[0]["source_label"], "手入力")
+        self.assertEqual(outcomes[0]["outcome_status"], "返信あり")
+        self.assertIn(f"{result['sent_id']}: 返信あり", preflight["recent_sent_outcomes"][0])
 
     def test_mark_custom_text_requires_confirmation_and_text(self):
         save_partner(PartnerRecord(partner_id="partner_001", display_name="sample"))

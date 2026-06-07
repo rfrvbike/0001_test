@@ -4,7 +4,7 @@ import re
 
 from .activity_log import add_activity_event, now_timestamp
 from .conversation_memory import add_turn
-from .models import PartnerRecord, PendingSuggestion
+from .models import PartnerRecord, PendingSuggestion, SentRecord
 from .partner_manager import save_updated_partner
 
 VALID_SUGGESTION_STATUSES = {"pending", "sent", "discarded"}
@@ -53,6 +53,7 @@ def mark_suggestion_sent(partner: PartnerRecord, suggestion_id: str) -> PendingS
     suggestion.status = "sent"
     suggestion.sent_at = now_timestamp()
     add_turn(partner, "user", suggestion.text)
+    _add_sent_record(partner, "generated_suggestion", suggestion.text, suggestion.sent_at, source_suggestion_id=suggestion_id)
     add_activity_event(partner, "suggestion_sent", f"{suggestion_id} を送信済み", suggestion_id, suggestion.sent_at)
     if partner.status == "first_message_suggested":
         partner.status = "first_message_sent"
@@ -61,8 +62,12 @@ def mark_suggestion_sent(partner: PartnerRecord, suggestion_id: str) -> PendingS
     return suggestion
 
 
-def mark_text_sent(partner: PartnerRecord, text: str) -> None:
-    add_turn(partner, "user", text)
+def mark_text_sent(partner: PartnerRecord, text: str) -> SentRecord:
+    turn = add_turn(partner, "user", text)
+    record = _add_sent_record(partner, "custom_text", text, turn.timestamp or now_timestamp())
+    add_activity_event(partner, "custom_text_sent", f"{record.sent_id} を手入力送信済みとして記録", record.sent_id, record.sent_at)
+    save_updated_partner(partner)
+    return record
 
 
 def discard_suggestion(partner: PartnerRecord, suggestion_id: str) -> PendingSuggestion:
@@ -100,3 +105,33 @@ def get_pending_suggestions(partner: PartnerRecord) -> list[PendingSuggestion]:
 
 def pending_suggestion_count(partner: PartnerRecord) -> int:
     return len(get_pending_suggestions(partner))
+
+
+def _add_sent_record(
+    partner: PartnerRecord,
+    source_type: str,
+    text: str,
+    sent_at: str,
+    source_suggestion_id: str | None = None,
+) -> SentRecord:
+    if source_suggestion_id and any(record.source_suggestion_id == source_suggestion_id for record in partner.sent_records):
+        return next(record for record in partner.sent_records if record.source_suggestion_id == source_suggestion_id)
+    record = SentRecord(
+        sent_id=_generate_next_sent_id(partner, source_type),
+        source_type=source_type,
+        source_suggestion_id=source_suggestion_id,
+        text=text,
+        sent_at=sent_at,
+    )
+    partner.sent_records.append(record)
+    return record
+
+
+def _generate_next_sent_id(partner: PartnerRecord, source_type: str) -> str:
+    prefix = "sent_custom" if source_type == "custom_text" else "sent_generated"
+    numbers = []
+    for record in partner.sent_records:
+        match = re.fullmatch(rf"{prefix}_(\d+)", record.sent_id)
+        if match:
+            numbers.append(int(match.group(1)))
+    return f"{prefix}_{max(numbers, default=0) + 1:06d}"

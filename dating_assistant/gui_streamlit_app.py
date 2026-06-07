@@ -321,48 +321,54 @@ def render_sent_outcome_controls(partner) -> None:
         return
 
     for suggestion in sent_suggestions:
-        title = f"{suggestion['suggestion_id']} / {suggestion['outcome_status']} / {suggestion['sent_at'] or 'sent_atなし'}"
+        title = f"{suggestion['sent_id']} / {suggestion['source_label']} / {suggestion['outcome_status']} / {suggestion['sent_at'] or 'sent_atなし'}"
         with st.expander(title, expanded=True):
+            st.markdown(f"**sent_id:** {suggestion['sent_id']}")
+            st.markdown(f"**種別:** {suggestion['source_label']}")
+            if suggestion["source_suggestion_id"]:
+                st.markdown(f"**source_suggestion_id:** {suggestion['source_suggestion_id']}")
+            st.markdown(f"**sent_at:** {suggestion['sent_at'] or '-'}")
+            st.markdown(f"**outcome_updated_at:** {suggestion['outcome_updated_at'] or '-'}")
             st.text_area(
                 "送信文",
                 suggestion["text"],
                 height=100,
                 disabled=True,
-                key=f"sent_text_{partner.partner_id}_{suggestion['suggestion_id']}",
+                key=f"sent_text_{partner.partner_id}_{suggestion['sent_id']}",
             )
             current_index = SENT_OUTCOME_STATUS_OPTIONS.index(suggestion["outcome_status"]) if suggestion["outcome_status"] in SENT_OUTCOME_STATUS_OPTIONS else 0
             outcome_status = st.selectbox(
                 "結果ステータス",
                 options=SENT_OUTCOME_STATUS_OPTIONS,
                 index=current_index,
-                key=f"outcome_status_{partner.partner_id}_{suggestion['suggestion_id']}",
+                key=f"outcome_status_{partner.partner_id}_{suggestion['sent_id']}",
             )
             outcome_memo = st.text_area(
                 "送信結果メモ",
                 value=suggestion["outcome_memo"],
                 height=90,
                 placeholder="例: 旅行の話題は反応よかった。次も広げてよさそう。",
-                key=f"outcome_memo_{partner.partner_id}_{suggestion['suggestion_id']}",
+                key=f"outcome_memo_{partner.partner_id}_{suggestion['sent_id']}",
             )
             if outcome_memo.strip():
                 with st.expander("送信結果メモ保存プレビュー", expanded=False):
-                    preview = build_sent_outcome_preview(partner, suggestion["suggestion_id"], outcome_status, outcome_memo)
+                    preview = build_sent_outcome_preview(partner, suggestion["sent_id"], outcome_status, outcome_memo)
                     for warning in preview["warnings"]:
                         st.warning(warning)
                     st.json(preview)
             confirm = st.checkbox(
                 "個人情報を含めず、送信結果メモをlocal保存する",
-                key=f"outcome_confirm_{partner.partner_id}_{suggestion['suggestion_id']}",
+                key=f"outcome_confirm_{partner.partner_id}_{suggestion['sent_id']}",
             )
             if st.button(
                 "送信結果メモを更新",
                 disabled=not confirm,
-                key=f"outcome_button_{partner.partner_id}_{suggestion['suggestion_id']}",
+                key=f"outcome_button_{partner.partner_id}_{suggestion['sent_id']}",
             ):
                 try:
                     result = update_sent_outcome_from_gui(
                         partner.partner_id,
-                        suggestion["suggestion_id"],
+                        suggestion["sent_id"],
                         outcome_status,
                         outcome_memo,
                         confirmed=confirm,

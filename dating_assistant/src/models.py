@@ -73,6 +73,18 @@ class PendingSuggestion:
 
 
 @dataclass
+class SentRecord:
+    sent_id: str
+    source_type: str
+    text: str
+    sent_at: str
+    source_suggestion_id: str | None = None
+    outcome_status: str = "未確認"
+    outcome_memo: str = ""
+    outcome_updated_at: str | None = None
+
+
+@dataclass
 class PartnerNote:
     text: str
     created_at: str | None = None
@@ -111,6 +123,7 @@ class PartnerRecord:
     conversation: list[ConversationTurn] = field(default_factory=list)
     analysis: PartnerAnalysis = field(default_factory=PartnerAnalysis)
     pending_suggestions: list[PendingSuggestion] = field(default_factory=list)
+    sent_records: list[SentRecord] = field(default_factory=list)
     message_state: MessageState = field(default_factory=MessageState)
     notes: list[PartnerNote] = field(default_factory=list)
     activity_log: list[ActivityEvent] = field(default_factory=list)

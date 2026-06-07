@@ -394,3 +394,12 @@ python -m streamlit run gui_streamlit_app.py
 - 最近の送信結果メモは生成前チェックへ表示し、次回以降の判断材料として見られるようにした。
 - 相手別メモと送信結果メモには既存の個人情報警告を再利用し、保存前プレビューで注意表示する。
 - 自動送信、外部API通信、マッチングアプリ操作、画像保存、local実データのGit管理は追加しない。
+
+### 作業No.119
+
+- custom textを送信済みlocal記録した場合にも、`sent_custom_000001` 形式の安定した `sent_id` を付与する。
+- AI候補由来の送信済み記録は `sent_generated_000001` 形式の `sent_id` と `source_type=generated_suggestion` を持たせる。
+- 手入力文由来の送信済み記録は `source_type=custom_text` とし、AI候補由来と画面上で区別できるようにする。
+- 古いsent済みsuggestionは `legacy_generated_<suggestion_id>` のfallback IDで表示し、結果メモ更新時に `sent_records` へ移行できるようにする。
+- 送信結果メモは `sent_id` に紐づけ、最近の送信結果として生成前チェックへ表示する。
+- 自動送信、外部API通信、マッチングアプリ操作、画像保存、local実データのGit管理は追加しない。

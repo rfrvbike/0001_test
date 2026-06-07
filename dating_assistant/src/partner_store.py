@@ -17,6 +17,7 @@ from .models import (
     PartnerProfile,
     PartnerRecord,
     PendingSuggestion,
+    SentRecord,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,6 +76,11 @@ def partner_from_mapping(data: dict[str, Any]) -> PartnerRecord:
         for suggestion in raw_suggestions
         if isinstance(suggestion, dict)
     ]
+    sent_records = [
+        SentRecord(**_known_fields(SentRecord, record))
+        for record in data.get("sent_records", [])
+        if isinstance(record, dict)
+    ]
     notes = [
         PartnerNote(text=note) if isinstance(note, str) else PartnerNote(**_known_fields(PartnerNote, note))
         for note in data.get("notes", [])
@@ -101,6 +107,7 @@ def partner_from_mapping(data: dict[str, Any]) -> PartnerRecord:
         conversation=turns,
         analysis=analysis,
         pending_suggestions=suggestions,
+        sent_records=sent_records,
         message_state=message_state,
         notes=notes,
         activity_log=activity_log,

@@ -353,3 +353,21 @@ OK
 - 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、顔写真保存、スクリーンショット保存は追加していない。
 - 実データは `data/local/partners/` のlocal partnerデータへ保存され、Git管理対象にしていない。
 - 実プロフィールYAMLやpartner実データYAMLはcommit対象にしていない。
+
+## 作業No.119 custom text送信済み記録ID安定化
+
+実装内容:
+
+- partner localデータに `sent_records` を追加し、送信済みlocal記録をAI候補由来と手入力由来の両方で扱えるようにした。
+- AI候補由来の送信済み記録には `sent_generated_000001` 形式の `sent_id` と `source_type=generated_suggestion` を付与する。
+- 手入力文由来の送信済み記録には `sent_custom_000001` 形式の `sent_id` と `source_type=custom_text` を付与する。
+- 送信結果メモは `sent_id` に紐づけて保存・更新するようにした。
+- 既存のsent済みsuggestionは `legacy_generated_<suggestion_id>` のfallback IDで表示し、結果メモ更新時に `sent_records` へ移行できるようにした。
+- 送信結果メモ画面で、sent_id、種別、source_suggestion_id、送信日時、結果更新日時、送信文を確認できるようにした。
+- custom text由来の送信結果メモも、生成前チェックの最近の送信結果に表示されるようにした。
+
+安全確認:
+
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、顔写真保存、スクリーンショット保存は追加していない。
+- 実データは `data/local/partners/` のlocal partnerデータへ保存され、Git管理対象にしていない。
+- 実プロフィールYAMLやpartner実データYAMLはcommit対象にしていない。

@@ -10,7 +10,7 @@ from src.activity_log import add_activity_event
 from src.app_core import generate
 from src.conversation_planner import estimate_partner_temperature
 from src.loaders import load_user_profile
-from src.models import ConversationTurn, GenerationRequest, PartnerNote, PartnerRecord, TargetProfile
+from src.models import ConversationTurn, GenerationRequest, PartnerNote, PartnerRecord, SentRecord, TargetProfile
 from src.partner_store import list_partners, load_partner
 from src.partner_manager import add_partner_note, create_partner_from_target_profile, save_updated_partner
 from src.real_profile_manager import (
@@ -250,30 +250,29 @@ def add_partner_note_from_gui(partner_id: str, text: str, confirmed: bool) -> di
 
 
 def format_sent_suggestions_for_outcomes(partner: PartnerRecord) -> list[dict[str, Any]]:
-    sent = [suggestion for suggestion in partner.pending_suggestions if suggestion.status == "sent"]
-    return [
-        {
-            "suggestion_id": suggestion.suggestion_id,
-            "purpose": suggestion.purpose,
-            "sent_at": suggestion.sent_at or "",
-            "text": suggestion.text,
-            "outcome_status": suggestion.outcome_status or "未確認",
-            "outcome_memo": suggestion.outcome_memo or "",
-            "outcome_updated_at": suggestion.outcome_updated_at or "",
-        }
-        for suggestion in sent
+    records = [
+        _sent_record_to_display(record)
+        for record in partner.sent_records
     ]
+    recorded_suggestion_ids = {record.source_suggestion_id for record in partner.sent_records if record.source_suggestion_id}
+    for suggestion in partner.pending_suggestions:
+        if suggestion.status == "sent" and suggestion.suggestion_id not in recorded_suggestion_ids:
+            records.append(_legacy_sent_suggestion_to_display(suggestion))
+    return sorted(records, key=lambda item: item["sent_at"] or "")
 
 
-def build_sent_outcome_preview(partner: PartnerRecord, suggestion_id: str, outcome_status: str, outcome_memo: str = "") -> dict[str, Any]:
-    suggestion = _find_sent_suggestion(partner, suggestion_id)
+def build_sent_outcome_preview(partner: PartnerRecord, sent_id: str, outcome_status: str, outcome_memo: str = "") -> dict[str, Any]:
+    record = _find_sent_record_or_legacy(partner, sent_id)
     outcome_status = outcome_status if outcome_status in SENT_OUTCOME_STATUS_OPTIONS else "未確認"
     outcome_memo = outcome_memo.strip()
     warnings = detect_privacy_warnings([outcome_memo])
     return {
         "partner_id": partner.partner_id,
-        "suggestion_id": suggestion.suggestion_id,
-        "送信文": suggestion.text,
+        "sent_id": record["sent_id"],
+        "source_type": record["source_type"],
+        "source_suggestion_id": record["source_suggestion_id"] or "-",
+        "sent_at": record["sent_at"] or "-",
+        "送信文": record["text"],
         "結果ステータス": outcome_status,
         "結果メモ": outcome_memo or "-",
         "warnings": warnings,
@@ -284,7 +283,7 @@ def build_sent_outcome_preview(partner: PartnerRecord, suggestion_id: str, outco
 
 def update_sent_outcome_from_gui(
     partner_id: str,
-    suggestion_id: str,
+    sent_id: str,
     outcome_status: str,
     outcome_memo: str = "",
     confirmed: bool = False,
@@ -296,17 +295,24 @@ def update_sent_outcome_from_gui(
     partner = load_partner(partner_id)
     if partner.status == "archived":
         raise ValueError("archivedのpartnerには送信結果メモを追加できません。")
-    suggestion = _find_sent_suggestion(partner, suggestion_id)
+    record = _find_sent_record(partner, sent_id)
     outcome_memo = outcome_memo.strip()
     warnings = detect_privacy_warnings([outcome_memo])
-    suggestion.outcome_status = outcome_status
-    suggestion.outcome_memo = outcome_memo
-    suggestion.outcome_updated_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    add_activity_event(partner, "sent_outcome_updated", f"{suggestion_id} 結果: {outcome_status}", suggestion_id, suggestion.outcome_updated_at)
+    record.outcome_status = outcome_status
+    record.outcome_memo = outcome_memo
+    record.outcome_updated_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    if record.source_suggestion_id:
+        suggestion = _find_sent_suggestion(partner, record.source_suggestion_id)
+        suggestion.outcome_status = outcome_status
+        suggestion.outcome_memo = outcome_memo
+        suggestion.outcome_updated_at = record.outcome_updated_at
+    add_activity_event(partner, "sent_outcome_updated", f"{sent_id} 結果: {outcome_status}", sent_id, record.outcome_updated_at)
     save_updated_partner(partner)
     return {
         "partner_id": partner_id,
-        "suggestion_id": suggestion_id,
+        "sent_id": sent_id,
+        "source_type": record.source_type,
+        "source_suggestion_id": record.source_suggestion_id or "",
         "outcome_status": outcome_status,
         "outcome_memo": outcome_memo,
         "warnings": warnings,
@@ -582,8 +588,11 @@ def build_mark_sent_preview(partner: PartnerRecord, suggestion_id: str | None = 
     return {
         "partner_id": partner.partner_id,
         "record_type": source,
+        "source_type": "generated_suggestion" if suggestion_id else "custom_text",
+        "sent_id": "保存時に自動採番",
         "speaker": "user",
         "text": text,
+        "warnings": detect_privacy_warnings([text]),
         "conversation_history": "user発話を1件追加",
         "message_state": "相手の返信待ちへ更新",
         "remaining_pending_suggestions": remaining_note,
@@ -596,12 +605,16 @@ def mark_suggestion_sent_from_gui(partner_id: str, suggestion_id: str, confirmed
     if not can_mark_suggestion_sent(partner, suggestion_id, confirmed=confirmed):
         raise ValueError("確認チェックがないか、送信済み記録できるpending suggestionではありません。")
     suggestion = mark_suggestion_sent(partner, suggestion_id)
+    stored = load_partner(partner_id)
+    sent_record = next((record for record in stored.sent_records if record.source_suggestion_id == suggestion_id), None)
     return {
         "partner_id": partner.partner_id,
         "suggestion_id": suggestion.suggestion_id,
+        "sent_id": sent_record.sent_id if sent_record else f"legacy_generated_{suggestion.suggestion_id}",
+        "source_type": "generated_suggestion",
         "text": suggestion.text,
         "status": suggestion.status,
-        "remaining_pending_suggestions": len(get_pending_suggestions(partner)),
+        "remaining_pending_suggestions": len(get_pending_suggestions(stored)),
     }
 
 
@@ -615,10 +628,12 @@ def mark_custom_text_sent_from_gui(partner_id: str, text: str, confirmed: bool) 
     if partner.status == "archived":
         raise ValueError("archivedのpartnerには送信済み記録できません。")
     pending_before = len(get_pending_suggestions(partner))
-    mark_text_sent(partner, text)
+    sent_record = mark_text_sent(partner, text)
     stored = load_partner(partner_id)
     return {
         "partner_id": stored.partner_id,
+        "sent_id": sent_record.sent_id,
+        "source_type": sent_record.source_type,
         "text": text,
         "remaining_pending_suggestions": pending_before,
         "note": "custom textで記録したため、元候補がpendingに残る場合があります。",
@@ -1184,17 +1199,80 @@ def _find_sent_suggestion(partner: PartnerRecord, suggestion_id: str):
     raise ValueError(f"sent suggestion not found: {suggestion_id}")
 
 
+def _find_sent_record(partner: PartnerRecord, sent_id: str) -> SentRecord:
+    for record in partner.sent_records:
+        if record.sent_id == sent_id:
+            return record
+    if sent_id.startswith("legacy_generated_"):
+        suggestion_id = sent_id.removeprefix("legacy_generated_")
+        suggestion = _find_sent_suggestion(partner, suggestion_id)
+        record = SentRecord(
+            sent_id=sent_id,
+            source_type="generated_suggestion",
+            source_suggestion_id=suggestion.suggestion_id,
+            text=suggestion.text,
+            sent_at=suggestion.sent_at or suggestion.created_at,
+            outcome_status=suggestion.outcome_status or "未確認",
+            outcome_memo=suggestion.outcome_memo or "",
+            outcome_updated_at=suggestion.outcome_updated_at,
+        )
+        partner.sent_records.append(record)
+        return record
+    raise ValueError(f"sent record not found: {sent_id}")
+
+
+def _find_sent_record_or_legacy(partner: PartnerRecord, sent_id: str) -> dict[str, Any]:
+    try:
+        return _sent_record_to_display(_find_sent_record(partner, sent_id))
+    except ValueError:
+        if sent_id.startswith("legacy_generated_"):
+            suggestion_id = sent_id.removeprefix("legacy_generated_")
+            return _legacy_sent_suggestion_to_display(_find_sent_suggestion(partner, suggestion_id))
+        raise
+
+
+def _sent_record_to_display(record: SentRecord) -> dict[str, Any]:
+    return {
+        "sent_id": record.sent_id,
+        "suggestion_id": record.source_suggestion_id or "",
+        "source_type": record.source_type,
+        "source_label": "AI候補" if record.source_type == "generated_suggestion" else "手入力",
+        "source_suggestion_id": record.source_suggestion_id or "",
+        "purpose": "custom_text" if record.source_type == "custom_text" else "generated_suggestion",
+        "sent_at": record.sent_at or "",
+        "text": record.text,
+        "outcome_status": record.outcome_status or "未確認",
+        "outcome_memo": record.outcome_memo or "",
+        "outcome_updated_at": record.outcome_updated_at or "",
+    }
+
+
+def _legacy_sent_suggestion_to_display(suggestion) -> dict[str, Any]:
+    return {
+        "sent_id": f"legacy_generated_{suggestion.suggestion_id}",
+        "suggestion_id": suggestion.suggestion_id,
+        "source_type": "generated_suggestion",
+        "source_label": "AI候補",
+        "source_suggestion_id": suggestion.suggestion_id,
+        "purpose": suggestion.purpose,
+        "sent_at": suggestion.sent_at or suggestion.created_at,
+        "text": suggestion.text,
+        "outcome_status": suggestion.outcome_status or "未確認",
+        "outcome_memo": suggestion.outcome_memo or "",
+        "outcome_updated_at": suggestion.outcome_updated_at or "",
+    }
+
+
 def _partner_notes_text(partner: PartnerRecord) -> str:
     return "\n".join(note.text.strip() for note in partner.notes if note.text.strip())
 
 
 def _recent_outcome_summaries(partner: PartnerRecord, limit: int = 3) -> list[str]:
-    sent = [suggestion for suggestion in partner.pending_suggestions if suggestion.status == "sent"]
     summaries = []
-    for suggestion in sent[-limit:]:
-        status = suggestion.outcome_status or "未確認"
-        memo = suggestion.outcome_memo.strip()
-        detail = f"{suggestion.suggestion_id}: {status}"
+    for record in format_sent_suggestions_for_outcomes(partner)[-limit:]:
+        status = record["outcome_status"] or "未確認"
+        memo = record["outcome_memo"].strip()
+        detail = f"{record['sent_id']}: {status}"
         if memo:
             detail += f" / {_truncate_for_display(memo, 80)}"
         summaries.append(detail)

@@ -45,6 +45,7 @@ class PartnerStoreTests(unittest.TestCase):
         save_partner(record)
         loaded = load_partner("partner_001")
         self.assertEqual(loaded.pending_suggestions, [])
+        self.assertEqual(loaded.sent_records, [])
         self.assertEqual(loaded.activity_log, [])
         self.assertEqual(loaded.message_state.last_user_message, "")
         self.assertFalse(loaded.message_state.awaiting_user_action)
