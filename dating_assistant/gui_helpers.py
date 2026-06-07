@@ -24,6 +24,91 @@ from src.real_profile_manager import (
 from src.suggestion_manager import add_suggestion, discard_suggestion, get_pending_suggestions, mark_suggestion_sent, mark_text_sent
 from src.timeline_builder import build_timeline_events
 
+PROFILE_PASTE_FIELD_ALIASES = {
+    "display_name": "display_name",
+    "name": "display_name",
+    "表示名": "display_name",
+    "名前": "display_name",
+    "相手の表示名": "display_name",
+    "app": "app_name",
+    "app_name": "app_name",
+    "アプリ": "app_name",
+    "アプリ名": "app_name",
+    "age": "age",
+    "年齢": "age",
+    "area": "area",
+    "エリア": "area",
+    "居住地": "area",
+    "地域": "area",
+    "profile": "profile_text",
+    "profile_text": "profile_text",
+    "プロフィール": "profile_text",
+    "プロフィール文": "profile_text",
+    "自己紹介": "profile_text",
+    "interests": "interests",
+    "hobbies": "interests",
+    "趣味": "interests",
+    "好きなこと": "interests",
+    "photo": "photo_memo",
+    "photo_memo": "photo_memo",
+    "写真": "photo_memo",
+    "写真メモ": "photo_memo",
+    "印象": "photo_memo",
+    "avoid_topics": "avoid_topics",
+    "避けたい話題": "avoid_topics",
+    "ng": "avoid_topics",
+    "notes": "notes",
+    "メモ": "notes",
+    "その他": "notes",
+    "conversation_hooks": "conversation_hooks",
+    "会話に使えそうな情報": "conversation_hooks",
+    "first_message_hints": "first_message_hints",
+    "初回候補ヒント": "first_message_hints",
+    "safety_notes": "safety_notes",
+    "安全メモ": "safety_notes",
+}
+
+PROFILE_PASTE_FIELDS = [
+    "display_name",
+    "app_name",
+    "age",
+    "area",
+    "profile_text",
+    "interests",
+    "photo_memo",
+    "avoid_topics",
+    "conversation_hooks",
+    "first_message_hints",
+    "safety_notes",
+    "notes",
+]
+
+GENERATION_OBJECTIVE_OPTIONS = [
+    "相手の趣味を広げる",
+    "相手のプロフィールに触れる",
+    "自分の紹介をする",
+    "共感のリアクション重視",
+    "質問を1つ入れる",
+    "軽くユーモアを入れる",
+    "電話に誘う",
+    "会う提案をする",
+    "場所を指定して会う提案をする",
+    "LINE交換を提案する",
+    "少し大人っぽい雰囲気にする",
+    "恋愛観に軽く触れる",
+]
+
+GENERATION_TONE_OPTIONS = [
+    "自然",
+    "丁寧",
+    "少し親しみやすい",
+    "軽くユーモア",
+    "落ち着いた感じ",
+    "短め",
+    "かなり無難",
+    "少し大人っぽいが控えめ",
+]
+
 PROFILE_SAFETY_PATTERNS = {
     "メールアドレス": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
     "電話番号": re.compile(r"(?:\+?\d[\d -]{8,}\d)"),
@@ -207,6 +292,127 @@ def generate_suggestion_for_gui(partner_id: str) -> dict[str, Any]:
     }
 
 
+def build_conversation_stage_summary(partner: PartnerRecord) -> dict[str, Any]:
+    partner_turns = [turn for turn in partner.conversation if turn.speaker == "partner"]
+    user_turns = [turn for turn in partner.conversation if turn.speaker == "user"]
+    round_count = min(len(partner_turns), len(user_turns))
+    latest_partner = partner_turns[-1].text if partner_turns else ""
+    temperature = estimate_partner_temperature(partner.conversation) if partner.conversation else "unknown"
+    if not partner.conversation:
+        stage = "初回前"
+        next_step = "プロフィールに触れた初回候補を作る"
+    elif partner.message_state.awaiting_partner_reply:
+        stage = "返信待ち"
+        next_step = "相手の返信を待つ"
+    elif round_count <= 1:
+        stage = "1往復目"
+        next_step = "共感と軽い質問で会話を続ける"
+    elif round_count == 2:
+        stage = "2往復目"
+        next_step = "温度感を見ながら話題を少し広げる"
+    elif temperature in {"good", "very_good"}:
+        stage = "3往復目以降"
+        next_step = "電話や軽い会う提案を検討してもよい"
+    else:
+        stage = "まだ雑談継続"
+        next_step = "急いで誘わず、もう少し会話を続ける"
+    return {
+        "stage": stage,
+        "round_count": round_count,
+        "partner_temperature": temperature,
+        "latest_partner_message": latest_partner or "-",
+        "next_recommendation": next_step,
+        "phone_suggestion": "2から3往復後で反応が良い場合のみ検討",
+        "meet_suggestion": "電話後または十分に自然な会話後に軽く検討",
+    }
+
+
+def build_generation_preflight(partner: PartnerRecord, objectives: list[str] | None = None, tone: str = "", place_hint: str = "") -> dict[str, Any]:
+    stage = build_conversation_stage_summary(partner)
+    objectives = [item for item in (objectives or []) if item]
+    warnings = []
+    if any("電話" in item for item in objectives) and stage["round_count"] < 2:
+        warnings.append("電話提案はまだ早い可能性があります。")
+    if any("会う" in item for item in objectives) and stage["round_count"] < 3:
+        warnings.append("会う提案はまだ早い可能性があります。")
+    if any("LINE" in item for item in objectives) and stage["round_count"] < 2:
+        warnings.append("LINE交換提案は唐突になりやすいため注意してください。")
+    return {
+        "partner_id": partner.partner_id,
+        "generation_mode": get_generation_mode_for_partner(partner),
+        "objectives": objectives or ["指定なし"],
+        "tone": tone or "自然",
+        "place_hint": place_hint.strip() or "-",
+        "stage": stage,
+        "warnings": warnings,
+        "local_save_only": True,
+        "auto_send": False,
+    }
+
+
+def generate_suggestion_variants_for_gui(
+    partner_id: str,
+    objectives: list[str] | None = None,
+    tone: str = "自然",
+    place_hint: str = "",
+) -> dict[str, Any]:
+    partner = load_partner(partner_id)
+    mode = get_generation_mode_for_partner(partner)
+    if mode not in {"first", "reply"}:
+        raise ValueError(build_generation_status_message(partner))
+    purpose = "first_message" if mode == "first" else "reply"
+    request = GenerationRequest(
+        target_profile=_target_from_partner(partner),
+        user_profile=load_user_profile(),
+        conversation_history=list(partner.conversation),
+        purpose=purpose,
+        current_stage="first_message" if mode == "first" else "auto",
+    )
+    result = generate(request)
+    base_candidates = _unique_candidates([result.best_message, *result.message_candidates])
+    variants = []
+    selected_objectives = [item for item in (objectives or []) if item]
+    for index in range(3):
+        base = base_candidates[index % len(base_candidates)]
+        objective = selected_objectives[index % len(selected_objectives)] if selected_objectives else "質問を1つ入れる"
+        text = _shape_candidate_for_objective(base, objective, tone, place_hint, mode, index)
+        suggestion = add_suggestion(
+            partner,
+            purpose="first" if mode == "first" else "reply",
+            text=text,
+            source="gui-generate-variants",
+            safety_result="OK",
+        )
+        variants.append(
+            {
+                "suggestion_id": suggestion.suggestion_id,
+                "text": suggestion.text,
+                "purpose": suggestion.purpose,
+                "objective": objective,
+                "tone": tone or "自然",
+                "use_case": _variant_use_case(index),
+                "safety_notes": _candidate_safety_notes(text, objective),
+            }
+        )
+    partner.analysis.partner_temperature = result.partner_temperature
+    partner.analysis.safe_topics = list(result.safe_topics)
+    partner.analysis.light_only_topics = list(result.light_only_topics)
+    partner.analysis.avoid_topics = list(result.avoid_topics)
+    partner.analysis.next_strategy = result.recommended_strategy
+    partner.analysis.last_suggested_message = variants[0]["text"]
+    if mode == "first":
+        partner.status = "first_message_suggested"
+    elif partner.status in {"new_profile", "first_message_sent", "first_message_suggested"}:
+        partner.status = "chatting"
+    save_updated_partner(partner)
+    return {
+        "mode": mode,
+        "variants": variants,
+        "stage": build_conversation_stage_summary(partner),
+        "preflight": build_generation_preflight(partner, selected_objectives, tone, place_hint),
+    }
+
+
 def can_mark_suggestion_sent(partner: PartnerRecord, suggestion_id: str, confirmed: bool = False) -> bool:
     if partner.status == "archived" or not confirmed:
         return False
@@ -329,6 +535,57 @@ def split_form_list(value: str) -> list[str]:
     return [item.strip() for item in normalized.splitlines() if item.strip()]
 
 
+def build_profile_form_from_paste(text: str) -> tuple[dict[str, Any], list[str]]:
+    extracted = {field: "" for field in PROFILE_PASTE_FIELDS}
+    warnings = []
+    current_field: str | None = None
+    unknown_lines = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        field, value = _split_profile_paste_line(line)
+        if field:
+            current_field = field
+            if value:
+                extracted[field] = _append_profile_field_value(extracted[field], value)
+            continue
+        if current_field in {"profile_text", "photo_memo", "interests", "avoid_topics", "conversation_hooks", "first_message_hints", "safety_notes", "notes"}:
+            cleaned = line[2:].strip() if line.startswith(("- ", "・")) else line
+            extracted[current_field] = _append_profile_field_value(extracted[current_field], cleaned)
+        else:
+            unknown_lines.append(line)
+    if unknown_lines and not extracted["profile_text"]:
+        extracted["profile_text"] = "\n".join(unknown_lines)
+    elif unknown_lines:
+        extracted["notes"] = _append_profile_field_value(extracted["notes"], "\n".join(unknown_lines))
+    safety_warnings = detect_profile_safety_warnings(extracted)
+    if safety_warnings:
+        warnings.append("保存前に見直してください: " + " / ".join(safety_warnings))
+    return extracted, warnings
+
+
+def merge_profile_form_with_paste(form: dict[str, Any], pasted_form: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(form)
+    for key, value in pasted_form.items():
+        if key == "label":
+            continue
+        if key not in merged or not str(merged.get(key, "")).strip():
+            merged[key] = value
+    return merged
+
+
+def build_profile_paste_preview(text: str) -> dict[str, Any]:
+    extracted, warnings = build_profile_form_from_paste(text)
+    return {
+        "extracted_fields": {key: value or "-" for key, value in extracted.items()},
+        "warnings": warnings,
+        "manual_review_required": True,
+        "saves_images": False,
+        "auto_send": False,
+    }
+
+
 def validate_profile_form(form: dict[str, Any]) -> list[str]:
     errors = []
     label = str(form.get("label", "")).strip()
@@ -393,6 +650,9 @@ def build_profile_save_preview(form: dict[str, Any]) -> dict[str, Any]:
         "photo_memo": data["photos_memo"],
         "interests": data["hobbies"],
         "avoid_topics": split_form_list(str(form.get("avoid_topics", ""))),
+        "conversation_hooks": split_form_list(str(form.get("conversation_hooks", ""))),
+        "first_message_hints": split_form_list(str(form.get("first_message_hints", ""))),
+        "safety_notes": split_form_list(str(form.get("safety_notes", ""))),
         "notes": str(form.get("notes", "")).strip() or "-",
         "保存先": str(get_real_profile_path(data["label"])),
     }
@@ -429,8 +689,45 @@ def list_real_profiles_for_gui() -> list[dict[str, Any]]:
     return profiles
 
 
+def filter_real_profiles_for_gui(query: str = "") -> list[dict[str, Any]]:
+    query = query.strip().lower()
+    profiles = list_real_profiles_for_gui()
+    if not query:
+        return profiles
+    return [profile for profile in profiles if query in profile["display_label"].lower() or query in profile["label"].lower()]
+
+
 def load_real_profile_for_gui(label: str) -> tuple[Path, TargetProfile]:
     return load_real_profile(label=label)
+
+
+def build_real_profile_summary_for_gui(label: str) -> dict[str, Any]:
+    path, profile = load_real_profile_for_gui(label)
+    return {
+        "label": label,
+        "path": str(path),
+        "age": profile.age or "-",
+        "area": profile.location_hint or "-",
+        "profile_text": profile.profile_text,
+        "interests": profile.hobbies,
+        "photo_memo": profile.photos_memo,
+        "free_notes": profile.free_notes or "-",
+    }
+
+
+def find_existing_partners_for_profile(label: str) -> list[dict[str, str]]:
+    _path, profile = load_real_profile_for_gui(label)
+    matches = []
+    for partner in list_partners():
+        if partner.profile.profile_text == profile.profile_text and partner.profile.hobbies == profile.hobbies:
+            matches.append(
+                {
+                    "partner_id": partner.partner_id,
+                    "display_name": partner.display_name,
+                    "status": partner.status,
+                }
+            )
+    return matches
 
 
 def build_partner_creation_preview(label: str, display_name: str, app_name: str = "", source_memo: str = "") -> dict[str, Any]:
@@ -580,6 +877,9 @@ def _build_free_notes(form: dict[str, Any]) -> str | None:
     display_name = str(form.get("display_name", "")).strip()
     app_name = str(form.get("app_name", "")).strip()
     avoid_topics = split_form_list(str(form.get("avoid_topics", "")))
+    conversation_hooks = split_form_list(str(form.get("conversation_hooks", "")))
+    first_message_hints = split_form_list(str(form.get("first_message_hints", "")))
+    safety_notes = split_form_list(str(form.get("safety_notes", "")))
     notes = str(form.get("notes", "")).strip()
     lines = []
     if display_name:
@@ -589,6 +889,15 @@ def _build_free_notes(form: dict[str, Any]) -> str | None:
     if avoid_topics:
         lines.append("avoid_topics:")
         lines.extend(f"- {item}" for item in avoid_topics)
+    if conversation_hooks:
+        lines.append("conversation_hooks:")
+        lines.extend(f"- {item}" for item in conversation_hooks)
+    if first_message_hints:
+        lines.append("first_message_hints:")
+        lines.extend(f"- {item}" for item in first_message_hints)
+    if safety_notes:
+        lines.append("safety_notes:")
+        lines.extend(f"- {item}" for item in safety_notes)
     if notes:
         lines.append("notes:")
         lines.append(notes)
@@ -639,3 +948,71 @@ def _target_from_partner(partner: PartnerRecord) -> TargetProfile:
         relationship_goal=profile.relationship_goal,
         free_notes=profile.free_notes,
     )
+
+
+def _split_profile_paste_line(line: str) -> tuple[str | None, str]:
+    match = re.match(r"^\s*([^:：]+)\s*[:：]\s*(.*)$", line)
+    if not match:
+        return None, ""
+    raw_key = match.group(1).strip().lower()
+    field = PROFILE_PASTE_FIELD_ALIASES.get(raw_key) or PROFILE_PASTE_FIELD_ALIASES.get(match.group(1).strip())
+    return field, match.group(2).strip() if field else ""
+
+
+def _append_profile_field_value(current: Any, value: str) -> str:
+    value = value.strip()
+    if not value:
+        return str(current or "")
+    current_text = str(current or "").strip()
+    return f"{current_text}\n{value}" if current_text else value
+
+
+def _unique_candidates(candidates: list[str]) -> list[str]:
+    unique = []
+    for candidate in candidates:
+        text = candidate.strip()
+        if text and text not in unique:
+            unique.append(text)
+    return unique or ["はじめまして。プロフィールを見て、話してみたいなと思いました。休日はどんな過ごし方が多いですか？"]
+
+
+def _shape_candidate_for_objective(base: str, objective: str, tone: str, place_hint: str, mode: str, index: int) -> str:
+    place = place_hint.strip()
+    if "電話" in objective:
+        return "メッセージだと少し伝わりにくいので、タイミングが合えば短く電話で話してみませんか？"
+    if "LINE" in objective:
+        return "このままアプリでも大丈夫ですが、話しやすければLINEに移っても大丈夫です。無理なければで大丈夫です。"
+    if "場所" in objective and place:
+        return f"話していて雰囲気が合いそうだなと思いました。よかったら今度、{place}あたりで軽くお茶でも行けたら嬉しいです。"
+    if "会う" in objective:
+        return "話していて雰囲気が合いそうだなと思いました。よかったら今度、軽くお茶でも行けたら嬉しいです。"
+    if "自分の紹介" in objective:
+        return _trim_for_gui(f"{base} 自分も近い雰囲気の話題は好きなので、ゆるく話せたら嬉しいです。")
+    if "ユーモア" in objective or "ユーモア" in tone:
+        return _trim_for_gui(f"{base} ちょっとだけ気になって、つい聞きたくなりました。")
+    if "大人" in objective or "大人" in tone:
+        return _trim_for_gui(base.replace("嬉しいです。", "嬉しいです。落ち着いて話せる感じもいいなと思いました。"))
+    if "短め" in tone:
+        return _trim_for_gui(base, 90)
+    if index == 1:
+        return _trim_for_gui(base.replace("気になりました", "印象に残りました"))
+    if index == 2:
+        return _trim_for_gui(base.replace("最近", "休日は"))
+    return _trim_for_gui(base)
+
+
+def _trim_for_gui(text: str, max_len: int = 160) -> str:
+    return text if len(text) <= max_len else text[: max_len - 1] + "…"
+
+
+def _variant_use_case(index: int) -> str:
+    return ["一番無難。迷ったらこれ。", "少し距離を縮める用。", "相手の反応が良いとき用。"][index % 3]
+
+
+def _candidate_safety_notes(text: str, objective: str) -> list[str]:
+    notes = ["自動送信ではありません。送信前に人間が確認してください。"]
+    if "電話" in objective or "会う" in objective or "LINE" in objective:
+        notes.append("会話の温度感が低い場合は送らないでください。")
+    if text.count("？") + text.count("?") > 1:
+        notes.append("質問が複数あります。1つに減らすと自然です。")
+    return notes

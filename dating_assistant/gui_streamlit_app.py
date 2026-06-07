@@ -18,8 +18,13 @@ from gui_helpers import (
     build_partner_creation_preview,
     build_generation_status_message,
     build_discard_suggestion_preview,
+    build_generation_preflight,
     build_mark_sent_preview,
+    build_profile_form_from_paste,
+    build_profile_paste_preview,
     build_profile_save_preview,
+    build_real_profile_summary_for_gui,
+    filter_real_profiles_for_gui,
     can_discard_suggestion,
     can_generate_suggestion,
     can_mark_suggestion_sent,
@@ -30,11 +35,16 @@ from gui_helpers import (
     format_pending_suggestions,
     format_timeline_items,
     generate_suggestion_for_gui,
+    generate_suggestion_variants_for_gui,
+    find_existing_partners_for_profile,
+    GENERATION_OBJECTIVE_OPTIONS,
+    GENERATION_TONE_OPTIONS,
     get_generation_mode_for_partner,
     discard_suggestion_from_gui,
     load_partner_choices,
     load_partner_for_view,
     list_real_profiles_for_gui,
+    merge_profile_form_with_paste,
     parse_conversation_paste,
     real_profile_exists,
     save_real_profile_from_form,
@@ -142,21 +152,55 @@ def render_generation_controls(partner) -> None:
     st.subheader("候補生成")
     mode = get_generation_mode_for_partner(partner)
     mode_label = {"first": "初回メッセージ候補", "reply": "返信候補", "blocked": "生成不可"}[mode]
-    button_label = f"{mode_label}を生成する" if mode in {"first", "reply"} else "候補生成不可"
+    button_label = f"{mode_label}を3つ生成する" if mode in {"first", "reply"} else "候補生成不可"
     st.write(f"**現在:** {build_generation_status_message(partner)}")
     st.write(f"**生成タイプ:** {mode_label}")
+    objectives = st.multiselect(
+        "今回の目的",
+        options=GENERATION_OBJECTIVE_OPTIONS,
+        default=["相手のプロフィールに触れる", "質問を1つ入れる"],
+        key=f"generation_objectives_{partner.partner_id}",
+    )
+    tone = st.selectbox(
+        "文章の雰囲気",
+        options=GENERATION_TONE_OPTIONS,
+        index=0,
+        key=f"generation_tone_{partner.partner_id}",
+    )
+    place_hint = ""
+    if any("場所" in objective for objective in objectives):
+        place_hint = st.text_input(
+            "場所の指定",
+            placeholder="例: 新宿あたり / 近場のカフェ / 仕事帰りに寄りやすい場所",
+            key=f"generation_place_{partner.partner_id}",
+        )
+    with st.expander("生成前チェック", expanded=True):
+        st.json(build_generation_preflight(partner, objectives, tone, place_hint))
     st.caption("候補生成はlocalのpending_suggestionsへ保存するだけです。自動送信ではありません。")
     confirm = st.checkbox("自動送信ではないことを確認し、候補をlocal保存する", key=f"generate_confirm_{partner.partner_id}")
     if st.button(button_label, disabled=not (can_generate_suggestion(partner) and confirm), key=f"generate_button_{partner.partner_id}"):
         try:
-            generated = generate_suggestion_for_gui(partner.partner_id)
+            generated = generate_suggestion_variants_for_gui(
+                partner.partner_id,
+                objectives=objectives,
+                tone=tone,
+                place_hint=place_hint,
+            )
         except ValueError as error:
             st.error(str(error))
             return
-        st.success(f"{generated['suggestion_id']} をpending_suggestionsへ保存しました。")
-        st.text_area("生成された候補", generated["text"], height=140, disabled=True, key=f"generated_{generated['suggestion_id']}")
+        st.success("3候補をpending_suggestionsへ保存しました。")
+        for variant in generated["variants"]:
+            with st.expander(f"{variant['suggestion_id']} / {variant['objective']} / {variant['use_case']}", expanded=True):
+                st.text_area(
+                    "候補本文",
+                    variant["text"],
+                    height=120,
+                    disabled=True,
+                    key=f"generated_{variant['suggestion_id']}",
+                )
+                st.write("注意: " + " / ".join(variant["safety_notes"]))
         st.info("実際に手動送信した後、pending_suggestions欄から送信済みとしてlocal記録できます。")
-        st.rerun()
 
 
 def render_sent_recording_controls(partner, suggestion: dict) -> None:
@@ -253,6 +297,11 @@ def render_profile_registration() -> None:
     st.subheader("プロフィール登録")
 
     with st.form("profile_registration_form"):
+        profile_paste = st.text_area(
+            "プロフィール情報まとめ貼り付け欄",
+            height=220,
+            help="マッチングアプリ上のプロフィール文、自己紹介、趣味、エリア、年齢、写真の印象メモなどをまとめて貼り付けます。画像そのものは保存しません。",
+        )
         label = st.text_input("label", help="英数字・ハイフン・アンダースコアのみ")
         display_name = st.text_input("display_name")
         app_name = st.text_input("app_name")
@@ -278,9 +327,16 @@ def render_profile_registration() -> None:
         "avoid_topics": avoid_topics,
         "notes": notes,
     }
+    pasted_form, paste_warnings = build_profile_form_from_paste(profile_paste)
+    form = merge_profile_form_with_paste(form, pasted_form)
 
     errors = validate_profile_form(form)
     warnings = detect_profile_safety_warnings(form)
+    if paste_warnings:
+        warnings.extend(paste_warnings)
+    if profile_paste.strip():
+        st.markdown("**貼り付け内容の抽出プレビュー**")
+        st.json(build_profile_paste_preview(profile_paste))
     preview = None
     if not errors:
         preview = build_profile_save_preview(form)
@@ -320,7 +376,8 @@ def render_profile_registration() -> None:
 def render_partner_creation() -> None:
     st.subheader("プロフィールからpartner作成")
 
-    profiles = list_real_profiles_for_gui()
+    search_query = st.text_input("保存済みプロフィール検索", placeholder="label / 趣味 / 年齢などで絞り込み")
+    profiles = filter_real_profiles_for_gui(search_query)
     if not profiles:
         st.info("保存済みreal_profileがありません。先にプロフィール登録を行ってください。")
         return
@@ -335,6 +392,12 @@ def render_partner_creation() -> None:
         submitted = st.form_submit_button("partnerを作成")
 
     label = profile_options[selected_profile]
+    st.markdown("**選択中プロフィール**")
+    st.json(build_real_profile_summary_for_gui(label))
+    existing_partners = find_existing_partners_for_profile(label)
+    if existing_partners:
+        st.warning("このreal_profileから作成済みと思われるpartnerがあります。必要ならpartnerビューで開いてください。")
+        st.dataframe(existing_partners, width="stretch", hide_index=True)
     preview = build_partner_creation_preview(label, display_name=display_name, app_name=app_name, source_memo=source_memo)
     st.markdown("**保存プレビュー**")
     st.json(preview)

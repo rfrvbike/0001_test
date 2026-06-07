@@ -8,11 +8,15 @@ from gui_helpers import (
     build_partner_label,
     build_partner_creation_preview,
     build_generation_status_message,
+    build_generation_preflight,
     build_discard_suggestion_preview,
     build_mark_sent_preview,
+    build_profile_form_from_paste,
+    build_profile_paste_preview,
     build_partner_summary,
     build_conversation_import_preview,
     build_profile_save_preview,
+    build_real_profile_summary_for_gui,
     can_generate_suggestion,
     can_discard_suggestion,
     can_mark_suggestion_sent,
@@ -23,13 +27,17 @@ from gui_helpers import (
     format_conversation_history,
     format_pending_suggestions,
     format_timeline_items,
+    generate_suggestion_variants_for_gui,
     generate_suggestion_for_gui,
+    filter_real_profiles_for_gui,
+    find_existing_partners_for_profile,
     get_generation_mode_for_partner,
     discard_suggestion_from_gui,
     get_real_profile_path,
     list_real_profiles_for_gui,
     load_real_profile_for_gui,
     load_partner_choices,
+    merge_profile_form_with_paste,
     mark_custom_text_sent_from_gui,
     mark_suggestion_sent_from_gui,
     parse_conversation_paste,
@@ -155,6 +163,34 @@ class GuiHelperTests(unittest.TestCase):
         self.assertIn("display_name: sample", data["free_notes"])
         self.assertEqual(preview["保存先label"], "profile_001")
         self.assertIn("profile_001.yaml", preview["保存先"])
+
+    def test_profile_paste_builds_form_and_preview(self):
+        pasted = "\n".join(
+            [
+                "表示名: sample",
+                "アプリ: pairs",
+                "年齢: 31",
+                "エリア: Tokyo",
+                "自己紹介: カフェと映画が好きです。",
+                "趣味: カフェ, 映画",
+                "写真メモ: 自然な笑顔",
+                "会話に使えそうな情報: 休日の話",
+                "初回候補ヒント: いきなり誘わない",
+                "安全メモ: 本名は保存しない",
+            ]
+        )
+        extracted, warnings = build_profile_form_from_paste(pasted)
+        form = merge_profile_form_with_paste({"label": "profile_003", "display_name": "", "profile_text": ""}, extracted)
+        data = build_real_profile_from_form(form)
+        preview = build_profile_paste_preview(pasted)
+
+        self.assertTrue(any("本名" in warning for warning in warnings))
+        self.assertEqual(form["display_name"], "sample")
+        self.assertEqual(data["age"], 31)
+        self.assertEqual(data["location_hint"], "Tokyo")
+        self.assertEqual(data["hobbies"], ["カフェ", "映画"])
+        self.assertIn("conversation_hooks:", data["free_notes"])
+        self.assertEqual(preview["auto_send"], False)
 
     def test_profile_form_requires_core_fields(self):
         errors = validate_profile_form({"label": "", "display_name": "", "profile_text": "", "photo_memo": ""})
@@ -302,6 +338,27 @@ class GuiHelperTests(unittest.TestCase):
         self.assertTrue(path.name.endswith("profile_001.yaml"))
         self.assertEqual(profile.profile_text, "カフェが好きです。")
 
+    def test_filter_profile_summary_and_existing_partner_match(self):
+        save_real_profile_from_form(
+            {
+                "label": "profile_cafe",
+                "display_name": "sample",
+                "profile_text": "カフェが好きです。",
+                "photo_memo": "自然な笑顔",
+                "interests": "カフェ",
+                "area": "Tokyo",
+            }
+        )
+        partner = save_partner_from_profile("profile_cafe", "sample", "pairs", "")
+
+        filtered = filter_real_profiles_for_gui("cafe")
+        summary = build_real_profile_summary_for_gui("profile_cafe")
+        matches = find_existing_partners_for_profile("profile_cafe")
+
+        self.assertEqual(filtered[0]["label"], "profile_cafe")
+        self.assertEqual(summary["area"], "Tokyo")
+        self.assertEqual(matches[0]["partner_id"], partner.partner_id)
+
     def test_build_partner_creation_preview_does_not_copy_full_profile_text(self):
         save_real_profile_from_form(
             {
@@ -425,6 +482,31 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(reply_result["mode"], "reply")
         self.assertEqual(reply_stored.pending_suggestions[0].purpose, "reply")
         self.assertEqual(reply_stored.message_state.next_action, "返信候補を確認して送る")
+
+    def test_generate_suggestion_variants_saves_three_pending_suggestions(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="chatting",
+            profile=PartnerProfile(profile_text="カフェが好きです。", hobbies=["カフェ"]),
+            conversation=[
+                ConversationTurn("partner", "カフェもご飯も好きです", "2026-06-07T10:00:00+09:00"),
+                ConversationTurn("user", "いいですね", "2026-06-07T10:01:00+09:00"),
+                ConversationTurn("partner", "休日によく行きます", "2026-06-07T10:02:00+09:00"),
+            ],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+        save_partner(partner)
+
+        preflight = build_generation_preflight(partner, ["質問を1つ入れる"], "自然", "")
+        result = generate_suggestion_variants_for_gui("partner_001", ["質問を1つ入れる", "軽くユーモアを入れる"], "自然", "")
+        stored = load_partner("partner_001")
+
+        self.assertEqual(preflight["auto_send"], False)
+        self.assertEqual(len(result["variants"]), 3)
+        self.assertEqual(len([item for item in stored.pending_suggestions if item.status == "pending"]), 3)
+        self.assertTrue(all(item.purpose == "reply" for item in stored.pending_suggestions))
+        self.assertIn("stage", result)
 
     def test_mark_sent_requires_pending_suggestion_and_confirmation(self):
         partner = PartnerRecord(

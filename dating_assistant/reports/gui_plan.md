@@ -291,6 +291,16 @@ last_human_confirmed_action: null
 - 自動送信、外部投稿、実LLM API呼び出し、マッチングアプリ操作、local実データのGit管理を行わない安全ルールを再確認した。
 - 新機能の大規模追加は行わず、ドキュメント整理と完成チェックに限定した。
 
+### 作業No.116
+
+- プロフィール登録画面に、プロフィール情報まとめ貼り付け欄と抽出プレビューを追加した。
+- 貼り付け内容から display_name, app_name, age, area, profile_text, interests, photo_memo, avoid_topics, conversation_hooks, first_message_hints, safety_notes をlocalで簡易抽出できるようにした。
+- 保存済みreal_profileの検索、選択中プロフィールの表示、既存partner候補の表示を追加した。
+- 候補生成UIに目的選択、文章の雰囲気選択、場所指定欄、生成前チェックを追加した。
+- 候補生成は既存のlocal生成を使い、3パターンをpending_suggestionsへ保存する形にした。
+- 電話、会う提案、LINE交換は早すぎる可能性を警告し、自動送信やマッチングアプリ操作は追加していない。
+- 相手別メモ、送信結果メモ、高度な自動抽出、さらに細かい文章品質改善は次回以降の改善候補として残した。
+
 ### Phase 1
 
 - `dating_assistant/gui_app.py` などにStreamlitアプリを追加する。
