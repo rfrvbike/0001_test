@@ -21,7 +21,7 @@ from src.real_profile_manager import (
     load_real_profile,
     validate_real_profile_label,
 )
-from src.suggestion_manager import add_suggestion, get_pending_suggestions, mark_suggestion_sent, mark_text_sent
+from src.suggestion_manager import add_suggestion, discard_suggestion, get_pending_suggestions, mark_suggestion_sent, mark_text_sent
 from src.timeline_builder import build_timeline_events
 
 PROFILE_SAFETY_PATTERNS = {
@@ -275,6 +275,50 @@ def mark_custom_text_sent_from_gui(partner_id: str, text: str, confirmed: bool) 
         "text": text,
         "remaining_pending_suggestions": pending_before,
         "note": "custom textで記録したため、元候補がpendingに残る場合があります。",
+    }
+
+
+def can_discard_suggestion(partner: PartnerRecord, suggestion_id: str, confirmed: bool = False) -> bool:
+    if partner.status == "archived" or not confirmed:
+        return False
+    return any(suggestion.suggestion_id == suggestion_id and suggestion.status == "pending" for suggestion in partner.pending_suggestions)
+
+
+def build_discard_suggestion_preview(partner: PartnerRecord, suggestion_id: str, reason: str = "") -> dict[str, Any]:
+    suggestion = next(
+        (item for item in partner.pending_suggestions if item.suggestion_id == suggestion_id and item.status == "pending"),
+        None,
+    )
+    if suggestion is None:
+        raise ValueError(f"pending suggestion not found: {suggestion_id}")
+    remaining = [item.suggestion_id for item in get_pending_suggestions(partner) if item.suggestion_id != suggestion_id]
+    return {
+        "partner_id": partner.partner_id,
+        "discard_target": suggestion_id,
+        "purpose": suggestion.purpose,
+        "reason": reason.strip() or "GUIから未使用候補として破棄",
+        "conversation_history": "変更しない",
+        "message_state": "既存discard処理に従ってnext_actionを再計算",
+        "remaining_pending_suggestions": " / ".join(remaining) if remaining else "-",
+        "local_record_only": True,
+    }
+
+
+def discard_suggestion_from_gui(partner_id: str, suggestion_id: str, confirmed: bool, reason: str = "") -> dict[str, Any]:
+    partner = load_partner(partner_id)
+    if not can_discard_suggestion(partner, suggestion_id, confirmed=confirmed):
+        raise ValueError("確認チェックがないか、破棄できるpending suggestionではありません。")
+    conversation_count_before = len(partner.conversation)
+    suggestion = discard_suggestion(partner, suggestion_id)
+    stored = load_partner(partner_id)
+    return {
+        "partner_id": stored.partner_id,
+        "suggestion_id": suggestion.suggestion_id,
+        "status": suggestion.status,
+        "discard_reason": reason.strip() or "GUIから未使用候補として破棄",
+        "conversation_history_unchanged": len(stored.conversation) == conversation_count_before,
+        "remaining_pending_suggestions": len(get_pending_suggestions(stored)),
+        "next_action": stored.message_state.next_action,
     }
 
 

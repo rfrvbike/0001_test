@@ -8,11 +8,13 @@ from gui_helpers import (
     build_partner_label,
     build_partner_creation_preview,
     build_generation_status_message,
+    build_discard_suggestion_preview,
     build_mark_sent_preview,
     build_partner_summary,
     build_conversation_import_preview,
     build_profile_save_preview,
     can_generate_suggestion,
+    can_discard_suggestion,
     can_mark_suggestion_sent,
     build_real_profile_from_form,
     detect_conversation_safety_warnings,
@@ -23,6 +25,7 @@ from gui_helpers import (
     format_timeline_items,
     generate_suggestion_for_gui,
     get_generation_mode_for_partner,
+    discard_suggestion_from_gui,
     get_real_profile_path,
     list_real_profiles_for_gui,
     load_real_profile_for_gui,
@@ -484,6 +487,60 @@ class GuiHelperTests(unittest.TestCase):
             mark_custom_text_sent_from_gui("partner_001", "送った文", confirmed=False)
         with self.assertRaises(ValueError):
             mark_custom_text_sent_from_gui("partner_001", "", confirmed=True)
+
+    def test_discard_suggestion_requires_pending_suggestion_and_confirmation(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            pending_suggestions=[PendingSuggestion("suggestion_001", "reply", "未使用候補", "2026-06-07T10:00:00+09:00")],
+        )
+        save_partner(partner)
+
+        self.assertFalse(can_discard_suggestion(partner, "suggestion_001", confirmed=False))
+        self.assertTrue(can_discard_suggestion(partner, "suggestion_001", confirmed=True))
+        with self.assertRaises(ValueError):
+            discard_suggestion_from_gui("partner_001", "suggestion_001", confirmed=False)
+        with self.assertRaises(ValueError):
+            build_discard_suggestion_preview(partner, "missing")
+
+    def test_discard_suggestion_from_gui_marks_discarded_without_changing_history(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            conversation=[ConversationTurn("partner", "こんにちは", "2026-06-07T10:00:00+09:00")],
+            pending_suggestions=[
+                PendingSuggestion("suggestion_001", "reply", "未使用候補", "2026-06-07T10:01:00+09:00"),
+                PendingSuggestion("suggestion_002", "reply", "残す候補", "2026-06-07T10:02:00+09:00"),
+            ],
+            message_state=MessageState(awaiting_user_action=True, next_action="返信候補を確認して送る"),
+        )
+        save_partner(partner)
+
+        preview = build_discard_suggestion_preview(partner, "suggestion_001", reason="修正文を送ったため")
+        result = discard_suggestion_from_gui("partner_001", "suggestion_001", confirmed=True, reason="修正文を送ったため")
+        stored = load_partner("partner_001")
+
+        self.assertEqual(preview["discard_target"], "suggestion_001")
+        self.assertEqual(preview["remaining_pending_suggestions"], "suggestion_002")
+        self.assertEqual(result["status"], "discarded")
+        self.assertTrue(result["conversation_history_unchanged"])
+        self.assertEqual(len(stored.conversation), 1)
+        self.assertEqual(stored.conversation[0].text, "こんにちは")
+        self.assertEqual([item["suggestion_id"] for item in format_pending_suggestions(stored)], ["suggestion_002"])
+        self.assertTrue(any(event.event_type == "suggestion_discarded" for event in stored.activity_log))
+
+    def test_discard_suggestion_blocks_archived_partner(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            status="archived",
+            pending_suggestions=[PendingSuggestion("suggestion_001", "reply", "未使用候補", "2026-06-07T10:00:00+09:00")],
+        )
+        save_partner(partner)
+
+        self.assertFalse(can_discard_suggestion(partner, "suggestion_001", confirmed=True))
+        with self.assertRaises(ValueError):
+            discard_suggestion_from_gui("partner_001", "suggestion_001", confirmed=True)
 
 
 if __name__ == "__main__":

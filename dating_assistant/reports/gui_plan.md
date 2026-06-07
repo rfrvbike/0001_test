@@ -263,6 +263,15 @@ last_human_confirmed_action: null
 - この操作はlocal YAMLへの記録のみで、マッチングアプリへの送信、自動送信、外部通信は行わない。
 - 候補破棄ボタンは作業No.110で追加する。
 
+### 作業No.110
+
+- pending_suggestions欄に、安全確認付きの候補破棄UIを追加する。
+- 「この候補を未使用候補として破棄する」確認チェックがONの場合だけ、破棄ボタンを有効化する。
+- 破棄理由入力欄とプレビューを表示し、既存の `partner-discard-suggestion` 相当のlocal処理を呼び出す。
+- 候補破棄では `conversation_history` を変更しない。timeline/activity_logには破棄記録を残す。
+- archived partnerでは破棄不可にする。
+- この操作はlocal整理のみで、マッチングアプリへの送信・削除、自動操作、外部通信は行わない。
+
 ### Phase 1
 
 - `dating_assistant/gui_app.py` などにStreamlitアプリを追加する。

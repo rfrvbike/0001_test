@@ -17,8 +17,10 @@ from gui_helpers import (
     build_conversation_import_preview,
     build_partner_creation_preview,
     build_generation_status_message,
+    build_discard_suggestion_preview,
     build_mark_sent_preview,
     build_profile_save_preview,
+    can_discard_suggestion,
     can_generate_suggestion,
     can_mark_suggestion_sent,
     detect_conversation_safety_warnings,
@@ -29,6 +31,7 @@ from gui_helpers import (
     format_timeline_items,
     generate_suggestion_for_gui,
     get_generation_mode_for_partner,
+    discard_suggestion_from_gui,
     load_partner_choices,
     load_partner_for_view,
     list_real_profiles_for_gui,
@@ -125,6 +128,7 @@ def render_partner_viewer() -> None:
                     key=f"suggestion_{suggestion['suggestion_id']}",
                 )
                 render_sent_recording_controls(partner, suggestion)
+                render_discard_controls(partner, suggestion)
 
     with tab_timeline:
         timeline = format_timeline_items(partner)
@@ -202,6 +206,45 @@ def render_sent_recording_controls(partner, suggestion: dict) -> None:
         st.success("入力文を送信済みとしてlocal記録しました。")
         if result["remaining_pending_suggestions"]:
             st.info("元候補はpendingに残っています。候補破棄機能は次作業で追加します。")
+        st.rerun()
+
+
+def render_discard_controls(partner, suggestion: dict) -> None:
+    suggestion_id = suggestion["suggestion_id"]
+    st.divider()
+    st.markdown("**候補破棄**")
+    st.warning(
+        "この操作は未使用候補をlocal上で破棄するだけです。conversation_historyは削除されません。"
+        "マッチングアプリには何も送信・削除しません。"
+    )
+    reason = st.text_area(
+        "破棄理由",
+        value="GUIから未使用候補として破棄",
+        height=80,
+        key=f"discard_reason_{partner.partner_id}_{suggestion_id}",
+    )
+    confirm = st.checkbox(
+        "この候補を未使用候補として破棄します",
+        key=f"discard_confirm_{partner.partner_id}_{suggestion_id}",
+    )
+    with st.expander("候補破棄プレビュー", expanded=False):
+        st.json(build_discard_suggestion_preview(partner, suggestion_id, reason=reason))
+    if partner.status == "archived":
+        st.warning("archivedのpartnerでは候補破棄できません。")
+    if st.button(
+        "候補を破棄",
+        disabled=not can_discard_suggestion(partner, suggestion_id, confirmed=confirm),
+        key=f"discard_button_{partner.partner_id}_{suggestion_id}",
+    ):
+        try:
+            result = discard_suggestion_from_gui(partner.partner_id, suggestion_id, confirmed=confirm, reason=reason)
+        except ValueError as error:
+            st.error(str(error))
+            return
+        if result["conversation_history_unchanged"]:
+            st.success(f"{result['suggestion_id']} をlocal上で破棄しました。conversation_historyは変更していません。")
+        else:
+            st.error("conversation_historyが変化しました。状態を確認してください。")
         st.rerun()
 
 
