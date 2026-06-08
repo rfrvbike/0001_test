@@ -1,5 +1,16 @@
 # dating_assistant latest_report
 
+## 作業No.136 stale Streamlit ImportError再発防止
+
+- `apply_profile_label_candidate` ImportErrorの実態を確認し、`gui_helpers.py` に関数が存在し、直接importでき、py_compileも成功することを確認した。
+- `gui_streamlit_app.py` の `from gui_helpers import ...` と `gui_helpers.py` のexport整合性を確認するpreflight `tools/check_dating_gui_imports.py` を追加した。
+- `start_dating_assistant_gui.bat` に、起動前の古いdating_assistant用Streamlitプロセス停止処理を追加した。
+- 古いプロセス停止は `tools/stop_stale_dating_streamlit.ps1` でCommandLineを `streamlit` と `dating_assistant/gui_streamlit_app.py` に絞り、無関係なpythonや他案件を止めないようにした。
+- bat起動時にGUI import preflightを実行し、失敗時はStreamlitを起動せず、足りないimport名を表示するようにした。
+- `gui_streamlit_app.py` が要求する `gui_helpers` のimport名が全て存在することを確認するunittestを追加した。
+- READMEに、GUI更新後のImportErrorは古いStreamlitプロセスの可能性があること、batが自動停止とpreflightを行うこと、手動確認・停止コマンドを追記した。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作機能は追加していない。
+
 ## 作業No.135 labelなしプロフィール貼り付けE2Eスモーク
 
 - labelなしのChatGPTプロジェクト形式プロフィール貼り付けから、実運用に近いE2Eスモークを実施した。
@@ -128,7 +139,7 @@
 - 自動送信、外部API通信、マッチングアプリ操作機能は追加していない。
 
 最新更新日: 2026-06-08
-最新作業No.: 135
+最新作業No.: 136
 
 ## 作業No.124 GUI版最終スモーク確認
 

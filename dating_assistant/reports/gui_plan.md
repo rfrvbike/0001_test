@@ -527,3 +527,13 @@ python -m streamlit run gui_streamlit_app.py
 - 送信済みlocal記録、sent_id、送信結果メモ、相手別メモ、未使用候補破棄が壊れていないことを確認する。
 - 作成したテスト用local YAMLは明示削除し、Git管理対象にしない。
 - 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、local実データのGit管理は追加しない。
+
+### 作業No.136
+
+- GUI起動時の `cannot import name ... from gui_helpers` 再発防止として、古いStreamlitプロセス対策を行う。
+- `start_dating_assistant_gui.bat` で、起動前にdating_assistant用StreamlitプロセスのみCommandLineで絞って停止する。
+- Streamlit起動前にGUI import preflightを実行し、`gui_streamlit_app.py` が要求する `gui_helpers` のimport名が全て存在することを確認する。
+- preflight失敗時はStreamlitを起動せず、不足import名を表示する。
+- unittestで `gui_streamlit_app.py` と `gui_helpers.py` のimport整合性を確認する。
+- READMEに、古いStreamlitプロセス確認・停止方法と、新batの自動停止/preflightを追記する。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、local実データのGit管理は追加しない。

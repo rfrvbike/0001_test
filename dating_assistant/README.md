@@ -46,6 +46,24 @@ http://localhost:8501
 
 ChromeやEdgeなどのブラウザで操作します。これはPC内で動くローカルGUIであり、インターネット上の公開Webサービスではありません。
 
+## GUI更新後の再起動
+
+GUI更新後に `cannot import name ... from gui_helpers` のようなImportErrorが出る場合は、古いStreamlitプロセスをブラウザで見続けている可能性があります。
+`start_dating_assistant_gui.bat` は起動前に、dating_assistant用の古いStreamlitプロセスだけを自動停止し、GUI import preflightを実行します。
+preflightで不足importが見つかった場合は、Streamlitを起動せず、足りない関数名を表示します。
+
+手動で確認する場合:
+
+```powershell
+Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match "streamlit|gui_streamlit_app|dating_assistant|start_dating" } | Select-Object ProcessId, Name, CommandLine
+```
+
+手動で停止する場合:
+
+```powershell
+Stop-Process -Id <PID> -Force
+```
+
 ## 初回メール入力が出た場合
 
 Streamlitの初回画面でメール入力が出た場合は、何も入力せずEnterでOKです。
