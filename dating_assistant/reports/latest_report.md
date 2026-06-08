@@ -1,5 +1,23 @@
 # dating_assistant latest_report
 
+## 作業No.135 labelなしプロフィール貼り付けE2Eスモーク
+
+- labelなしのChatGPTプロジェクト形式プロフィール貼り付けから、実運用に近いE2Eスモークを実施した。
+- GUI AppTestで、labelなし貼り付け時に `profile_...` の自動label候補、label種別「自動候補」、カード形式の抽出プレビュー、詳細JSON折りたたみ、保存導線、partner作成タブが表示されることを確認した。
+- `display_name: テストさん`、複数行 `profile_text:`、`interests:`、`photo_memo:`、`conversation_hooks:`、`first_message_hints:`、`privacy_notes:` が抽出できることを確認した。
+- `privacy_notes:` が `profile_text` に混ざらないことを確認した。
+- 自動生成された `profile_20260608_235542` を使い、テスト用real_profileをlocal保存できることを確認した。
+- 保存済みプロフィール検索でテスト用real_profileが見つかることを確認した。
+- テスト用real_profileから `partner_014` を作成でき、partner statusが `new_profile`、next_actionが「初回候補生成待ち」になることを確認した。
+- 初回候補生成前チェックで、会話ステージが「初回前」、温度感が「不明」になることを確認した。
+- 初回候補A/B/Cを生成でき、候補A「一番無難」、候補B「少し親しみやすい」、候補C「少し距離を縮める」が表示されることを確認した。
+- 初回候補に電話、会う提案、LINE交換が含まれないことを確認した。
+- 送信済みlocal記録で `sent_generated_000001` が作成され、送信結果メモを更新できることを確認した。
+- 相手別メモ追加、未使用候補破棄も動作することを確認した。
+- 会話履歴インポート周辺は既存unittestで維持確認した。
+- スモーク後、作成した `profile_20260608_235542.yaml` と `partner_014.yaml` は明示削除し、localテストデータを残していない。
+- 画像保存、自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作機能は追加していない。
+
 ## 作業No.134 label未指定プロフィールの保存用label候補
 
 - 日本語ラベル形式や `label` 未指定のプロフィール貼り付けでも保存しやすいよう、保存用label候補を自動生成するようにした。
@@ -110,7 +128,7 @@
 - 自動送信、外部API通信、マッチングアプリ操作機能は追加していない。
 
 最新更新日: 2026-06-08
-最新作業No.: 134
+最新作業No.: 135
 
 ## 作業No.124 GUI版最終スモーク確認
 

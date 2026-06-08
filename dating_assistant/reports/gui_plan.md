@@ -518,3 +518,12 @@ python -m streamlit run gui_streamlit_app.py
 - 不足分・修正欄と抽出プレビューで、label候補、label種別、理由を確認できるようにする。
 - 自動候補は保存前にユーザーが確認・修正できる状態を維持する。
 - 個人情報警告、自動送信なし、外部通信なし、画像保存なし、local実データをGit管理しない設計を維持する。
+
+### 作業No.135
+
+- labelなしプロフィール貼り付けから、real_profile保存、partner作成、初回候補生成までのE2Eスモークを実施する。
+- GUI AppTestで、label自動候補、カード形式プレビュー、保存導線、partner作成タブを確認する。
+- テスト用local real_profile / partnerを作成して、保存済みプロフィール検索、partner状態、生成前チェック、候補A/B/Cを確認する。
+- 送信済みlocal記録、sent_id、送信結果メモ、相手別メモ、未使用候補破棄が壊れていないことを確認する。
+- 作成したテスト用local YAMLは明示削除し、Git管理対象にしない。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、local実データのGit管理は追加しない。
