@@ -1,5 +1,16 @@
 # dating_assistant latest_report
 
+## 作業No.137 構造化プロフィールYAML保存の安全化
+
+- プロフィール登録画面で、ChatGPTプロジェクト由来の構造化プロフィールを保存すると、コロン、ハイフン、引用符、改行を含む値がYAMLとして壊れる可能性があった。
+- 原因は `src/real_profile_manager.py` のreal_profile保存が手作業のYAML文字列連結で、リスト項目内の `:` や `-`、複数行メモを安全にエスケープできていなかったこと。
+- `src/loaders.py` に `dump_yaml` を追加し、PyYAMLがある環境では `safe_dump(allow_unicode=True, sort_keys=False)` を使い、ない環境ではJSON引用を使う安全な簡易YAML出力へfallbackするようにした。
+- 読み込み側もPyYAMLがある場合は `safe_load` を優先し、fallbackの簡易パーサでは引用符内のコロンをmappingとして誤判定しないようにした。
+- 空リストは `[]` として保存・読み戻しできるようにし、既存の空項目プロフィールも壊れないようにした。
+- GUI保存時の予期しない保存エラーは、ユーザー向け案内と開発者向け詳細の折りたたみ表示に分けるようにした。
+- コロン、ハイフン、引用符、複数行、日本語、絵文字、長文メモを含むプロフィールの保存・読み戻し・partner作成表示テストを追加した。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、local実データのGit管理は追加していない。
+
 ## 作業No.136 stale Streamlit ImportError再発防止
 
 - `apply_profile_label_candidate` ImportErrorの実態を確認し、`gui_helpers.py` に関数が存在し、直接importでき、py_compileも成功することを確認した。
@@ -139,7 +150,7 @@
 - 自動送信、外部API通信、マッチングアプリ操作機能は追加していない。
 
 最新更新日: 2026-06-08
-最新作業No.: 136
+最新作業No.: 137
 
 ## 作業No.124 GUI版最終スモーク確認
 

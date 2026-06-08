@@ -492,6 +492,38 @@ privacy_notes:
         with self.assertRaises(FileExistsError):
             save_real_profile_from_form(form)
 
+    def test_save_real_profile_from_structured_paste_reads_back_and_displays(self):
+        form = {
+            "label": "profile_yaml_safe",
+            "display_name": "sample",
+            "profile_text": "自然が好きです: カフェも好きです。\n- 休日は散歩します。\n\"落ち着いた雰囲気\"です 😊",
+            "photo_memo": "明るい雰囲気: 屋外\n- 笑顔",
+            "interests": "自然: 散歩\n- カフェ巡り\n\"映画\"",
+            "conversation_hooks": "自然: 公園の話\n食事: 好きなお店",
+            "first_message_hints": "質問は1つ: 休日の過ごし方",
+            "avoid_topics": "- 強い誘い\n連絡先交換: 早すぎる",
+            "safety_notes": "実データは保存しない\n画像そのものは保存しない",
+            "notes": "notes:\n- コロン: ハイフン - 引用符 \" を含む長文",
+            "area": "東京: 西側",
+        }
+
+        path, warnings = save_real_profile_from_form(form)
+        _loaded_path, profile = load_real_profile_for_gui("profile_yaml_safe")
+        display = build_profile_display_sections("profile_yaml_safe")
+        partner = save_partner_from_profile("profile_yaml_safe", "sample", "pairs", "")
+
+        self.assertTrue(path.exists())
+        self.assertEqual(warnings, [])
+        self.assertEqual(profile.profile_text, form["profile_text"])
+        self.assertIn("自然: 散歩", profile.hobbies)
+        self.assertIn("- カフェ巡り", profile.hobbies)
+        self.assertIn("明るい雰囲気: 屋外", profile.photos_memo)
+        self.assertIn("conversation_hooks:", profile.free_notes)
+        self.assertIn("自然: 公園の話", profile.free_notes)
+        self.assertEqual(display["profile_text"], form["profile_text"])
+        self.assertEqual(partner.profile.profile_text, form["profile_text"])
+        self.assertEqual(partner.conversation, [])
+
     def test_profile_form_accepts_photo_memo_without_profile_text(self):
         form = {
             "label": "profile_002",

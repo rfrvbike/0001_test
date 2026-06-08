@@ -4,7 +4,7 @@ import os
 import re
 from pathlib import Path
 
-from .loaders import load_target_profile
+from .loaders import dump_yaml, load_target_profile
 from .models import TargetProfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -246,27 +246,18 @@ def display_path(path: Path) -> str:
 
 
 def _format_yaml(profile: TargetProfile) -> str:
-    lines = [
-        f"name_or_label: {profile.name_or_label}",
-        f"age: {profile.age if profile.age is not None else 'null'}",
-        "profile_text: |",
-        *[f"  {line}" for line in profile.profile_text.splitlines()],
-    ]
-    if profile.hobbies:
-        lines.extend(["hobbies:", *[f"  - {item}" for item in profile.hobbies]])
-    if profile.photos_memo:
-        lines.extend(["photos_memo:", *[f"  - {item}" for item in profile.photos_memo]])
-    lines.extend(
-        [
-            f"location_hint: {profile.location_hint or 'null'}",
-            f"relationship_goal: {profile.relationship_goal or 'null'}",
-        ]
+    return dump_yaml(
+        {
+            "name_or_label": profile.name_or_label,
+            "age": profile.age,
+            "profile_text": profile.profile_text,
+            "hobbies": profile.hobbies,
+            "photos_memo": profile.photos_memo,
+            "location_hint": profile.location_hint,
+            "relationship_goal": profile.relationship_goal,
+            "free_notes": profile.free_notes,
+        }
     )
-    if profile.free_notes:
-        lines.extend(["free_notes: |", *[f"  {line}" for line in profile.free_notes.splitlines()]])
-    else:
-        lines.append("free_notes: null")
-    return "\n".join(lines) + "\n"
 
 
 def _display_path(path: Path) -> str:

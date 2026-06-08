@@ -565,6 +565,11 @@ def render_profile_registration() -> None:
         except ValueError as error:
             st.error(str(error))
             return
+        except Exception as error:
+            st.error("保存用データの形式に問題があります。プロフィール文内の記号や改行を安全に保存できるよう処理します。")
+            with st.expander("開発者向け詳細"):
+                st.code(f"{type(error).__name__}: {error}")
+            return
         st.success(f"保存しました: {path}")
         if save_warnings:
             st.warning("保存内容に注意語が含まれます: " + " / ".join(save_warnings))

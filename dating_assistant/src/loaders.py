@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import fields
 from pathlib import Path
 from typing import Any, TypeVar
@@ -10,12 +11,27 @@ T = TypeVar("T")
 
 ROOT = Path(__file__).resolve().parents[1]
 
+try:
+    import yaml as _pyyaml
+except ModuleNotFoundError:  # pragma: no cover - depends on optional local setup
+    _pyyaml = None
+
 
 def load_yaml(path: str | Path) -> dict[str, Any]:
-    data = parse_simple_yaml(Path(path).read_text(encoding="utf-8"))
+    text = Path(path).read_text(encoding="utf-8")
+    if _pyyaml is not None:
+        data = _pyyaml.safe_load(text)
+    else:
+        data = parse_simple_yaml(text)
     if not isinstance(data, dict):
         raise ValueError(f"YAML root must be a mapping: {path}")
     return data
+
+
+def dump_yaml(data: dict[str, Any]) -> str:
+    if _pyyaml is not None:
+        return _pyyaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+    return _dump_simple_yaml(data)
 
 
 def parse_simple_yaml(text: str) -> Any:
@@ -32,6 +48,15 @@ def parse_simple_yaml(text: str) -> Any:
             return value == "true"
         if value in {"null", "None"}:
             return None
+        if value == "[]":
+            return []
+        if value == "{}":
+            return {}
+        if len(value) >= 2 and value[0] == value[-1] == '"':
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return value.strip("\"")
         try:
             return int(value)
         except ValueError:
@@ -48,8 +73,8 @@ def parse_simple_yaml(text: str) -> Any:
                 if not item:
                     child, index = parse_block(index, indent + 2)
                     result.append(child)
-                elif ":" in item:
-                    key, value = item.split(":", 1)
+                elif (pair := _split_unquoted_mapping_value(item)) is not None:
+                    key, value = pair
                     entry = {key.strip(): scalar(value.strip()) if value.strip() else {}}
                     if index < len(lines) and lines[index][0] > indent:
                         child, index = parse_block(index, lines[index][0])
@@ -88,6 +113,56 @@ def parse_simple_yaml(text: str) -> Any:
 
     parsed, _ = parse_block(0, lines[0][0] if lines else 0)
     return parsed
+
+
+def _split_unquoted_mapping_value(text: str) -> tuple[str, str] | None:
+    in_single = False
+    in_double = False
+    escaped = False
+    for index, char in enumerate(text):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and in_double:
+            escaped = True
+            continue
+        if char == "'" and not in_double:
+            in_single = not in_single
+            continue
+        if char == '"' and not in_single:
+            in_double = not in_double
+            continue
+        if char == ":" and not in_single and not in_double:
+            return text[:index], text[index + 1 :]
+    return None
+
+
+def _dump_simple_yaml(data: dict[str, Any]) -> str:
+    lines: list[str] = []
+    for key, value in data.items():
+        if isinstance(value, list):
+            if value:
+                lines.append(f"{key}:")
+                for item in value:
+                    lines.append(f"  - {_format_scalar(item)}")
+            else:
+                lines.append(f"{key}: []")
+        elif isinstance(value, str) and "\n" in value:
+            lines.append(f"{key}: |")
+            lines.extend(f"  {line}" for line in value.splitlines())
+        else:
+            lines.append(f"{key}: {_format_scalar(value)}")
+    return "\n".join(lines) + "\n"
+
+
+def _format_scalar(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    return json.dumps(str(value), ensure_ascii=False)
 
 
 def load_config(name: str) -> dict[str, Any]:
