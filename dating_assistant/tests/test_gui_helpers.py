@@ -41,6 +41,7 @@ from gui_helpers import (
     format_pending_suggestions,
     format_sent_suggestions_for_outcomes,
     format_timeline_items,
+    get_profile_ocr_environment_status,
     extract_profile_text_from_image,
     generate_suggestion_variants_for_gui,
     generate_suggestion_for_gui,
@@ -315,6 +316,17 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(result["engine"], "pytesseract")
         self.assertIn("text", result)
         self.assertTrue(result["errors"])
+
+    def test_profile_ocr_environment_status_is_optional_and_safe(self):
+        status = get_profile_ocr_environment_status()
+
+        self.assertIn(status["summary"], {"設定済み", "未設定"})
+        self.assertIn("pytesseract", status)
+        self.assertIn("tesseract", status)
+        self.assertIn("japanese", status)
+        self.assertIn("english", status)
+        self.assertIn("messages", status)
+        self.assertIn("テキスト貼り付け", status["alternatives"])
 
     def test_profile_form_requires_core_fields(self):
         errors = validate_profile_form({"label": "", "display_name": "", "profile_text": "", "photo_memo": ""})

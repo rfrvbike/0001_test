@@ -90,6 +90,35 @@ OCRが未設定の場合でもGUI全体は起動します。その場合は、�
 OCRを使う場合は、任意で `pytesseract` とWindows用Tesseract OCR本体のセットアップが必要です。
 OCR結果に本名、勤務先、学校名、LINE ID、SNS ID、住所、電話番号、メールアドレスが含まれる場合は保存前に削除してください。
 
+### OCRセットアップは任意です
+
+OCRは補助機能です。未設定でも、プロフィール情報まとめ貼り付け欄を使う通常運用はそのまま使えます。
+画像から文字を読み取りたい場合だけ、Windowsローカル環境に次を用意してください。
+
+1. Windows用Tesseract OCR本体をインストールする
+2. `tesseract.exe` にPATHを通す
+3. GUI用Python環境に `pytesseract` を追加する
+4. 日本語を読む場合はTesseractの日本語言語データ `jpn` を追加する
+5. 英語も読む場合は `eng` が使えることを確認する
+
+確認コマンド:
+
+```powershell
+tesseract --version
+tesseract --list-langs
+.\.venv_dating_gui\Scripts\python.exe -c "import pytesseract; print(pytesseract.get_tesseract_version())"
+```
+
+GUI用Python環境へ入れる例:
+
+```powershell
+.\.venv_dating_gui\Scripts\python.exe -m pip install pytesseract
+```
+
+`tesseract --list-langs` に `jpn` が出ない場合、日本語OCRは未設定です。
+その場合はTesseractの日本語言語データを追加するか、プロフィール文をテキストで貼り付けてください。
+Tesseract本体、言語データ、インストーラー、画像ファイルはリポジトリに入れません。
+
 ## 保存済みプロフィールからpartner作成
 
 「プロフィールからpartner作成」タブで保存済みプロフィールを検索し、内容を確認してpartnerを作成します。

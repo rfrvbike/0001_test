@@ -44,6 +44,7 @@ from gui_helpers import (
     format_pending_suggestions,
     format_sent_suggestions_for_outcomes,
     format_timeline_items,
+    get_profile_ocr_environment_status,
     get_clipboard_image_for_ocr,
     generate_suggestion_for_gui,
     generate_suggestion_variants_for_gui,
@@ -598,6 +599,21 @@ def _render_profile_ocr_intake() -> None:
         "「クリップボード画像を読み取る」を押してください。画像そのものは保存しません。"
     )
     _render_bullet_items("安全メモ", build_profile_ocr_privacy_notes())
+    ocr_status = get_profile_ocr_environment_status()
+    with st.container(border=True):
+        st.markdown("**OCR環境**")
+        _render_summary_rows(
+            [
+                {"label": "OCR環境", "value": ocr_status["summary"]},
+                {"label": "日本語OCR", "value": "使用可" if ocr_status["japanese"] else "未設定"},
+                {"label": "英語OCR", "value": "使用可" if ocr_status["english"] else "未設定"},
+                {"label": "Tesseract", "value": ocr_status["tesseract_version"]},
+            ]
+        )
+        if ocr_status["messages"]:
+            for message in ocr_status["messages"]:
+                st.caption(str(message))
+        _render_bullet_items("代替手段", ocr_status["alternatives"])
 
     col_clipboard, col_upload = st.columns(2)
     with col_clipboard:

@@ -468,3 +468,13 @@ python -m streamlit run gui_streamlit_app.py
 - OCRはローカル任意機能とし、`pytesseract` / Tesseract OCR本体が未設定でもGUI全体は起動できるようにする。
 - OCR結果にも個人情報・注意語チェックを適用し、保存前に削除・修正できるようにする。
 - 既存のテキスト一括貼り付け運用、自動送信なし、外部API通信なし、実LLM API呼び出しなし、マッチングアプリ操作なしを維持する。
+
+### 作業No.129
+
+- Windowsローカル環境でOCRが実際に使える状態か確認する。
+- Pillow / ImageGrab、`pytesseract`、Tesseract OCR本体、`jpn` / `eng` 言語データの状態を確認する。
+- OCR未設定でもGUI全体が落ちず、テキスト一括貼り付け運用を続けられることを維持する。
+- GUIにOCR環境状態と代替手段を表示し、未設定時に次の対応が分かるようにする。
+- READMEに任意OCRセットアップ手順と確認コマンドを整理する。
+- Tesseract本体、言語データ、インストーラー、画像ファイルはリポジトリに入れない。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、local実データのGit管理は追加しない。

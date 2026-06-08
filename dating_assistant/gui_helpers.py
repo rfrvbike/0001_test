@@ -4,6 +4,7 @@ from dataclasses import asdict
 from datetime import datetime
 from io import BytesIO
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -864,6 +865,66 @@ def build_profile_ocr_failure_guidance() -> dict[str, list[str]]:
             "うまくいかない場合は、画像ではなくテキストを手入力またはメモ帳経由で貼り付けてください",
             "画像ファイルアップロード方式も試してください",
         ],
+    }
+
+
+def get_profile_ocr_environment_status() -> dict[str, Any]:
+    messages: list[str] = []
+    languages: list[str] = []
+    pillow_available = False
+    imagegrab_available = False
+    pytesseract_available = False
+    tesseract_available = False
+    tesseract_version = ""
+    tesseract_path = shutil.which("tesseract") or ""
+
+    try:
+        import PIL  # noqa: F401
+
+        pillow_available = True
+    except Exception:
+        messages.append("Pillowが未設定のため、画像ファイル読み取りが使えません。")
+
+    try:
+        from PIL import ImageGrab  # noqa: F401
+
+        imagegrab_available = True
+    except Exception:
+        messages.append("Pillow ImageGrabが未設定のため、クリップボード画像読み取りが使えません。")
+
+    try:
+        import pytesseract
+
+        pytesseract_available = True
+        try:
+            tesseract_version = str(pytesseract.get_tesseract_version())
+            languages = list(pytesseract.get_languages(config=""))
+            tesseract_available = True
+        except Exception as exc:
+            messages.append(f"Tesseract OCR本体を確認できません: {exc}")
+    except Exception:
+        messages.append("pytesseractが未設定です。OCRを使う場合はPython環境へ追加してください。")
+
+    if not tesseract_path and not tesseract_available:
+        messages.append("tesseract.exe がPATHから見つかりません。")
+    if tesseract_available and "jpn" not in languages:
+        messages.append("日本語OCRデータ jpn が見つかりません。日本語プロフィールは正しく読めない可能性があります。")
+    if tesseract_available and "eng" not in languages:
+        messages.append("英語OCRデータ eng が見つかりません。")
+
+    return {
+        "summary": "設定済み" if pytesseract_available and tesseract_available else "未設定",
+        "pillow": pillow_available,
+        "imagegrab": imagegrab_available,
+        "pytesseract": pytesseract_available,
+        "tesseract": tesseract_available,
+        "tesseract_path": tesseract_path or "未検出",
+        "tesseract_version": tesseract_version or "未検出",
+        "languages": languages,
+        "japanese": "jpn" in languages,
+        "english": "eng" in languages,
+        "messages": messages,
+        "alternatives": ["テキスト貼り付け", "画像ファイル選択", "メモ帳経由で貼り付け"],
     }
 
 
