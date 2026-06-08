@@ -498,3 +498,12 @@ python -m streamlit run gui_streamlit_app.py
 - 詳細JSONは折りたたみ内に残す。
 - READMEとGUIに標準貼り付け形式例を追加する。
 - 個人情報警告、自動送信なし、外部通信なし、画像保存なし、local実データをGit管理しない設計を維持する。
+
+### 作業No.133
+
+- No.132後の構造化プロフィール貼り付けを、実運用に近いテストデータでスモーク確認する。
+- `label`、`display_name`、`profile_text`、箇条書き項目が正しく抽出され、必須エラーが不要に出ないことを確認する。
+- Streamlit AppTestで、抽出プレビューのカード表示と詳細JSON折りたたみ表示を確認する。
+- テスト用real_profile保存、保存済みプロフィール検索、partner作成プレビュー、partner作成導線を確認する。
+- 作成したテスト用local実データは明示削除し、Git管理対象にしない。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、local実データのGit管理は追加しない。

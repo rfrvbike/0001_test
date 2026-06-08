@@ -1,5 +1,20 @@
 # dating_assistant latest_report
 
+## 作業No.133 構造化プロフィール貼り付け実運用スモーク
+
+- 作業No.132で対応したChatGPTプロジェクト形式のプロフィール貼り付けについて、実運用に近いテストデータでスモーク確認した。
+- `label: test_profile_001`、`display_name: テストさん`、`profile_text:` の複数行本文を正しく抽出できることを確認した。
+- `profile_text:` は後続の `interests:`、`photo_memo:`、`conversation_hooks:`、`first_message_hints:`、`privacy_notes:` を巻き込まないことを確認した。
+- `interests:`、`photo_memo:`、`conversation_hooks:`、`first_message_hints:`、`privacy_notes:` の箇条書きが抽出されることを確認した。
+- 抽出プレビューがカード形式で表示され、詳細JSONが折りたたみ内にあることをStreamlit AppTestで確認した。
+- 標準フォーマット貼り付けでは、不要な必須エラーが出ないことを確認した。
+- 日本語ラベル形式でも、表示名、自己紹介、趣味、写真メモ、会話フック、初回ヒント、安全メモが抽出されることを確認した。
+- テスト用 `test_profile_001` をlocal real_profileとして保存できることを確認した。
+- 保存済みプロフィール検索で `test_profile_001` が見つかり、プロフィールカードとpartner作成プレビューが表示できることを確認した。
+- partner作成導線でテスト用partnerをlocal作成できることを確認した。
+- スモーク後、作成した `test_profile_001.yaml` と `partner_014.yaml` は明示削除し、localテストデータを残していない。
+- 画像保存、自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作機能は追加していない。
+
 ## 作業No.132 構造化プロフィール貼り付け対応
 
 - ChatGPTプロジェクトから出力する構造化プロフィール貼り付け形式に対応した。
@@ -83,7 +98,7 @@
 - 自動送信、外部API通信、マッチングアプリ操作機能は追加していない。
 
 最新更新日: 2026-06-08
-最新作業No.: 132
+最新作業No.: 133
 
 ## 作業No.124 GUI版最終スモーク確認
 
