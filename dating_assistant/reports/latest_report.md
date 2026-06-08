@@ -1,5 +1,22 @@
 # dating_assistant latest_report
 
+## 作業No.130 OCR実行環境の導入確認
+
+- Windowsローカル環境のTesseract OCR本体導入状態を確認した。
+- `tesseract --version` と `tesseract --list-langs` は、どちらも `tesseract` コマンド未認識だった。
+- `where.exe tesseract` でも `tesseract.exe` は検出できなかった。
+- `C:\Program Files\Tesseract-OCR\tesseract.exe` と `C:\Program Files (x86)\Tesseract-OCR\tesseract.exe` は存在しなかった。
+- GUI用 `.venv_dating_gui` に `pytesseract 0.3.13` を導入した。
+- `pytesseract` からTesseract OCR本体を確認すると、Tesseract本体未導入またはPATH未設定のため `TesseractNotFoundError` になった。
+- Tesseract OCR本体が未検出のため、英語OCRデータ `eng` と日本語OCRデータ `jpn` は使用可として確認できなかった。
+- `winget` と `choco` はこの環境ではコマンド未認識だったため、Codex側からTesseract OCR本体を安全に導入できなかった。
+- 実OCRスモーク、クリップボード画像読み取り、画像ファイルアップロードOCRは、Tesseract本体未導入のため未実施とした。
+- READMEに、`pytesseract` だけではOCRできないこと、`where.exe tesseract`、標準インストール先、PATH設定の注意を追記した。
+- OCR未設定でもGUI全体は落ちず、テキスト一括貼り付け運用を継続できる設計を維持した。
+- Tesseract本体、言語データ、インストーラー、画像ファイルはリポジトリに入れていない。
+- 画像そのもの、顔写真、スクリーンショット画像の保存機能は追加していない。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作機能は追加していない。
+
 ## 作業No.129 OCR環境確認とセットアップ案内
 
 - Windowsローカル環境のOCR状態を確認した。
@@ -52,7 +69,7 @@
 - 自動送信、外部API通信、マッチングアプリ操作機能は追加していない。
 
 最新更新日: 2026-06-08
-最新作業No.: 129
+最新作業No.: 130
 
 ## 作業No.124 GUI版最終スモーク確認
 

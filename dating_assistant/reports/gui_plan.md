@@ -478,3 +478,12 @@ python -m streamlit run gui_streamlit_app.py
 - READMEに任意OCRセットアップ手順と確認コマンドを整理する。
 - Tesseract本体、言語データ、インストーラー、画像ファイルはリポジトリに入れない。
 - 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、local実データのGit管理は追加しない。
+
+### 作業No.130
+
+- GUI用 `.venv_dating_gui` に `pytesseract` を導入し、Python側のOCRラッパー状態を確認する。
+- Tesseract OCR本体、`tesseract.exe` のPATH、`eng` / `jpn` 言語データの導入状態を確認する。
+- Tesseract本体が未導入またはPATH未設定の場合は、実OCRスモークを止め、READMEとlatest_reportに手動導入手順と切り分けを残す。
+- OCRが使えない場合でもGUI全体が落ちず、テキスト一括貼り付け運用を続けられることを確認する。
+- テスト用画像を使う場合も一時処理のみとし、画像そのもの、顔写真、スクリーンショット実データは保存・commitしない。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、local実データのGit管理は追加しない。

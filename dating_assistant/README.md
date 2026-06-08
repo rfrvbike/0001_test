@@ -117,6 +117,11 @@ GUI用Python環境へ入れる例:
 
 `tesseract --list-langs` に `jpn` が出ない場合、日本語OCRは未設定です。
 その場合はTesseractの日本語言語データを追加するか、プロフィール文をテキストで貼り付けてください。
+`pytesseract` はPythonからTesseract OCR本体を呼び出すためのラッパーです。
+`pytesseract` だけを入れても、Tesseract OCR本体が未導入、または `tesseract.exe` にPATHが通っていない場合はOCRできません。
+WindowsでPATHが通っているか分からない場合は、PowerShellで `where.exe tesseract` を確認してください。
+標準的なインストール先は `C:\Program Files\Tesseract-OCR\tesseract.exe` です。
+このファイルが存在する場合は、`C:\Program Files\Tesseract-OCR` をPATHに追加してからGUIを起動し直してください。
 Tesseract本体、言語データ、インストーラー、画像ファイルはリポジトリに入れません。
 
 ## 保存済みプロフィールからpartner作成
