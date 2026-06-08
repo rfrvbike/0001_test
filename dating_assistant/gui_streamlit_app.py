@@ -520,10 +520,11 @@ def render_profile_registration() -> None:
         "notes": notes,
     }
     pasted_form, paste_warnings = build_profile_form_from_paste(profile_paste)
-    form, label_meta, errors = build_profile_save_payload(form, pasted_form, label_seed_candidate)
+    form, label_meta, errors, save_readiness_warnings = build_profile_save_payload(form, pasted_form, label_seed_candidate)
 
     has_profile_input = any(str(value).strip() for value in form.values()) or profile_paste.strip()
     warnings = detect_profile_safety_warnings(form)
+    warnings.extend(save_readiness_warnings)
     if paste_warnings:
         warnings.extend(paste_warnings)
     if profile_paste.strip():

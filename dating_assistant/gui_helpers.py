@@ -106,6 +106,8 @@ PROFILE_LIST_FIELDS = {
 PROFILE_MULTILINE_FIELDS = PROFILE_LIST_FIELDS | {"profile_text", "notes"}
 PROFILE_SCALAR_FIELDS = {"label", "display_name", "app_name", "age", "area"}
 PROFILE_UNSET_VALUES = {"", "-", "未設定", "なし", "無し", "不明", "n/a", "none", "null"}
+PROFILE_DRAFT_TEXT = "プロフィール本文未設定。あとで補完してください。"
+PROFILE_PHOTO_ONLY_TEXT = "プロフィール本文なし。写真メモのみ登録。"
 PROFILE_PASTE_LABELS = {
     "label": "label",
     "display_name": "表示名",
@@ -882,10 +884,10 @@ def build_profile_save_payload(
     form_values: dict[str, Any],
     pasted_form: dict[str, Any],
     label_candidate: dict[str, Any] | None = None,
-) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+) -> tuple[dict[str, Any], dict[str, Any], list[str], list[str]]:
     merged = merge_profile_form_with_paste(form_values, pasted_form)
     merged, label_meta = apply_profile_label_candidate(merged, label_candidate)
-    return merged, label_meta, validate_profile_form(merged)
+    return merged, label_meta, validate_profile_form(merged), build_profile_save_warnings(merged)
 
 
 def apply_profile_label_candidate(form: dict[str, Any], candidate: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -1130,9 +1132,6 @@ def extract_profile_text_from_image(image: Any, languages: str = "jpn+eng") -> d
 def validate_profile_form(form: dict[str, Any]) -> list[str]:
     errors = []
     label = str(form.get("label", "")).strip()
-    display_name = str(form.get("display_name", "")).strip()
-    profile_text = str(form.get("profile_text", "")).strip()
-    photo_memo = str(form.get("photo_memo", "")).strip()
     if not label:
         errors.append("label は必須です。")
     else:
@@ -1140,11 +1139,28 @@ def validate_profile_form(form: dict[str, Any]) -> list[str]:
             validate_real_profile_label(label)
         except ValueError:
             errors.append("label は英数字・ハイフン・アンダースコアのみで入力してください。")
-    if not display_name:
-        errors.append("display_name は必須です。")
-    if not profile_text and not photo_memo:
-        errors.append("profile_text または photo_memo のどちらかは必須です。")
     return errors
+
+
+def build_profile_save_warnings(form: dict[str, Any]) -> list[str]:
+    missing = _profile_missing_fields(form)
+    if not missing:
+        return []
+    return ["不完全プロフィールとして保存します。あとで不足分を補完できます。", *[f"不足項目: {field}" for field in missing]]
+
+
+def build_profile_completion_status(form: dict[str, Any]) -> str:
+    missing = _profile_missing_fields(form)
+    has_profile_content = bool(str(form.get("profile_text", "")).strip() or split_form_list(str(form.get("photo_memo", ""))))
+    has_any_content = has_profile_content or bool(
+        str(form.get("display_name", "")).strip()
+        or split_form_list(str(form.get("interests", "")))
+    )
+    if not has_any_content:
+        return "draft"
+    if missing:
+        return "incomplete"
+    return "complete"
 
 
 def detect_profile_safety_warnings(form: dict[str, Any]) -> list[str]:
@@ -1165,7 +1181,9 @@ def build_real_profile_from_form(form: dict[str, Any]) -> dict[str, Any]:
     photo_items = split_form_list(str(form.get("photo_memo", "")))
     profile_text = str(form.get("profile_text", "")).strip()
     if not profile_text and photo_items:
-        profile_text = "プロフィール文なし。写真メモのみ登録。"
+        profile_text = PROFILE_PHOTO_ONLY_TEXT
+    elif not profile_text:
+        profile_text = PROFILE_DRAFT_TEXT
     free_notes = _build_free_notes(form)
     return {
         "label": str(form.get("label", "")).strip(),
@@ -1195,6 +1213,8 @@ def build_profile_save_preview(form: dict[str, Any]) -> dict[str, Any]:
         "first_message_hints": split_form_list(str(form.get("first_message_hints", ""))),
         "safety_notes": split_form_list(str(form.get("safety_notes", ""))),
         "notes": str(form.get("notes", "")).strip() or "-",
+        "profile_status": build_profile_completion_status(form),
+        "warnings": build_profile_save_warnings(form),
         "保存先": str(get_real_profile_path(data["label"])),
     }
 
@@ -1213,7 +1233,8 @@ def save_real_profile_from_form(form: dict[str, Any]) -> tuple[Path, list[str]]:
     if errors:
         raise ValueError("\n".join(errors))
     data = build_real_profile_from_form(form)
-    return create_real_profile(**data)
+    path, warnings = create_real_profile(**data)
+    return path, sorted(set(warnings + build_profile_save_warnings(form)))
 
 
 def list_real_profiles_for_gui() -> list[dict[str, Any]]:
@@ -1543,6 +1564,15 @@ def _empty_to_none(value: str) -> str | None:
     return value if value else None
 
 
+def _profile_missing_fields(form: dict[str, Any]) -> list[str]:
+    missing = []
+    if not str(form.get("display_name", "")).strip():
+        missing.append("display_name")
+    if not str(form.get("profile_text", "")).strip() and not split_form_list(str(form.get("photo_memo", ""))):
+        missing.append("profile_text_or_photo_memo")
+    return missing
+
+
 def _build_free_notes(form: dict[str, Any]) -> str | None:
     display_name = str(form.get("display_name", "")).strip()
     app_name = str(form.get("app_name", "")).strip()
@@ -1551,7 +1581,12 @@ def _build_free_notes(form: dict[str, Any]) -> str | None:
     first_message_hints = split_form_list(str(form.get("first_message_hints", "")))
     safety_notes = split_form_list(str(form.get("safety_notes", "")))
     notes = str(form.get("notes", "")).strip()
-    lines = []
+    status = build_profile_completion_status(form)
+    missing = _profile_missing_fields(form)
+    lines = [f"profile_status: {status}"]
+    if missing:
+        lines.append("profile_missing_fields:")
+        lines.extend(f"- {item}" for item in missing)
     if display_name:
         lines.append(f"display_name: {display_name}")
     if app_name:

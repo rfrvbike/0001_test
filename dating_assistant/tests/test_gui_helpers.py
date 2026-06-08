@@ -17,6 +17,7 @@ from gui_helpers import (
     build_profile_form_from_paste,
     build_profile_label_candidate,
     build_profile_paste_preview,
+    build_profile_save_warnings,
     build_sent_outcome_preview,
     build_partner_summary,
     build_conversation_import_preview,
@@ -434,13 +435,14 @@ privacy_notes:
             now=datetime(2026, 6, 8, 12, 34, 56),
             existing_labels=set(),
         )
-        form, label_meta, errors = build_profile_save_payload(
+        form, label_meta, errors, warnings = build_profile_save_payload(
             {"label": "", "display_name": "", "profile_text": "", "photo_memo": ""},
             extracted,
             candidate,
         )
 
         self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
         self.assertEqual(form["label"], "profile_20260608_123456")
         self.assertEqual(form["display_name"], "テストさん")
         self.assertEqual(form["profile_text"], "自然と食事が好きです。")
@@ -455,7 +457,7 @@ privacy_notes:
             "photo_memo": "落ち着いた雰囲気",
             "interests": "自然\n食事",
         }
-        form, _label_meta, errors = build_profile_save_payload(
+        form, _label_meta, errors, warnings = build_profile_save_payload(
             {
                 "label": "manual_label",
                 "display_name": "",
@@ -467,6 +469,7 @@ privacy_notes:
         )
 
         self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
         self.assertEqual(form["label"], "manual_label")
         self.assertEqual(form["display_name"], "テストさん")
         self.assertEqual(form["profile_text"], "自然が好きです。")
@@ -506,10 +509,13 @@ privacy_notes:
 
     def test_profile_form_requires_core_fields(self):
         errors = validate_profile_form({"label": "", "display_name": "", "profile_text": "", "photo_memo": ""})
+        warnings = build_profile_save_warnings({"label": "", "display_name": "", "profile_text": "", "photo_memo": ""})
 
         self.assertIn("label は必須です。", errors)
-        self.assertIn("display_name は必須です。", errors)
-        self.assertIn("profile_text または photo_memo のどちらかは必須です。", errors)
+        self.assertNotIn("display_name は必須です。", errors)
+        self.assertNotIn("profile_text または photo_memo のどちらかは必須です。", errors)
+        self.assertTrue(any("display_name" in warning for warning in warnings))
+        self.assertTrue(any("profile_text_or_photo_memo" in warning for warning in warnings))
 
     def test_profile_form_detects_safety_warnings(self):
         warnings = detect_profile_safety_warnings(
@@ -574,6 +580,45 @@ privacy_notes:
         self.assertEqual(partner.profile.profile_text, form["profile_text"])
         self.assertEqual(partner.conversation, [])
 
+    def test_incomplete_structured_profile_can_be_saved_as_draft(self):
+        form, _label_meta, errors, warnings = build_profile_save_payload(
+            {"label": "", "display_name": "", "profile_text": "", "photo_memo": "", "interests": ""},
+            {"notes": "あとで補完する"},
+            build_profile_label_candidate("", existing_labels=set()),
+        )
+
+        path, save_warnings = save_real_profile_from_form(form)
+        _loaded_path, profile = load_real_profile_for_gui(form["label"])
+        display = build_profile_display_sections(form["label"])
+        partner = save_partner_from_profile(form["label"], "", "pairs", "")
+
+        self.assertEqual(errors, [])
+        self.assertTrue(warnings)
+        self.assertTrue(save_warnings)
+        self.assertTrue(path.exists())
+        self.assertEqual(profile.profile_text, "プロフィール本文未設定。あとで補完してください。")
+        self.assertIn("profile_status: draft", profile.free_notes)
+        self.assertIn("profile_missing_fields:", profile.free_notes)
+        self.assertEqual(display["profile_text"], "プロフィール本文未設定。あとで補完してください。")
+        self.assertEqual(partner.profile.profile_text, "プロフィール本文未設定。あとで補完してください。")
+
+    def test_missing_display_name_does_not_block_profile_save(self):
+        form, _label_meta, errors, warnings = build_profile_save_payload(
+            {"label": "", "display_name": "", "profile_text": "", "photo_memo": ""},
+            {"profile_text": "自然が好きです。"},
+            build_profile_label_candidate("", existing_labels=set()),
+        )
+
+        path, save_warnings = save_real_profile_from_form(form)
+        _loaded_path, profile = load_real_profile_for_gui(form["label"])
+
+        self.assertEqual(errors, [])
+        self.assertTrue(any("display_name" in warning for warning in warnings))
+        self.assertTrue(any("display_name" in warning for warning in save_warnings))
+        self.assertTrue(path.exists())
+        self.assertEqual(profile.profile_text, "自然が好きです。")
+        self.assertIn("profile_status: incomplete", profile.free_notes)
+
     def test_profile_form_accepts_photo_memo_without_profile_text(self):
         form = {
             "label": "profile_002",
@@ -585,7 +630,7 @@ privacy_notes:
         data = build_real_profile_from_form(form)
 
         self.assertEqual(validate_profile_form(form), [])
-        self.assertEqual(data["profile_text"], "プロフィール文なし。写真メモのみ登録。")
+        self.assertEqual(data["profile_text"], "プロフィール本文なし。写真メモのみ登録。")
         self.assertEqual(data["photos_memo"], ["公園の写真"])
 
     def test_parse_conversation_paste_supports_japanese_labels(self):

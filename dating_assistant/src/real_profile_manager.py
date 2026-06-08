@@ -52,8 +52,7 @@ def create_real_profile(
     free_notes: str | None = None,
 ) -> tuple[Path, list[str]]:
     validate_real_profile_label(label)
-    if not profile_text.strip():
-        raise ValueError("profile_text is required")
+    profile_text = profile_text.strip() or "プロフィール本文未設定。あとで補完してください。"
     path = get_real_profile_dir() / f"{label}.yaml"
     if path.exists():
         raise FileExistsError(f"Real profile already exists: {label}")
