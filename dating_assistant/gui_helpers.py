@@ -851,6 +851,25 @@ def build_profile_form_from_paste(text: str) -> tuple[dict[str, Any], list[str]]
     return extracted, warnings
 
 
+def build_profile_label_candidate(
+    display_name: str = "",
+    now: datetime | None = None,
+    existing_labels: set[str] | None = None,
+) -> dict[str, Any]:
+    timestamp = (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    display_name = str(display_name or "").strip()
+    base = _safe_profile_label_base(display_name)
+    reason = "display_nameを安全なASCIIに変換しました" if base != "profile" else "labelが未指定だったためgeneric候補を作成しました"
+    label = f"{base}_{timestamp}"
+    label = _deduplicate_profile_label(label, existing_labels=existing_labels)
+    return {
+        "label": label,
+        "label_source": "自動候補",
+        "label_reason": reason,
+        "editable": True,
+    }
+
+
 def merge_profile_form_with_paste(form: dict[str, Any], pasted_form: dict[str, Any]) -> dict[str, Any]:
     merged = dict(form)
     for key, value in pasted_form.items():
@@ -859,8 +878,34 @@ def merge_profile_form_with_paste(form: dict[str, Any], pasted_form: dict[str, A
     return merged
 
 
-def build_profile_paste_preview(text: str) -> dict[str, Any]:
+def apply_profile_label_candidate(form: dict[str, Any], candidate: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    merged = dict(form)
+    explicit_label = str(merged.get("label", "")).strip()
+    if explicit_label:
+        if candidate and explicit_label == candidate.get("label"):
+            return merged, candidate
+        return merged, {
+            "label": explicit_label,
+            "label_source": "貼り付け内容または入力欄から取得",
+            "label_reason": "明示labelを優先しました",
+            "editable": True,
+        }
+    candidate = candidate or build_profile_label_candidate(str(merged.get("display_name", "")))
+    merged["label"] = candidate["label"]
+    return merged, candidate
+
+
+def build_profile_paste_preview(text: str, label_candidate: dict[str, Any] | None = None) -> dict[str, Any]:
     extracted, warnings = build_profile_form_from_paste(text)
+    label_meta = {
+        "label": extracted.get("label") or "",
+        "label_source": "貼り付け内容から取得" if extracted.get("label") else "未指定",
+        "label_reason": "labelが貼り付け内容に含まれていました" if extracted.get("label") else "貼り付け内容にlabelがありません",
+        "editable": True,
+    }
+    if not extracted.get("label"):
+        label_meta = label_candidate or build_profile_label_candidate(str(extracted.get("display_name", "")))
+        extracted["label"] = label_meta["label"]
     extracted_fields = {key: extracted.get(key) or "未設定" for key in PROFILE_PASTE_FIELDS}
     missing_fields = [key for key, value in extracted.items() if not value]
     required_missing_fields = [key for key in ("label", "display_name", "profile_text") if not extracted.get(key)]
@@ -868,6 +913,8 @@ def build_profile_paste_preview(text: str) -> dict[str, Any]:
         "extracted_fields": extracted_fields,
         "summary": [
             {"label": "label", "value": extracted_fields["label"]},
+            {"label": "label種別", "value": label_meta["label_source"]},
+            {"label": "理由", "value": label_meta["label_reason"]},
             {"label": "表示名", "value": extracted_fields["display_name"]},
             {"label": "アプリ", "value": extracted_fields["app_name"]},
             {"label": "年齢", "value": extracted_fields["age"]},
@@ -896,6 +943,7 @@ def build_profile_paste_preview(text: str) -> dict[str, Any]:
         "manual_review_required": True,
         "saves_images": False,
         "auto_send": False,
+        "label_meta": label_meta,
         "detail": extracted_fields,
     }
 
@@ -1456,6 +1504,29 @@ def _parse_optional_int(value: Any) -> int | None:
     if _is_profile_unset_value(text):
         return None
     return int(text) if text else None
+
+
+def _safe_profile_label_base(display_name: str) -> str:
+    text = str(display_name or "").strip()
+    if not text or detect_privacy_warnings([text]):
+        return "profile"
+    ascii_text = text.encode("ascii", errors="ignore").decode("ascii").lower()
+    ascii_text = re.sub(r"[^a-z0-9_-]+", "_", ascii_text)
+    ascii_text = re.sub(r"_+", "_", ascii_text).strip("_-")
+    if not ascii_text or not re.search(r"[a-z]", ascii_text):
+        return "profile"
+    return ascii_text[:32].strip("_-") or "profile"
+
+
+def _deduplicate_profile_label(label: str, existing_labels: set[str] | None = None) -> str:
+    existing = set(existing_labels) if existing_labels is not None else {path.stem for path, _profile in list_real_profiles()}
+    if label not in existing:
+        return label
+    for index in range(1, 1000):
+        candidate = f"{label}_{index:03d}"
+        if candidate not in existing:
+            return candidate
+    raise ValueError("利用可能なlabel候補を作成できませんでした。")
 
 
 def _empty_to_none(value: str) -> str | None:

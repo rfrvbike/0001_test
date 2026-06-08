@@ -15,12 +15,14 @@ from gui_helpers import (
     build_mark_sent_preview,
     build_partner_note_preview,
     build_profile_form_from_paste,
+    build_profile_label_candidate,
     build_profile_paste_preview,
     build_sent_outcome_preview,
     build_partner_summary,
     build_conversation_import_preview,
     build_conversation_import_failure_guidance,
     build_partner_operational_display,
+    apply_profile_label_candidate,
     build_profile_ocr_failure_guidance,
     build_profile_ocr_privacy_notes,
     build_profile_ocr_text_preview,
@@ -372,6 +374,54 @@ privacy_notes:
         self.assertEqual(preview["required_missing_fields"], [])
         self.assertIn("detail", preview)
         self.assertNotIn("path", preview)
+
+    def test_profile_label_candidate_prefers_explicit_label(self):
+        pasted = "label:\nnozomi_001\n\ndisplay_name:\nのぞみ\n\nprofile_text:\nこんにちは"
+        extracted, _warnings = build_profile_form_from_paste(pasted)
+        form, meta = apply_profile_label_candidate(extracted)
+        preview = build_profile_paste_preview(pasted)
+
+        self.assertEqual(form["label"], "nozomi_001")
+        self.assertEqual(meta["label_source"], "貼り付け内容または入力欄から取得")
+        self.assertEqual(preview["label_meta"]["label_source"], "貼り付け内容から取得")
+        self.assertEqual(preview["summary"][0]["value"], "nozomi_001")
+
+    def test_profile_label_candidate_generates_safe_generic_label_for_japanese_name(self):
+        from datetime import datetime
+
+        candidate = build_profile_label_candidate("のぞみ / LINE", now=datetime(2026, 6, 8, 12, 34, 56), existing_labels=set())
+
+        self.assertEqual(candidate["label"], "profile_20260608_123456")
+        self.assertEqual(candidate["label_source"], "自動候補")
+        self.assertNotIn("のぞみ", candidate["label"])
+        self.assertNotIn("/", candidate["label"])
+        self.assertNotIn("LINE", candidate["label"])
+
+    def test_profile_label_candidate_uses_ascii_display_name_and_deduplicates(self):
+        from datetime import datetime
+
+        existing = {"cafe_friend_20260608_123456", "cafe_friend_20260608_123456_001"}
+        candidate = build_profile_label_candidate("Cafe Friend!!", now=datetime(2026, 6, 8, 12, 34, 56), existing_labels=existing)
+
+        self.assertEqual(candidate["label"], "cafe_friend_20260608_123456_002")
+        self.assertNotIn(" ", candidate["label"])
+        self.assertNotIn("!", candidate["label"])
+
+    def test_profile_paste_without_label_gets_editable_candidate_in_preview(self):
+        from datetime import datetime
+
+        pasted = "表示名:\nテストさん\n\n自己紹介:\n自然と食事が好きです。\n\n趣味・興味:\n* 自然\n* 食事"
+        extracted, _warnings = build_profile_form_from_paste(pasted)
+        candidate = build_profile_label_candidate(extracted["display_name"], now=datetime(2026, 6, 8, 12, 34, 56), existing_labels=set())
+        preview = build_profile_paste_preview(pasted, label_candidate=candidate)
+        form, meta = apply_profile_label_candidate(extracted, candidate)
+
+        self.assertEqual(form["label"], "profile_20260608_123456")
+        self.assertEqual(meta["label_source"], "自動候補")
+        self.assertEqual(preview["label_meta"]["label_source"], "自動候補")
+        self.assertEqual(preview["summary"][0]["value"], "profile_20260608_123456")
+        self.assertIn("label種別", [row["label"] for row in preview["summary"]])
+        self.assertEqual(preview["required_missing_fields"], [])
 
     def test_profile_ocr_preview_warns_and_never_marks_image_saved(self):
         preview = build_profile_ocr_text_preview("LINEと sample@example.com は保存しない")

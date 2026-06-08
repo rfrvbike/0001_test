@@ -129,6 +129,11 @@ privacy_notes:
 `profile_text:` は次の項目キーまでを自己紹介として読み取ります。
 `interests:`、`photo_memo:`、`conversation_hooks:`、`first_message_hints:`、`avoid_topics:`、`privacy_notes:` は箇条書きとして読み取ります。
 `未設定` は空欄として扱います。
+ChatGPTプロジェクト側で `label` を出せる場合は、英数字・ハイフン・アンダースコアの保存用labelを含めてください。
+`label` がない場合は、dating_assistant側で `profile_YYYYMMDD_HHMMSS` 形式などの安全なlabel候補を自動作成します。
+自動候補はそのまま保存確定せず、不足分・修正欄と抽出プレビューに表示されます。
+保存前に必ずlabelを確認し、必要なら修正してください。
+日本語の表示名、本名らしき文字列、LINE ID、SNS ID、メールアドレス、電話番号などはlabelに使わず、genericな保存名を使います。
 
 画像から読み取る補助機能もあります。
 Windowsキー + Shift + S でプロフィール画面を範囲選択したあと、「クリップボード画像を読み取る」を押します。

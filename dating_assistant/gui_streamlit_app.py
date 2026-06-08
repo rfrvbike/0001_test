@@ -29,6 +29,7 @@ from gui_helpers import (
     build_profile_ocr_text_preview,
     build_profile_paste_preview,
     build_profile_save_preview,
+    apply_profile_label_candidate,
     build_profile_display_sections,
     build_real_profile_summary_for_gui,
     build_sent_outcome_preview,
@@ -44,6 +45,7 @@ from gui_helpers import (
     format_pending_suggestions,
     format_sent_suggestions_for_outcomes,
     format_timeline_items,
+    build_profile_label_candidate,
     get_profile_ocr_environment_status,
     get_clipboard_image_for_ocr,
     generate_suggestion_for_gui,
@@ -464,6 +466,10 @@ def render_profile_registration() -> None:
     if "profile_paste_text" not in st.session_state:
         st.session_state["profile_paste_text"] = ""
     _render_profile_ocr_intake()
+    pasted_seed_form, _seed_warnings = build_profile_form_from_paste(str(st.session_state.get("profile_paste_text", "")))
+    label_seed_candidate = None
+    if st.session_state.get("profile_paste_text") and not pasted_seed_form.get("label"):
+        label_seed_candidate = build_profile_label_candidate(str(pasted_seed_form.get("display_name", "")))
 
     with st.form("profile_registration_form"):
         st.markdown("### まずここにプロフィールを貼り付け")
@@ -483,7 +489,14 @@ def render_profile_registration() -> None:
             st.code(_profile_paste_format_example(), language="text")
         with st.expander("不足分・修正欄", expanded=False):
             st.caption("自動抽出できなかった項目だけ、必要に応じて修正してください。")
-            label = st.text_input("label", help="英数字・ハイフン・アンダースコアのみ")
+            if label_seed_candidate:
+                st.info("label が未指定だったため、自動候補を作成しました。保存前に必要なら修正してください。")
+                st.caption(f"label候補: {label_seed_candidate['label']}")
+            label = st.text_input(
+                "label",
+                value=str(label_seed_candidate["label"]) if label_seed_candidate else "",
+                help="英数字・ハイフン・アンダースコアのみ。label未指定時は保存用候補を表示します。",
+            )
             display_name = st.text_input("display_name")
             app_name = st.text_input("app_name")
             age = st.number_input("age", min_value=18, max_value=120, value=None, step=1)
@@ -510,6 +523,7 @@ def render_profile_registration() -> None:
     }
     pasted_form, paste_warnings = build_profile_form_from_paste(profile_paste)
     form = merge_profile_form_with_paste(form, pasted_form)
+    form, label_meta = apply_profile_label_candidate(form, label_seed_candidate)
 
     has_profile_input = any(str(value).strip() for value in form.values()) or profile_paste.strip()
     errors = validate_profile_form(form)
@@ -517,7 +531,7 @@ def render_profile_registration() -> None:
     if paste_warnings:
         warnings.extend(paste_warnings)
     if profile_paste.strip():
-        _render_profile_paste_preview_card(build_profile_paste_preview(profile_paste))
+        _render_profile_paste_preview_card(build_profile_paste_preview(profile_paste, label_meta))
         st.info("抽出できなかった項目や違う項目は、不足分・修正欄で直してから保存してください。")
     elif not submitted:
         st.info("プロフィールを貼り付けると、保存に必要な項目を確認できます。")
