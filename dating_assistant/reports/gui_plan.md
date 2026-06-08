@@ -487,3 +487,14 @@ python -m streamlit run gui_streamlit_app.py
 - OCRが使えない場合でもGUI全体が落ちず、テキスト一括貼り付け運用を続けられることを確認する。
 - テスト用画像を使う場合も一時処理のみとし、画像そのもの、顔写真、スクリーンショット実データは保存・commitしない。
 - 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作、画像保存、local実データのGit管理は追加しない。
+
+### 作業No.132
+
+- ChatGPTプロジェクトから出力する構造化プロフィール貼り付け形式を正式対応する。
+- `label:` / `display_name:` / `profile_text:` など、キー行の次に値が来る形式を読み取れるようにする。
+- `profile_text:` は次の項目キーまでを本文として扱い、後続のリスト項目が混ざらないようにする。
+- `interests:`、`photo_memo:`、`conversation_hooks:`、`first_message_hints:`、`avoid_topics:`、`privacy_notes:` の箇条書きをリストとして扱う。
+- 抽出プレビューはJSON直表示を通常画面から外し、カード形式と日本語ラベルで確認できるようにする。
+- 詳細JSONは折りたたみ内に残す。
+- READMEとGUIに標準貼り付け形式例を追加する。
+- 個人情報警告、自動送信なし、外部通信なし、画像保存なし、local実データをGit管理しない設計を維持する。

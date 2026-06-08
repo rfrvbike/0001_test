@@ -81,6 +81,55 @@ Streamlitの初回画面でメール入力が出た場合は、何も入力せ�
 抽出プレビューを確認し、抽出できなかった項目や違う項目だけを「不足分・修正欄」で直してから保存します。
 不足分・修正欄は補助用です。まず一括貼り付け欄を使い、初期表示では必須エラーを出さず、保存時に必要項目を確認します。
 
+ChatGPTプロジェクトでプロフィールを整理してから貼り付ける場合は、次の標準フォーマットがおすすめです。
+
+```text
+label:
+sample_001
+
+display_name:
+サンプル
+
+app_name:
+未設定
+
+age:
+未設定
+
+area:
+未設定
+
+profile_text:
+はじめまして。
+プロフィールを見ていただき、ありがとうございます。
+
+interests:
+* 自然が好き
+* 食事が好き
+
+photo_memo:
+* 落ち着いた雰囲気
+
+conversation_hooks:
+* 自然の話
+
+first_message_hints:
+* 返信しやすい質問を1つ入れる
+
+avoid_topics:
+* 未設定
+
+notes:
+未設定
+
+privacy_notes:
+* 個人情報は保存しない
+```
+
+`profile_text:` は次の項目キーまでを自己紹介として読み取ります。
+`interests:`、`photo_memo:`、`conversation_hooks:`、`first_message_hints:`、`avoid_topics:`、`privacy_notes:` は箇条書きとして読み取ります。
+`未設定` は空欄として扱います。
+
 画像から読み取る補助機能もあります。
 Windowsキー + Shift + S でプロフィール画面を範囲選択したあと、「クリップボード画像を読み取る」を押します。
 クリップボードから読めない場合は、png / jpg / jpeg / webp の画像ファイルを一時的に選択できます。

@@ -62,6 +62,7 @@ from gui_helpers import (
     save_partner_from_profile,
     save_real_profile_from_form,
     SENT_OUTCOME_STATUS_OPTIONS,
+    split_form_list,
     add_partner_note_from_gui,
     update_sent_outcome_from_gui,
     validate_imported_turns,
@@ -296,6 +297,81 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(preview["extracted_fields"]["display_name"], "sample")
         self.assertIn("avoid_topics", preview["missing_fields"])
         self.assertTrue(preview["manual_review_required"])
+
+    def test_profile_paste_supports_structured_chatgpt_format(self):
+        pasted = """label:
+nozomi_001
+
+display_name:
+のぞみ
+
+app_name:
+未設定
+
+age:
+未設定
+
+area：
+未設定
+
+profile_text:
+はじめまして。
+プロフィールを見ていただき、ありがとうございます。
+
+interests:
+* 自然が好き
+* 食事が好き
+* 旅行が好き
+
+photo_memo:
+* 落ち着いた雰囲気
+* やわらかい印象
+
+conversation_hooks:
+* 自然の話
+* 食事の話
+* 休日の過ごし方
+
+first_message_hints:
+* 自然や食事の話題から入る
+* 返信しやすい質問を1つ入れる
+
+avoid_topics:
+* 未設定
+
+notes:
+未設定
+
+privacy_notes:
+* 個人情報は保存しない
+"""
+        extracted, warnings = build_profile_form_from_paste(pasted)
+        preview = build_profile_paste_preview(pasted)
+        form = merge_profile_form_with_paste({"label": "", "display_name": "", "profile_text": ""}, extracted)
+        errors = validate_profile_form(form)
+
+        self.assertEqual(extracted["label"], "nozomi_001")
+        self.assertEqual(extracted["display_name"], "のぞみ")
+        self.assertEqual(extracted["app_name"], "")
+        self.assertEqual(extracted["age"], "")
+        self.assertEqual(extracted["area"], "")
+        self.assertEqual(extracted["profile_text"], "はじめまして。\nプロフィールを見ていただき、ありがとうございます。")
+        self.assertEqual(split_form_list(extracted["interests"]), ["自然が好き", "食事が好き", "旅行が好き"])
+        self.assertEqual(split_form_list(extracted["photo_memo"]), ["落ち着いた雰囲気", "やわらかい印象"])
+        self.assertEqual(split_form_list(extracted["conversation_hooks"]), ["自然の話", "食事の話", "休日の過ごし方"])
+        self.assertEqual(split_form_list(extracted["first_message_hints"]), ["自然や食事の話題から入る", "返信しやすい質問を1つ入れる"])
+        self.assertEqual(extracted["avoid_topics"], "")
+        self.assertEqual(extracted["notes"], "")
+        self.assertEqual(split_form_list(extracted["safety_notes"]), ["個人情報は保存しない"])
+        self.assertNotIn("privacy_notes", extracted["profile_text"])
+        self.assertNotIn("interests", extracted["profile_text"])
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+        self.assertEqual(preview["summary"][0]["value"], "nozomi_001")
+        self.assertEqual(preview["profile_text"], extracted["profile_text"])
+        self.assertEqual(preview["required_missing_fields"], [])
+        self.assertIn("detail", preview)
+        self.assertNotIn("path", preview)
 
     def test_profile_ocr_preview_warns_and_never_marks_image_saved(self):
         preview = build_profile_ocr_text_preview("LINEと sample@example.com は保存しない")

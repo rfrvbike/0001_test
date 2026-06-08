@@ -478,6 +478,9 @@ def render_profile_registration() -> None:
             help="マッチングアプリ上のプロフィール文、自己紹介、趣味、エリア、年齢、写真の印象メモなどをまとめて貼り付けます。画像そのものは保存しません。",
         )
         st.caption("スクリーンショット画像や顔写真そのものは保存しません。読み取ったテキストとメモだけを貼り付けてください。")
+        with st.expander("貼り付け形式の例", expanded=False):
+            st.caption("ChatGPTプロジェクトから出力する場合は、この形式がおすすめです。")
+            st.code(_profile_paste_format_example(), language="text")
         with st.expander("不足分・修正欄", expanded=False):
             st.caption("自動抽出できなかった項目だけ、必要に応じて修正してください。")
             label = st.text_input("label", help="英数字・ハイフン・アンダースコアのみ")
@@ -514,8 +517,7 @@ def render_profile_registration() -> None:
     if paste_warnings:
         warnings.extend(paste_warnings)
     if profile_paste.strip():
-        st.markdown("**貼り付け内容の抽出プレビュー**")
-        st.json(build_profile_paste_preview(profile_paste))
+        _render_profile_paste_preview_card(build_profile_paste_preview(profile_paste))
         st.info("抽出できなかった項目や違う項目は、不足分・修正欄で直してから保存してください。")
     elif not submitted:
         st.info("プロフィールを貼り付けると、保存に必要な項目を確認できます。")
@@ -554,6 +556,73 @@ def render_profile_registration() -> None:
             st.warning("保存内容に注意語が含まれます: " + " / ".join(save_warnings))
 
     st.info("保存後は「プロフィールからpartner作成」タブでpartner化できます。")
+
+
+def _profile_paste_format_example() -> str:
+    return """label:
+sample_001
+
+display_name:
+サンプル
+
+app_name:
+未設定
+
+age:
+未設定
+
+area:
+未設定
+
+profile_text:
+はじめまして。
+プロフィールを見ていただき、ありがとうございます。
+
+interests:
+* 自然が好き
+* 食事が好き
+
+photo_memo:
+* 落ち着いた雰囲気
+
+conversation_hooks:
+* 自然の話
+
+first_message_hints:
+* 返信しやすい質問を1つ入れる
+
+avoid_topics:
+* 未設定
+
+notes:
+未設定
+
+privacy_notes:
+* 個人情報は保存しない"""
+
+
+def _render_profile_paste_preview_card(preview: dict[str, object]) -> None:
+    st.markdown("**貼り付け内容の抽出プレビュー**")
+    with st.container(border=True):
+        st.markdown("**基本情報**")
+        _render_summary_rows(preview["summary"])
+        st.markdown("**自己紹介**")
+        st.write(preview["profile_text"])
+        for section in preview["sections"]:
+            _render_bullet_items(section["title"], section["items"])
+        st.markdown("**メモ**")
+        st.write(preview["notes"])
+        if preview["missing_labels"]:
+            st.warning(
+                "不足している項目: "
+                + " / ".join(preview["missing_labels"])
+                + "。貼り付け形式が標準フォーマットと違う可能性があります。"
+            )
+        if preview["warnings"]:
+            st.warning("保存前に見直してください: " + " / ".join(preview["warnings"]))
+        _render_bullet_items("確認メモ", preview["review_notes"])
+    with st.expander("詳細JSONを表示", expanded=False):
+        st.json(preview["detail"])
 
 
 def _render_summary_rows(rows: list[dict[str, object]]) -> None:

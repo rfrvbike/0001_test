@@ -27,6 +27,9 @@ from src.suggestion_manager import add_suggestion, discard_suggestion, get_pendi
 from src.timeline_builder import build_timeline_events
 
 PROFILE_PASTE_FIELD_ALIASES = {
+    "label": "label",
+    "ラベル": "label",
+    "保存名": "label",
     "display_name": "display_name",
     "name": "display_name",
     "表示名": "display_name",
@@ -50,27 +53,35 @@ PROFILE_PASTE_FIELD_ALIASES = {
     "interests": "interests",
     "hobbies": "interests",
     "趣味": "interests",
+    "趣味・興味": "interests",
     "好きなこと": "interests",
     "photo": "photo_memo",
     "photo_memo": "photo_memo",
     "写真": "photo_memo",
     "写真メモ": "photo_memo",
+    "写真から分かる印象メモ": "photo_memo",
     "印象": "photo_memo",
     "avoid_topics": "avoid_topics",
     "避けたい話題": "avoid_topics",
+    "避けた方がよさそうな話題": "avoid_topics",
     "ng": "avoid_topics",
     "notes": "notes",
     "メモ": "notes",
     "その他": "notes",
     "conversation_hooks": "conversation_hooks",
     "会話に使えそうな情報": "conversation_hooks",
+    "会話に使えそうな話題": "conversation_hooks",
     "first_message_hints": "first_message_hints",
     "初回候補ヒント": "first_message_hints",
+    "初回メッセージのヒント": "first_message_hints",
     "safety_notes": "safety_notes",
+    "privacy_notes": "safety_notes",
     "安全メモ": "safety_notes",
+    "保存しない方がよい個人情報・注意": "safety_notes",
 }
 
 PROFILE_PASTE_FIELDS = [
+    "label",
     "display_name",
     "app_name",
     "age",
@@ -84,6 +95,32 @@ PROFILE_PASTE_FIELDS = [
     "safety_notes",
     "notes",
 ]
+PROFILE_LIST_FIELDS = {
+    "interests",
+    "photo_memo",
+    "avoid_topics",
+    "conversation_hooks",
+    "first_message_hints",
+    "safety_notes",
+}
+PROFILE_MULTILINE_FIELDS = PROFILE_LIST_FIELDS | {"profile_text", "notes"}
+PROFILE_SCALAR_FIELDS = {"label", "display_name", "app_name", "age", "area"}
+PROFILE_UNSET_VALUES = {"", "-", "未設定", "なし", "無し", "不明", "n/a", "none", "null"}
+PROFILE_PASTE_LABELS = {
+    "label": "label",
+    "display_name": "表示名",
+    "app_name": "アプリ",
+    "age": "年齢",
+    "area": "エリア",
+    "profile_text": "自己紹介",
+    "interests": "趣味・興味",
+    "photo_memo": "写真メモ",
+    "avoid_topics": "避けた方がよい話題",
+    "conversation_hooks": "会話に使えそうな話題",
+    "first_message_hints": "初回メッセージのヒント",
+    "safety_notes": "保存しない方がよい個人情報・注意",
+    "notes": "メモ",
+}
 
 GENERATION_OBJECTIVE_OPTIONS = [
     "相手のプロフィールに触れる",
@@ -775,7 +812,7 @@ def split_form_list(value: str) -> list[str]:
     if not value:
         return []
     normalized = value.replace(",", "\n").replace("、", "\n")
-    return [item.strip() for item in normalized.splitlines() if item.strip()]
+    return [item.strip() for item in normalized.splitlines() if item.strip() and not _is_profile_unset_value(item)]
 
 
 def build_profile_form_from_paste(text: str) -> tuple[dict[str, Any], list[str]]:
@@ -790,12 +827,18 @@ def build_profile_form_from_paste(text: str) -> tuple[dict[str, Any], list[str]]
         field, value = _split_profile_paste_line(line)
         if field:
             current_field = field
-            if value:
-                extracted[field] = _append_profile_field_value(extracted[field], value)
+            cleaned_value = _clean_profile_paste_value(value)
+            if cleaned_value:
+                extracted[field] = _append_profile_field_value(extracted[field], cleaned_value)
             continue
-        if current_field in {"profile_text", "photo_memo", "interests", "avoid_topics", "conversation_hooks", "first_message_hints", "safety_notes", "notes"}:
-            cleaned = line[2:].strip() if line.startswith(("- ", "・")) else line
-            extracted[current_field] = _append_profile_field_value(extracted[current_field], cleaned)
+        if current_field in PROFILE_MULTILINE_FIELDS:
+            cleaned = _clean_profile_paste_value(_strip_profile_list_marker(line))
+            if cleaned:
+                extracted[current_field] = _append_profile_field_value(extracted[current_field], cleaned)
+        elif current_field in PROFILE_SCALAR_FIELDS and not extracted.get(current_field):
+            cleaned = _clean_profile_paste_value(_strip_profile_list_marker(line))
+            if cleaned:
+                extracted[current_field] = cleaned
         else:
             unknown_lines.append(line)
     if unknown_lines and not extracted["profile_text"]:
@@ -811,8 +854,6 @@ def build_profile_form_from_paste(text: str) -> tuple[dict[str, Any], list[str]]
 def merge_profile_form_with_paste(form: dict[str, Any], pasted_form: dict[str, Any]) -> dict[str, Any]:
     merged = dict(form)
     for key, value in pasted_form.items():
-        if key == "label":
-            continue
         if key not in merged or not str(merged.get(key, "")).strip():
             merged[key] = value
     return merged
@@ -820,20 +861,42 @@ def merge_profile_form_with_paste(form: dict[str, Any], pasted_form: dict[str, A
 
 def build_profile_paste_preview(text: str) -> dict[str, Any]:
     extracted, warnings = build_profile_form_from_paste(text)
-    extracted_fields = {key: extracted.get(key) or "未抽出" for key in PROFILE_PASTE_FIELDS}
+    extracted_fields = {key: extracted.get(key) or "未設定" for key in PROFILE_PASTE_FIELDS}
     missing_fields = [key for key, value in extracted.items() if not value]
+    required_missing_fields = [key for key in ("label", "display_name", "profile_text") if not extracted.get(key)]
     return {
         "extracted_fields": extracted_fields,
+        "summary": [
+            {"label": "label", "value": extracted_fields["label"]},
+            {"label": "表示名", "value": extracted_fields["display_name"]},
+            {"label": "アプリ", "value": extracted_fields["app_name"]},
+            {"label": "年齢", "value": extracted_fields["age"]},
+            {"label": "エリア", "value": extracted_fields["area"]},
+        ],
+        "profile_text": extracted_fields["profile_text"],
+        "sections": [
+            {"title": PROFILE_PASTE_LABELS["interests"], "items": format_list_or_empty(split_form_list(str(extracted.get("interests", ""))))},
+            {"title": PROFILE_PASTE_LABELS["photo_memo"], "items": format_list_or_empty(split_form_list(str(extracted.get("photo_memo", ""))))},
+            {"title": PROFILE_PASTE_LABELS["conversation_hooks"], "items": format_list_or_empty(split_form_list(str(extracted.get("conversation_hooks", ""))))},
+            {"title": PROFILE_PASTE_LABELS["first_message_hints"], "items": format_list_or_empty(split_form_list(str(extracted.get("first_message_hints", ""))))},
+            {"title": PROFILE_PASTE_LABELS["avoid_topics"], "items": format_list_or_empty(split_form_list(str(extracted.get("avoid_topics", ""))))},
+            {"title": PROFILE_PASTE_LABELS["safety_notes"], "items": format_list_or_empty(split_form_list(str(extracted.get("safety_notes", ""))))},
+        ],
+        "notes": extracted_fields["notes"],
+        "missing_labels": [PROFILE_PASTE_LABELS.get(key, key) for key in required_missing_fields],
+        "required_missing_fields": required_missing_fields,
         "missing_fields": missing_fields,
         "warnings": warnings,
         "review_notes": [
             "抽出できなかった項目や違う項目は、保存前に下の入力欄で修正できます。",
+            "label / display_name / profile_text が空の場合は、貼り付け形式が標準フォーマットと違う可能性があります。",
             "スクリーンショット画像や顔写真そのものではなく、読み取ったテキストと印象メモだけを保存します。",
             "本名、勤務先、学校名、LINE ID、SNS ID、住所、電話番号、メールアドレスは保存しないでください。",
         ],
         "manual_review_required": True,
         "saves_images": False,
         "auto_send": False,
+        "detail": extracted_fields,
     }
 
 
@@ -1390,6 +1453,8 @@ def _parse_optional_int(value: Any) -> int | None:
     if value is None:
         return None
     text = str(value).strip()
+    if _is_profile_unset_value(text):
+        return None
     return int(text) if text else None
 
 
@@ -1527,6 +1592,19 @@ def _split_profile_paste_line(line: str) -> tuple[str | None, str]:
     raw_key = match.group(1).strip().lower()
     field = PROFILE_PASTE_FIELD_ALIASES.get(raw_key) or PROFILE_PASTE_FIELD_ALIASES.get(match.group(1).strip())
     return field, match.group(2).strip() if field else ""
+
+
+def _is_profile_unset_value(value: Any) -> bool:
+    return str(value or "").strip().lower() in PROFILE_UNSET_VALUES
+
+
+def _clean_profile_paste_value(value: str) -> str:
+    cleaned = value.strip()
+    return "" if _is_profile_unset_value(cleaned) else cleaned
+
+
+def _strip_profile_list_marker(line: str) -> str:
+    return re.sub(r"^\s*(?:[-*・]|[0-9]+[.)])\s*", "", line).strip()
 
 
 def _append_profile_field_value(current: Any, value: str) -> str:
