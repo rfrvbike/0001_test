@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime
+from io import BytesIO
 import re
 from pathlib import Path
 from typing import Any
@@ -832,6 +833,115 @@ def build_profile_paste_preview(text: str) -> dict[str, Any]:
         "manual_review_required": True,
         "saves_images": False,
         "auto_send": False,
+    }
+
+
+def build_profile_ocr_privacy_notes() -> list[str]:
+    return [
+        "画像そのものは保存しません",
+        "顔写真そのものは保存しません",
+        "スクリーンショット画像そのものは保存しません",
+        "OCRで読み取った文字だけを確認用に表示します",
+        "保存する前に必ず内容を確認してください",
+        "本名、勤務先、学校名、LINE ID、SNS ID、住所、電話番号、メールアドレスは保存しないでください",
+    ]
+
+
+def build_profile_ocr_failure_guidance() -> dict[str, list[str]]:
+    return {
+        "考えられる理由": [
+            "クリップボードに画像が入っていない",
+            "画像ではなくテキストをコピーしている",
+            "OCR環境が未設定",
+            "文字が小さすぎる",
+            "画像がぼやけている",
+            "日本語OCRの設定が不足している",
+        ],
+        "対処": [
+            "Windowsキー + Shift + S で範囲選択し直してください",
+            "画像を大きめに切り取ってください",
+            "文字が見える部分だけを切り取ってください",
+            "うまくいかない場合は、画像ではなくテキストを手入力またはメモ帳経由で貼り付けてください",
+            "画像ファイルアップロード方式も試してください",
+        ],
+    }
+
+
+def build_profile_ocr_text_preview(text: str) -> dict[str, Any]:
+    cleaned = text.strip()
+    return {
+        "text": cleaned,
+        "text_length": len(cleaned),
+        "warnings": detect_profile_safety_warnings({"ocr_text": cleaned}) if cleaned else [],
+        "auto_save": False,
+        "image_saved": False,
+    }
+
+
+def get_clipboard_image_for_ocr() -> tuple[Any | None, list[str]]:
+    try:
+        from PIL import ImageGrab
+    except Exception:
+        return None, ["PillowのImageGrabが利用できないため、クリップボード画像を取得できません。"]
+
+    try:
+        clipboard = ImageGrab.grabclipboard()
+    except Exception as exc:
+        return None, [f"クリップボード画像を取得できませんでした: {exc}"]
+    if clipboard is None:
+        return None, ["クリップボードに画像がありません。"]
+    if isinstance(clipboard, list):
+        return None, ["クリップボードにはファイル参照が入っています。画像ファイルアップロード方式を使ってください。"]
+    if not hasattr(clipboard, "convert"):
+        return None, ["クリップボードの内容は画像として扱えません。"]
+    return clipboard, []
+
+
+def load_uploaded_image_for_ocr(data: bytes) -> tuple[Any | None, list[str]]:
+    try:
+        from PIL import Image
+    except Exception:
+        return None, ["Pillowが利用できないため、画像ファイルを読み取れません。"]
+    try:
+        image = Image.open(BytesIO(data))
+        image.load()
+        return image, []
+    except Exception as exc:
+        return None, [f"画像ファイルを読み取れませんでした: {exc}"]
+
+
+def extract_profile_text_from_image(image: Any, languages: str = "jpn+eng") -> dict[str, Any]:
+    try:
+        import pytesseract
+    except Exception:
+        return {
+            "ok": False,
+            "text": "",
+            "engine": "pytesseract",
+            "errors": ["OCR環境が未設定です。pytesseract と Tesseract OCR本体を設定してください。"],
+            "warnings": [],
+        }
+
+    try:
+        if hasattr(image, "convert"):
+            image = image.convert("RGB")
+        text = pytesseract.image_to_string(image, lang=languages).strip()
+    except Exception as exc:
+        return {
+            "ok": False,
+            "text": "",
+            "engine": "pytesseract",
+            "errors": [f"OCRに失敗しました: {exc}"],
+            "warnings": [],
+        }
+    preview = build_profile_ocr_text_preview(text)
+    errors = [] if text else ["画像から文字を読み取れませんでした。"]
+    return {
+        "ok": bool(text),
+        "text": text,
+        "engine": "pytesseract",
+        "errors": errors,
+        "warnings": preview["warnings"],
     }
 
 

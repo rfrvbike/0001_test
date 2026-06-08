@@ -24,6 +24,9 @@ from gui_helpers import (
     build_partner_note_preview,
     build_partner_operational_display,
     build_profile_form_from_paste,
+    build_profile_ocr_failure_guidance,
+    build_profile_ocr_privacy_notes,
+    build_profile_ocr_text_preview,
     build_profile_paste_preview,
     build_profile_save_preview,
     build_profile_display_sections,
@@ -41,8 +44,10 @@ from gui_helpers import (
     format_pending_suggestions,
     format_sent_suggestions_for_outcomes,
     format_timeline_items,
+    get_clipboard_image_for_ocr,
     generate_suggestion_for_gui,
     generate_suggestion_variants_for_gui,
+    extract_profile_text_from_image,
     format_partner_preview_for_display,
     GENERATION_OBJECTIVE_OPTIONS,
     GENERATION_TONE_OPTIONS,
@@ -53,6 +58,7 @@ from gui_helpers import (
     list_real_profiles_for_gui,
     merge_profile_form_with_paste,
     parse_conversation_paste,
+    load_uploaded_image_for_ocr,
     real_profile_exists,
     save_real_profile_from_form,
     save_partner_from_profile,
@@ -454,6 +460,10 @@ def render_discard_controls(partner, suggestion: dict) -> None:
 def render_profile_registration() -> None:
     st.subheader("プロフィール登録")
 
+    if "profile_paste_text" not in st.session_state:
+        st.session_state["profile_paste_text"] = ""
+    _render_profile_ocr_intake()
+
     with st.form("profile_registration_form"):
         st.markdown("### まずここにプロフィールを貼り付け")
         st.info(
@@ -463,6 +473,7 @@ def render_profile_registration() -> None:
         profile_paste = st.text_area(
             "プロフィール情報まとめ貼り付け欄",
             height=320,
+            key="profile_paste_text",
             help="マッチングアプリ上のプロフィール文、自己紹介、趣味、エリア、年齢、写真の印象メモなどをまとめて貼り付けます。画像そのものは保存しません。",
         )
         st.caption("スクリーンショット画像や顔写真そのものは保存しません。読み取ったテキストとメモだけを貼り付けてください。")
@@ -578,6 +589,71 @@ def _render_partner_preview_card(preview_display: dict[str, object]) -> None:
         _render_summary_rows(preview_display["summary"])
         _render_bullet_items("作成時に含まれる内容", preview_display["included"])
         _render_bullet_items("注意", preview_display["cautions"])
+
+
+def _render_profile_ocr_intake() -> None:
+    st.markdown("### 画像からプロフィールを読み取る")
+    st.info(
+        "Windowsキー + Shift + S でプロフィール画面を範囲選択したあと、"
+        "「クリップボード画像を読み取る」を押してください。画像そのものは保存しません。"
+    )
+    _render_bullet_items("安全メモ", build_profile_ocr_privacy_notes())
+
+    col_clipboard, col_upload = st.columns(2)
+    with col_clipboard:
+        if st.button("クリップボード画像を読み取る"):
+            image, image_errors = get_clipboard_image_for_ocr()
+            if image_errors:
+                st.session_state["profile_ocr_errors"] = image_errors
+                st.session_state["profile_ocr_text"] = ""
+            else:
+                result = extract_profile_text_from_image(image)
+                st.session_state["profile_ocr_errors"] = result["errors"]
+                st.session_state["profile_ocr_warnings"] = result["warnings"]
+                st.session_state["profile_ocr_text"] = result["text"]
+    with col_upload:
+        uploaded_image = st.file_uploader(
+            "画像ファイルを選択",
+            type=["png", "jpg", "jpeg", "webp"],
+            help="クリップボードから読めない場合の代替です。画像そのものは保存しません。",
+        )
+        if st.button("選択画像を読み取る"):
+            if uploaded_image is None:
+                st.session_state["profile_ocr_errors"] = ["画像ファイルを選択してください。"]
+                st.session_state["profile_ocr_text"] = ""
+            else:
+                image, image_errors = load_uploaded_image_for_ocr(uploaded_image.getvalue())
+                if image_errors:
+                    st.session_state["profile_ocr_errors"] = image_errors
+                    st.session_state["profile_ocr_text"] = ""
+                else:
+                    result = extract_profile_text_from_image(image)
+                    st.session_state["profile_ocr_errors"] = result["errors"]
+                    st.session_state["profile_ocr_warnings"] = result["warnings"]
+                    st.session_state["profile_ocr_text"] = result["text"]
+
+    ocr_text = str(st.session_state.get("profile_ocr_text", "") or "")
+    ocr_errors = list(st.session_state.get("profile_ocr_errors", []) or [])
+    ocr_warnings = list(st.session_state.get("profile_ocr_warnings", []) or [])
+
+    if ocr_errors:
+        st.warning("画像から文字を読み取れませんでした。")
+        guidance = build_profile_ocr_failure_guidance()
+        with st.container(border=True):
+            _render_bullet_items("考えられる理由", guidance["考えられる理由"])
+            _render_bullet_items("対処", guidance["対処"])
+        for error in ocr_errors:
+            st.caption(error)
+
+    if ocr_text:
+        st.markdown("**読み取ったテキスト**")
+        edited_text = st.text_area("OCR結果確認・修正欄", value=ocr_text, height=180, key="profile_ocr_edit_text")
+        preview = build_profile_ocr_text_preview(edited_text)
+        if preview["warnings"] or ocr_warnings:
+            st.warning("OCR結果に注意語が含まれます。保存前に削除・修正してください: " + " / ".join(sorted(set(preview["warnings"] + ocr_warnings))))
+        if st.button("このテキストをプロフィール欄へ反映"):
+            st.session_state["profile_paste_text"] = edited_text
+            st.success("プロフィール情報まとめ貼り付け欄へ反映しました。保存前に内容を確認してください。")
 
 
 def render_partner_creation() -> None:

@@ -21,6 +21,9 @@ from gui_helpers import (
     build_conversation_import_preview,
     build_conversation_import_failure_guidance,
     build_partner_operational_display,
+    build_profile_ocr_failure_guidance,
+    build_profile_ocr_privacy_notes,
+    build_profile_ocr_text_preview,
     build_profile_display_sections,
     build_profile_save_preview,
     build_real_profile_summary_for_gui,
@@ -38,6 +41,7 @@ from gui_helpers import (
     format_pending_suggestions,
     format_sent_suggestions_for_outcomes,
     format_timeline_items,
+    extract_profile_text_from_image,
     generate_suggestion_variants_for_gui,
     generate_suggestion_for_gui,
     filter_real_profiles_for_gui,
@@ -291,6 +295,26 @@ class GuiHelperTests(unittest.TestCase):
         self.assertEqual(preview["extracted_fields"]["display_name"], "sample")
         self.assertIn("avoid_topics", preview["missing_fields"])
         self.assertTrue(preview["manual_review_required"])
+
+    def test_profile_ocr_preview_warns_and_never_marks_image_saved(self):
+        preview = build_profile_ocr_text_preview("LINEと sample@example.com は保存しない")
+        notes = build_profile_ocr_privacy_notes()
+        guidance = build_profile_ocr_failure_guidance()
+
+        self.assertFalse(preview["auto_save"])
+        self.assertFalse(preview["image_saved"])
+        self.assertIn("LINE", preview["warnings"])
+        self.assertIn("メールアドレス", preview["warnings"])
+        self.assertIn("画像そのものは保存しません", notes)
+        self.assertIn("OCR環境が未設定", guidance["考えられる理由"])
+
+    def test_profile_ocr_missing_engine_fails_without_breaking_gui(self):
+        result = extract_profile_text_from_image(object())
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["engine"], "pytesseract")
+        self.assertIn("text", result)
+        self.assertTrue(result["errors"])
 
     def test_profile_form_requires_core_fields(self):
         errors = validate_profile_form({"label": "", "display_name": "", "profile_text": "", "photo_memo": ""})
