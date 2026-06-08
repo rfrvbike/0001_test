@@ -878,6 +878,16 @@ def merge_profile_form_with_paste(form: dict[str, Any], pasted_form: dict[str, A
     return merged
 
 
+def build_profile_save_payload(
+    form_values: dict[str, Any],
+    pasted_form: dict[str, Any],
+    label_candidate: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    merged = merge_profile_form_with_paste(form_values, pasted_form)
+    merged, label_meta = apply_profile_label_candidate(merged, label_candidate)
+    return merged, label_meta, validate_profile_form(merged)
+
+
 def apply_profile_label_candidate(form: dict[str, Any], candidate: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     merged = dict(form)
     explicit_label = str(merged.get("label", "")).strip()

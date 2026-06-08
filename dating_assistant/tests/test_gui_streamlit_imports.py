@@ -27,7 +27,7 @@ class GuiStreamlitImportTests(unittest.TestCase):
         missing = sorted(name for name in imported_names if not hasattr(helpers, name))
 
         self.assertEqual(missing, [])
-        self.assertIn("apply_profile_label_candidate", imported_names)
+        self.assertIn("build_profile_save_payload", imported_names)
 
     def test_gui_streamlit_app_imports_without_import_error(self):
         module = importlib.import_module("gui_streamlit_app")

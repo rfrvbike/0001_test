@@ -28,8 +28,8 @@ from gui_helpers import (
     build_profile_ocr_privacy_notes,
     build_profile_ocr_text_preview,
     build_profile_paste_preview,
+    build_profile_save_payload,
     build_profile_save_preview,
-    apply_profile_label_candidate,
     build_profile_display_sections,
     build_real_profile_summary_for_gui,
     build_sent_outcome_preview,
@@ -59,7 +59,6 @@ from gui_helpers import (
     load_partner_choices,
     load_partner_for_view,
     list_real_profiles_for_gui,
-    merge_profile_form_with_paste,
     parse_conversation_paste,
     load_uploaded_image_for_ocr,
     real_profile_exists,
@@ -72,7 +71,6 @@ from gui_helpers import (
     mark_suggestion_sent_from_gui,
     update_sent_outcome_from_gui,
     validate_imported_turns,
-    validate_profile_form,
 )
 
 
@@ -497,15 +495,15 @@ def render_profile_registration() -> None:
                 value=str(label_seed_candidate["label"]) if label_seed_candidate else "",
                 help="英数字・ハイフン・アンダースコアのみ。label未指定時は保存用候補を表示します。",
             )
-            display_name = st.text_input("display_name")
-            app_name = st.text_input("app_name")
+            display_name = st.text_input("display_name", value=str(pasted_seed_form.get("display_name", "")))
+            app_name = st.text_input("app_name", value=str(pasted_seed_form.get("app_name", "")))
             age = st.number_input("age", min_value=18, max_value=120, value=None, step=1)
-            area = st.text_input("area")
-            profile_text = st.text_area("profile_text", height=160)
-            photo_memo = st.text_area("photo_memo", height=100)
-            interests = st.text_area("interests", height=80, help="改行、カンマ、読点で区切れます")
-            avoid_topics = st.text_area("avoid_topics", height=80, help="改行、カンマ、読点で区切れます")
-            notes = st.text_area("notes", height=100)
+            area = st.text_input("area", value=str(pasted_seed_form.get("area", "")))
+            profile_text = st.text_area("profile_text", value=str(pasted_seed_form.get("profile_text", "")), height=160)
+            photo_memo = st.text_area("photo_memo", value=str(pasted_seed_form.get("photo_memo", "")), height=100)
+            interests = st.text_area("interests", value=str(pasted_seed_form.get("interests", "")), height=80, help="改行、カンマ、読点で区切れます")
+            avoid_topics = st.text_area("avoid_topics", value=str(pasted_seed_form.get("avoid_topics", "")), height=80, help="改行、カンマ、読点で区切れます")
+            notes = st.text_area("notes", value=str(pasted_seed_form.get("notes", "")), height=100)
         confirm_local_save = st.checkbox("保存内容を確認し、local YAMLとして保存する")
         submitted = st.form_submit_button("保存")
 
@@ -522,11 +520,9 @@ def render_profile_registration() -> None:
         "notes": notes,
     }
     pasted_form, paste_warnings = build_profile_form_from_paste(profile_paste)
-    form = merge_profile_form_with_paste(form, pasted_form)
-    form, label_meta = apply_profile_label_candidate(form, label_seed_candidate)
+    form, label_meta, errors = build_profile_save_payload(form, pasted_form, label_seed_candidate)
 
     has_profile_input = any(str(value).strip() for value in form.values()) or profile_paste.strip()
-    errors = validate_profile_form(form)
     warnings = detect_profile_safety_warnings(form)
     if paste_warnings:
         warnings.extend(paste_warnings)

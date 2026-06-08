@@ -27,6 +27,7 @@ from gui_helpers import (
     build_profile_ocr_privacy_notes,
     build_profile_ocr_text_preview,
     build_profile_display_sections,
+    build_profile_save_payload,
     build_profile_save_preview,
     build_real_profile_summary_for_gui,
     can_generate_suggestion,
@@ -422,6 +423,55 @@ privacy_notes:
         self.assertEqual(preview["summary"][0]["value"], "profile_20260608_123456")
         self.assertIn("label種別", [row["label"] for row in preview["summary"]])
         self.assertEqual(preview["required_missing_fields"], [])
+
+    def test_profile_save_payload_with_label_candidate_passes_validation(self):
+        from datetime import datetime
+
+        pasted = "display_name:\nテストさん\n\nprofile_text:\n自然と食事が好きです。\n\ninterests:\n* 自然\n* 食事"
+        extracted, _warnings = build_profile_form_from_paste(pasted)
+        candidate = build_profile_label_candidate(
+            extracted["display_name"],
+            now=datetime(2026, 6, 8, 12, 34, 56),
+            existing_labels=set(),
+        )
+        form, label_meta, errors = build_profile_save_payload(
+            {"label": "", "display_name": "", "profile_text": "", "photo_memo": ""},
+            extracted,
+            candidate,
+        )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(form["label"], "profile_20260608_123456")
+        self.assertEqual(form["display_name"], "テストさん")
+        self.assertEqual(form["profile_text"], "自然と食事が好きです。")
+        self.assertEqual(split_form_list(form["interests"]), ["自然", "食事"])
+        self.assertEqual(label_meta["label"], "profile_20260608_123456")
+
+    def test_empty_form_fields_do_not_clear_extracted_values(self):
+        extracted = {
+            "label": "",
+            "display_name": "テストさん",
+            "profile_text": "自然が好きです。",
+            "photo_memo": "落ち着いた雰囲気",
+            "interests": "自然\n食事",
+        }
+        form, _label_meta, errors = build_profile_save_payload(
+            {
+                "label": "manual_label",
+                "display_name": "",
+                "profile_text": "",
+                "photo_memo": "",
+                "interests": "",
+            },
+            extracted,
+        )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(form["label"], "manual_label")
+        self.assertEqual(form["display_name"], "テストさん")
+        self.assertEqual(form["profile_text"], "自然が好きです。")
+        self.assertEqual(form["photo_memo"], "落ち着いた雰囲気")
+        self.assertEqual(form["interests"], "自然\n食事")
 
     def test_profile_ocr_preview_warns_and_never_marks_image_saved(self):
         preview = build_profile_ocr_text_preview("LINEと sample@example.com は保存しない")
