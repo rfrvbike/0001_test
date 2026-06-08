@@ -106,8 +106,9 @@ PROFILE_LIST_FIELDS = {
 PROFILE_MULTILINE_FIELDS = PROFILE_LIST_FIELDS | {"profile_text", "notes"}
 PROFILE_SCALAR_FIELDS = {"label", "display_name", "app_name", "age", "area"}
 PROFILE_UNSET_VALUES = {"", "-", "未設定", "なし", "無し", "不明", "n/a", "none", "null"}
-PROFILE_DRAFT_TEXT = "プロフィール本文未設定。あとで補完してください。"
+PROFILE_MINIMAL_TEXT = "プロフィール本文未設定。あとで補完できます。"
 PROFILE_PHOTO_ONLY_TEXT = "プロフィール本文なし。写真メモのみ登録。"
+PROFILE_DISPLAY_NAME_UNSET = "表示名未設定"
 PROFILE_PASTE_LABELS = {
     "label": "label",
     "display_name": "表示名",
@@ -887,7 +888,20 @@ def build_profile_save_payload(
 ) -> tuple[dict[str, Any], dict[str, Any], list[str], list[str]]:
     merged = merge_profile_form_with_paste(form_values, pasted_form)
     merged, label_meta = apply_profile_label_candidate(merged, label_candidate)
+    merged = normalize_profile_save_form(merged)
     return merged, label_meta, validate_profile_form(merged), build_profile_save_warnings(merged)
+
+
+def normalize_profile_save_form(form: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(form)
+    if not str(normalized.get("label", "")).strip():
+        normalized["label"] = build_profile_label_candidate(str(normalized.get("display_name", "")))["label"]
+    if _is_profile_unset_value(normalized.get("display_name", "")):
+        normalized["display_name"] = PROFILE_DISPLAY_NAME_UNSET
+    normalized.setdefault("photo_memo", "")
+    normalized.setdefault("interests", "")
+    normalized.setdefault("profile_text", "")
+    return normalized
 
 
 def apply_profile_label_candidate(form: dict[str, Any], candidate: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -920,7 +934,7 @@ def build_profile_paste_preview(text: str, label_candidate: dict[str, Any] | Non
         extracted["label"] = label_meta["label"]
     extracted_fields = {key: extracted.get(key) or "未設定" for key in PROFILE_PASTE_FIELDS}
     missing_fields = [key for key, value in extracted.items() if not value]
-    required_missing_fields = [key for key in ("label", "display_name", "profile_text") if not extracted.get(key)]
+    recommended_missing_fields = _profile_missing_fields(extracted)
     return {
         "extracted_fields": extracted_fields,
         "summary": [
@@ -942,8 +956,9 @@ def build_profile_paste_preview(text: str, label_candidate: dict[str, Any] | Non
             {"title": PROFILE_PASTE_LABELS["safety_notes"], "items": format_list_or_empty(split_form_list(str(extracted.get("safety_notes", ""))))},
         ],
         "notes": extracted_fields["notes"],
-        "missing_labels": [PROFILE_PASTE_LABELS.get(key, key) for key in required_missing_fields],
-        "required_missing_fields": required_missing_fields,
+        "missing_labels": [PROFILE_PASTE_LABELS.get(key, key) for key in recommended_missing_fields],
+        "required_missing_fields": [],
+        "recommended_missing_fields": recommended_missing_fields,
         "missing_fields": missing_fields,
         "warnings": warnings,
         "review_notes": [
@@ -1133,7 +1148,7 @@ def validate_profile_form(form: dict[str, Any]) -> list[str]:
     errors = []
     label = str(form.get("label", "")).strip()
     if not label:
-        errors.append("label は必須です。")
+        errors.append("保存先labelを自動生成できませんでした。")
     else:
         try:
             validate_real_profile_label(label)
@@ -1146,18 +1161,15 @@ def build_profile_save_warnings(form: dict[str, Any]) -> list[str]:
     missing = _profile_missing_fields(form)
     if not missing:
         return []
-    return ["不完全プロフィールとして保存します。あとで不足分を補完できます。", *[f"不足項目: {field}" for field in missing]]
+    return ["情報が少ないプロフィールとして保存できます。不足項目はあとで補完できます。", *[f"不足項目: {field}" for field in missing]]
 
 
 def build_profile_completion_status(form: dict[str, Any]) -> str:
     missing = _profile_missing_fields(form)
-    has_profile_content = bool(str(form.get("profile_text", "")).strip() or split_form_list(str(form.get("photo_memo", ""))))
-    has_any_content = has_profile_content or bool(
-        str(form.get("display_name", "")).strip()
-        or split_form_list(str(form.get("interests", "")))
-    )
-    if not has_any_content:
-        return "draft"
+    has_profile_content = bool(_profile_text_value(form, "profile_text") or split_form_list(str(form.get("photo_memo", ""))))
+    content_signal_count = _profile_content_signal_count(form)
+    if content_signal_count <= 1 or not has_profile_content:
+        return "minimal"
     if missing:
         return "incomplete"
     return "complete"
@@ -1179,11 +1191,11 @@ def detect_profile_safety_warnings(form: dict[str, Any]) -> list[str]:
 
 def build_real_profile_from_form(form: dict[str, Any]) -> dict[str, Any]:
     photo_items = split_form_list(str(form.get("photo_memo", "")))
-    profile_text = str(form.get("profile_text", "")).strip()
+    profile_text = _profile_text_value(form, "profile_text")
     if not profile_text and photo_items:
         profile_text = PROFILE_PHOTO_ONLY_TEXT
     elif not profile_text:
-        profile_text = PROFILE_DRAFT_TEXT
+        profile_text = PROFILE_MINIMAL_TEXT
     free_notes = _build_free_notes(form)
     return {
         "label": str(form.get("label", "")).strip(),
@@ -1203,7 +1215,7 @@ def build_profile_save_preview(form: dict[str, Any]) -> dict[str, Any]:
         "保存先label": data["label"],
         "display_name": str(form.get("display_name", "")).strip() or "-",
         "app_name": str(form.get("app_name", "")).strip() or "-",
-        "age": data["age"],
+        "age": data["age"] if data["age"] is not None else "-",
         "area": data["location_hint"] or "-",
         "profile_text": data["profile_text"],
         "photo_memo": data["photos_memo"],
@@ -1229,6 +1241,7 @@ def real_profile_exists(label: str) -> bool:
 
 
 def save_real_profile_from_form(form: dict[str, Any]) -> tuple[Path, list[str]]:
+    form = normalize_profile_save_form(form)
     errors = validate_profile_form(form)
     if errors:
         raise ValueError("\n".join(errors))
@@ -1534,7 +1547,10 @@ def _parse_optional_int(value: Any) -> int | None:
     text = str(value).strip()
     if _is_profile_unset_value(text):
         return None
-    return int(text) if text else None
+    if not text:
+        return None
+    match = re.search(r"\d+", text)
+    return int(match.group(0)) if match else None
 
 
 def _safe_profile_label_base(display_name: str) -> str:
@@ -1566,11 +1582,38 @@ def _empty_to_none(value: str) -> str | None:
 
 def _profile_missing_fields(form: dict[str, Any]) -> list[str]:
     missing = []
-    if not str(form.get("display_name", "")).strip():
+    display_name = str(form.get("display_name", "")).strip()
+    if _is_profile_unset_value(display_name) or display_name == PROFILE_DISPLAY_NAME_UNSET:
         missing.append("display_name")
-    if not str(form.get("profile_text", "")).strip() and not split_form_list(str(form.get("photo_memo", ""))):
+    if not _profile_text_value(form, "profile_text") and not split_form_list(str(form.get("photo_memo", ""))):
         missing.append("profile_text_or_photo_memo")
+    if not split_form_list(str(form.get("interests", ""))):
+        missing.append("interests")
     return missing
+
+
+def _profile_content_signal_count(form: dict[str, Any]) -> int:
+    signals = [
+        _profile_text_value(form, "display_name")
+        and _profile_text_value(form, "display_name") != PROFILE_DISPLAY_NAME_UNSET,
+        _profile_text_value(form, "profile_text"),
+        split_form_list(str(form.get("photo_memo", ""))),
+        split_form_list(str(form.get("interests", ""))),
+        _profile_text_value(form, "age"),
+        _profile_text_value(form, "area"),
+        _profile_text_value(form, "app_name"),
+        split_form_list(str(form.get("conversation_hooks", ""))),
+        split_form_list(str(form.get("first_message_hints", ""))),
+        split_form_list(str(form.get("avoid_topics", ""))),
+        split_form_list(str(form.get("safety_notes", ""))),
+        _profile_text_value(form, "notes"),
+    ]
+    return sum(1 for signal in signals if bool(signal))
+
+
+def _profile_text_value(form: dict[str, Any], key: str) -> str:
+    value = str(form.get(key, "")).strip()
+    return "" if _is_profile_unset_value(value) else value
 
 
 def _build_free_notes(form: dict[str, Any]) -> str | None:

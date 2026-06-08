@@ -520,9 +520,11 @@ def render_profile_registration() -> None:
         "notes": notes,
     }
     pasted_form, paste_warnings = build_profile_form_from_paste(profile_paste)
+    has_profile_input = bool(profile_paste.strip()) or any(
+        str(value).strip() for key, value in form.items() if key != "label"
+    )
     form, label_meta, errors, save_readiness_warnings = build_profile_save_payload(form, pasted_form, label_seed_candidate)
 
-    has_profile_input = any(str(value).strip() for value in form.values()) or profile_paste.strip()
     warnings = detect_profile_safety_warnings(form)
     warnings.extend(save_readiness_warnings)
     if paste_warnings:
@@ -543,13 +545,16 @@ def render_profile_registration() -> None:
     if submitted and errors:
         for error in errors:
             st.error(error)
-        st.error("保存するには、表示名とプロフィール本文または写真メモが必要です。")
+        st.error("保存先labelを安全に決められないため保存できません。")
     if submitted and warnings:
         st.warning("保存前に見直してください: " + " / ".join(warnings))
 
     if submitted:
+        if not has_profile_input:
+            st.error("保存対象のプロフィール情報が空です。貼り付け欄または補助入力欄に1文字以上入力してください。")
+            return
         if errors:
-            st.error("保存できません。入力内容を確認してください。")
+            st.error("保存できません。保存先labelを確認してください。")
             return
         if not confirm_local_save:
             st.error("保存前確認チェックを入れてください。")

@@ -103,12 +103,12 @@ class RealProfileManagerTests(unittest.TestCase):
         self.assertIn("【プロフィール文】", output)
         self.assertIn("プロフィール文", output)
 
-    def test_empty_profile_text_is_saved_as_draft_placeholder(self):
-        path, warnings = create_real_profile("draft_001", "")
+    def test_empty_profile_text_is_saved_as_minimal_placeholder(self):
+        path, warnings = create_real_profile("minimal_empty_001", "")
         profile = load_target_profile(path)
 
         self.assertEqual(warnings, [])
-        self.assertEqual(profile.profile_text, "プロフィール本文未設定。あとで補完してください。")
+        self.assertEqual(profile.profile_text, "プロフィール本文未設定。あとで補完できます。")
 
     def test_existing_profile_is_not_overwritten(self):
         create_real_profile("same_001", "first")
