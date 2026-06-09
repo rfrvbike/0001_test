@@ -233,6 +233,107 @@ class GuiStreamlitImportTests(unittest.TestCase):
                     self.assertTrue(any("partner_001" not in option for option in options))
                     self.assertTrue(format_partner_preview_for_display(label, "", "pairs", "")["summary"])
 
+    def test_customer_flow_from_sparse_profile_to_conversation_records(self):
+        from streamlit.testing.v1 import AppTest
+        from src.partner_store import load_partner
+
+        app_file = APP_DIR / "gui_streamlit_app.py"
+        sparse_profile = "\n".join(
+            [
+                "display_name:",
+                "未設定",
+                "",
+                "profile_text:",
+                "よろしくお願いします。",
+                "",
+                "interests:",
+                "- 未設定",
+                "",
+                "photo_memo:",
+                "- 未設定",
+                "",
+                "conversation_hooks:",
+                "- 未設定",
+                "",
+                "first_message_hints:",
+                "- 未設定",
+                "",
+                "avoid_topics:",
+                "- 未設定",
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            real_dir = Path(tmp) / "real_profiles"
+            partner_dir = Path(tmp) / "partners"
+            with unittest.mock.patch.dict(
+                os.environ,
+                {
+                    "DATING_ASSISTANT_REAL_PROFILE_DIR": str(real_dir),
+                    "DATING_ASSISTANT_PARTNER_DIR": str(partner_dir),
+                },
+                clear=False,
+            ):
+                at = AppTest.from_file(str(app_file), default_timeout=20)
+                at.run()
+                at.text_area[0].set_value(sparse_profile)
+                at.checkbox[1].set_value(True)
+                at.button[2].click().run()
+
+                self.assertEqual(len(at.exception), 0)
+                self.assertEqual(len(at.error), 0)
+                self.assertGreaterEqual(len(at.warning), 1)
+                self.assertEqual(len(list(real_dir.glob("*.yaml"))), 1)
+                self.assertEqual(len(list(partner_dir.glob("partner_*.yaml"))), 1)
+
+                at.button[3].click().run()
+                partner = load_partner("partner_001")
+                self.assertEqual(partner.display_name, "表示名未設定")
+                self.assertEqual(partner.conversation, [])
+                self.assertIn("表示名未設定", str(at.selectbox[0].options[0]))
+                self.assertNotIn("partner_001", str(at.selectbox[0].options[0]))
+
+                at.checkbox[2].set_value(True)
+                at.button[1].click().run()
+                partner = load_partner("partner_001")
+                self.assertEqual(len([item for item in partner.pending_suggestions if item.status == "pending"]), 3)
+                self.assertEqual(len(at.exception), 0)
+                self.assertEqual(len(at.error), 0)
+
+                at.run()
+                at.checkbox[3].set_value(True)
+                at.button[2].click().run()
+                partner = load_partner("partner_001")
+                self.assertEqual(len(partner.sent_records), 1)
+                self.assertEqual(len(partner.conversation), 1)
+                self.assertEqual(partner.conversation[0].speaker, "user")
+                self.assertTrue(partner.message_state.awaiting_partner_reply)
+
+                at.checkbox[4].set_value(True)
+                at.button[4].click().run()
+                partner = load_partner("partner_001")
+                self.assertTrue(any(item.status == "discarded" for item in partner.pending_suggestions))
+
+                at.selectbox[2].set_value(at.selectbox[2].options[1])
+                at.text_area[6].set_value("返信が来た。次もカフェの話で続ける。")
+                at.checkbox[5].set_value(True)
+                at.button[5].click().run()
+                partner = load_partner("partner_001")
+                self.assertEqual(partner.sent_records[0].outcome_status, "返信あり")
+                self.assertIn("カフェ", partner.sent_records[0].outcome_memo)
+
+                at.text_area[1].set_value("partner: カフェ好きです。")
+                at.run()
+                self.assertEqual(len(at.exception), 0)
+                self.assertEqual(len(at.error), 0)
+                at.checkbox[2].set_value(True)
+                at.button[1].click().run()
+                partner = load_partner("partner_001")
+                self.assertEqual(partner.conversation[-1].speaker, "partner")
+                self.assertIn("カフェ", partner.conversation[-1].text)
+                self.assertTrue(partner.message_state.awaiting_user_action)
+                self.assertFalse(partner.message_state.awaiting_partner_reply)
+
     def test_profile_registration_save_button_blocks_only_blank_profile(self):
         from streamlit.testing.v1 import AppTest
 

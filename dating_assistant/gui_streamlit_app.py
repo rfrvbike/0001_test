@@ -203,11 +203,12 @@ def render_inline_conversation_import(partner) -> None:
             key=f"inline_conversation_paste_{partner.partner_id}",
         )
         if pasted.strip():
-            parsed = parse_conversation_paste(pasted)
-            preview = build_conversation_import_preview(parsed["turns"])
-            errors = validate_imported_turns(parsed["turns"])
-            warnings = detect_conversation_safety_warnings(pasted)
-            if parsed["unknown_lines"]:
+            turns, parse_warnings = parse_conversation_paste(pasted)
+            errors = validate_imported_turns(turns)
+            warnings = list(parse_warnings)
+            warnings.extend(detect_conversation_safety_warnings(pasted))
+            preview = build_conversation_import_preview(partner, turns, warnings)
+            if parse_warnings:
                 guidance = build_conversation_import_failure_guidance()
                 st.warning("読み取れない行があります。自分: / 相手: の形に直すと追加しやすくなります。")
                 with st.expander("直し方のヒント", expanded=False):
@@ -229,11 +230,11 @@ def render_inline_conversation_import(partner) -> None:
                 key=f"inline_conversation_button_{partner.partner_id}",
             ):
                 try:
-                    result = append_conversation_turns_to_partner(partner.partner_id, parsed["turns"])
+                    result = append_conversation_turns_to_partner(partner.partner_id, turns)
                 except ValueError as error:
                     st.error(str(error))
                     return
-                st.success(f"{result['added_count']}件の会話履歴をlocalに追加しました。")
+                st.success(f"{len(turns)}件の会話履歴をlocalに追加しました。")
                 st.rerun()
 
 
@@ -899,8 +900,8 @@ def render_partner_creation() -> None:
     with st.expander("保存プレビューの詳細JSONを表示", expanded=False):
         st.json(preview)
 
-    confirm_create = st.checkbox("保存内容を確認し、partner YAMLとしてlocal保存する")
-    submitted = st.button("partnerを作成")
+    confirm_create = st.checkbox("保存内容を確認し、会話対象としてlocal保存する")
+    submitted = st.button("会話対象として登録")
     if submitted:
         if not confirm_create:
             st.error("保存前確認チェックを入れてください。")
