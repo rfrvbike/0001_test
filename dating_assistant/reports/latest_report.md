@@ -1,5 +1,14 @@
 # dating_assistant latest_report
 
+## 作業No.152 販売前ベータ配布前チェック
+
+- 販売前ベータ配布前チェックとして、Git管理対象、.gitignore、起動bat、README上部、設定・ヘルプタブ、reports/docs内の実データ混入リスクを確認した。
+- data/local/ と outputs/local/ は実データをGit管理しない方針で、trackedは .gitkeep と example に限定されていることを確認した。
+- 実プロフィールYAML、partner実データYAML、画像、顔写真、スクリーンショット、一時ファイル、untrackedの混入がないことを確認した。
+- dating_assistant/.streamlit/secrets.toml、.streamlit配下のlocalファイル、Streamlit cacheを.gitignoreへ追加し、配布前のsecret/cache混入を防ぐ方針を補強した。
+- README上部と設定・ヘルプタブに、購入者が触るものと通常触らないものを追記した。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作機能は追加していない。
+
 ## 作業No.151 販売前ベータ版チェック
 
 - 販売前ベータ版として、起動方法、README上部、設定・ヘルプタブ、local保存の説明、安全上の注意、現時点の制限を確認・整理した。

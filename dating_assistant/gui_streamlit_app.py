@@ -1206,6 +1206,11 @@ def render_help() -> None:
             "入力したプロフィール、会話履歴、送信済み記録、メモは、基本的にお使いのPC内にlocal保存されます。"
             "外部サービスへ自動送信したり、マッチングアプリへ直接送ったりしません。"
         )
+    with st.expander("Q. どのファイルを触ればよいですか？"):
+        st.markdown(
+            "`start_dating_assistant_gui.bat` を起動し、ブラウザでGUIを操作してください。"
+            "通常利用では、Pythonファイル、YAMLファイル、data/local、outputs/local、Git関連ファイルを開いたり編集したりする必要はありません。"
+        )
     with st.expander("Q. 画像やスクリーンショットは保存されますか？"):
         st.markdown(
             "保存しません。画像から読み取った文字や、ユーザーが確認して入力したメモだけを保存対象にします。"

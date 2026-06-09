@@ -30,6 +30,12 @@ dating_assistantは、マッチングアプリ上の相手プロフィールや�
 
 起動できない場合は、もう一度 `start_dating_assistant_gui.bat` から起動し直してください。このbatは古いStreamlit画面が残っている場合の停止処理と、GUIのimport確認を行ってから起動します。
 
+### 購入者が触るもの・触らないもの
+
+購入者が基本的に触るものは、`start_dating_assistant_gui.bat`、ブラウザで開いたGUI、このREADME上部、必要に応じてChatGPTで整理したプロフィール文だけです。
+
+通常利用では、`dating_assistant/src/`、`tests/`、`reports/`、`data/local/`、`outputs/local/`、YAMLファイル、Pythonファイル、`.env`、Git関連ファイルを開いたり編集したりする必要はありません。実プロフィールや会話履歴はGUIからlocal保存されます。
+
 ### 初めて使うときの流れ
 
 1. 「プロフィール登録」を開きます。

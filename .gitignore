@@ -34,6 +34,9 @@ dating_assistant/data/local/real_profiles/*
 !dating_assistant/data/local/real_profiles/.gitkeep
 dating_assistant/outputs/local/*
 !dating_assistant/outputs/local/.gitkeep
+dating_assistant/.streamlit/secrets.toml
+dating_assistant/.streamlit/*.local.*
+dating_assistant/.streamlit/cache/
 dating_assistant/reports/archive_staging_report.md
 
 # Local/generated reports
