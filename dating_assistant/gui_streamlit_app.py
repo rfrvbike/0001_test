@@ -562,7 +562,7 @@ def render_profile_registration() -> None:
             interests = st.text_area("interests", value=str(pasted_seed_form.get("interests", "")), height=80, help="改行、カンマ、読点で区切れます")
             avoid_topics = st.text_area("avoid_topics", value=str(pasted_seed_form.get("avoid_topics", "")), height=80, help="改行、カンマ、読点で区切れます")
             notes = st.text_area("notes", value=str(pasted_seed_form.get("notes", "")), height=100)
-        confirm_local_save = st.checkbox("保存内容を確認し、local YAMLとして保存する")
+        confirm_local_save = st.checkbox("保存内容を確認し、このプロフィールをlocal保存する")
         submitted = st.form_submit_button("保存")
 
     form = {
@@ -595,12 +595,17 @@ def render_profile_registration() -> None:
     preview = None
     if has_profile_input and not errors:
         preview = build_profile_save_preview(form)
-        st.markdown("**保存プレビュー**")
+        st.markdown("**保存前の確認**")
         display_preview = dict(preview)
         display_preview.pop("保存先label", None)
         display_preview.pop("菫晏ｭ伜・label", None)
         display_preview["保存ID"] = "自動生成済み"
-        st.json(display_preview)
+        st.write(f"表示名: {form.get('display_name') or '表示名未設定'}")
+        st.write(f"自己紹介: {form.get('profile_text') or 'プロフィール本文未設定'}")
+        st.write(f"状態: {form.get('profile_status') or '情報確認中'}")
+        st.caption("保存IDは自動生成します。情報が少ない場合も、あとから補完できます。")
+        with st.expander("保存前データの詳細を表示", expanded=False):
+            st.json(display_preview)
         if real_profile_exists(preview["保存先label"]):
             errors.append("同じlabelのreal profileが既に存在します。上書きはできません。")
 
@@ -643,7 +648,9 @@ def render_profile_registration() -> None:
             with st.expander("開発者向け詳細"):
                 st.code(f"{type(error).__name__}: {error}")
             return
-        st.success(f"プロフィールを保存しました: {path}")
+        st.success("プロフィールを保存しました。")
+        with st.expander("保存先の詳細を表示", expanded=False):
+            st.code(str(path))
         if save_warnings:
             st.warning("保存内容に注意語が含まれます: " + " / ".join(save_warnings))
         try:

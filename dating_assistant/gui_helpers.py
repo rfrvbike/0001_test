@@ -283,7 +283,7 @@ def build_partner_profile_card(partner: PartnerRecord) -> dict[str, Any]:
             {"title": "初回メッセージのヒント", "items": format_list_or_empty(_free_note_list(profile.free_notes or "", "first_message_hints"))},
             {"title": "避けた方がよさそうな話題", "items": format_list_or_empty(_free_note_list(profile.free_notes or "", "avoid_topics"))},
         ],
-        "notes": profile.free_notes or "",
+        "notes": _free_note_body(profile.free_notes or ""),
         "detail": {
             "partner_id": partner.partner_id,
             "status": partner.status,
@@ -2005,8 +2005,10 @@ def _first_message_variant(partner: PartnerRecord | None, base: str, objective: 
     if index == 0:
         return _trim_for_gui(f"はじめまして。{hook}が印象に残りました。休日はそのあたりで過ごすことが多いですか？", 120)
     if index == 1:
-        return _trim_for_gui(f"はじめまして。{hook}の雰囲気が自然で、話してみたいなと思いました。最近もよく楽しんでいますか？", 120)
-    return _trim_for_gui(f"はじめまして。{hook}の話、少し気になりました。気軽に話せたら嬉しいです。", 100)
+        natural_hook = hook if hook.endswith("雰囲気") else f"{hook}の雰囲気"
+        return _trim_for_gui(f"はじめまして。{natural_hook}が自然で、話してみたいなと思いました。最近もよく楽しんでいますか？", 120)
+    topic_hook = "プロフィール" if hook.endswith("雰囲気") else hook
+    return _trim_for_gui(f"はじめまして。{topic_hook}の話、少し気になりました。気軽に話せたら嬉しいです。", 100)
 
 
 def _safe_reply_variant(

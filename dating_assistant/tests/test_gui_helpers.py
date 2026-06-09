@@ -224,6 +224,28 @@ class GuiHelperTests(unittest.TestCase):
         self.assertIn("カフェが好きです。", card["profile_text"])
         self.assertTrue(any(section["title"] == "会話に使えそうな話題" for section in card["sections"]))
 
+    def test_partner_profile_card_hides_internal_profile_metadata_notes(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="表示名未設定",
+            profile=PartnerProfile(
+                profile_text="よろしくお願いします。",
+                free_notes=(
+                    "profile_status: minimal\n"
+                    "profile_missing_fields:\n"
+                    "- display_name\n"
+                    "- interests\n"
+                    "display_name: 表示名未設定"
+                ),
+            ),
+        )
+
+        card = build_partner_profile_card(partner)
+
+        self.assertEqual(card["notes"], "")
+        self.assertNotIn("profile_status", str(card))
+        self.assertNotIn("profile_missing_fields", str(card))
+
     def test_partner_notes_can_be_saved_loaded_and_warn_on_privacy_words(self):
         partner = PartnerRecord(partner_id="partner_001", display_name="sample", status="chatting")
         save_partner(partner)
@@ -1232,6 +1254,30 @@ privacy_notes:
         self.assertTrue(all("temperature" in item for item in result["variants"]))
         self.assertTrue(all("aim" in item for item in result["variants"]))
         self.assertTrue(all("quality_check" in item for item in result["variants"]))
+
+    def test_first_message_variants_avoid_duplicate_profile_atmosphere_phrase(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="表示名未設定",
+            status="new_profile",
+            profile=PartnerProfile(
+                profile_text="よろしくお願いします。",
+                free_notes="profile_status: minimal\ndisplay_name: 表示名未設定",
+            ),
+        )
+        save_partner(partner)
+
+        result = generate_suggestion_variants_for_gui(
+            "partner_001",
+            ["相手のプロフィールに触れる", "質問を1つ入れる"],
+            "自然",
+            "",
+        )
+        texts = [variant["text"] for variant in result["variants"]]
+
+        self.assertTrue(any("プロフィールの雰囲気" in text for text in texts))
+        self.assertFalse(any("雰囲気の雰囲気" in text for text in texts))
+        self.assertEqual(len(result["variants"]), 3)
 
     def test_generation_preflight_emphasizes_early_risky_objectives(self):
         partner = PartnerRecord(
