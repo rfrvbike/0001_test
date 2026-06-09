@@ -1141,6 +1141,10 @@ def render_conversation_import() -> None:
 def render_help() -> None:
     st.subheader("設定・ヘルプ")
     st.caption("このツールの使い方、安全な利用方法、local保存の考え方を確認できます。")
+    st.info(
+        "まずは「プロフィール登録」で相手情報を保存し、普段は「相手と会話する」で候補作成と記録を行います。"
+        "実際の送信は必ずユーザー本人がマッチングアプリ上で手動で行います。"
+    )
     st.markdown("### このツールでできること")
     _render_bullet_items(
         "できること",
@@ -1186,6 +1190,31 @@ def render_help() -> None:
             "データはlocal保存です。実データをGitに入れないでください",
         ],
     )
+    st.markdown("### よくある困りごと")
+    with st.expander("Q. 起動できないときはどうすればよいですか？"):
+        st.markdown(
+            "- `start_dating_assistant_gui.bat` をダブルクリックして起動し直してください。\n"
+            "- 起動後はブラウザで `http://localhost:8501` を開きます。\n"
+            "- 古い画面が残っている場合は、ブラウザを再読み込みしてください。"
+        )
+    with st.expander("Q. このツールからマッチングアプリへ自動送信されますか？"):
+        st.markdown(
+            "いいえ。候補文を作るだけです。実際の送信は、ユーザー本人がマッチングアプリ上で手動で行います。"
+        )
+    with st.expander("Q. 入力したプロフィールや会話履歴はどこに保存されますか？"):
+        st.markdown(
+            "入力したプロフィール、会話履歴、送信済み記録、メモは、基本的にお使いのPC内にlocal保存されます。"
+            "外部サービスへ自動送信したり、マッチングアプリへ直接送ったりしません。"
+        )
+    with st.expander("Q. 画像やスクリーンショットは保存されますか？"):
+        st.markdown(
+            "保存しません。画像から読み取った文字や、ユーザーが確認して入力したメモだけを保存対象にします。"
+        )
+    with st.expander("Q. プロフィール情報が少ない場合でも使えますか？"):
+        st.markdown(
+            "使えます。表示名や自己紹介が少なくてもプロフィールとして保存できます。"
+            "不足している内容は警告として表示され、あとから補完できます。"
+        )
 
 
 def _normalize_conversation_labels(text: str, user_label: str, partner_label: str) -> str:

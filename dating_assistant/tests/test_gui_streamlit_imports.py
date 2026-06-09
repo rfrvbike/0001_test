@@ -230,6 +230,10 @@ class GuiStreamlitImportTests(unittest.TestCase):
                 self.assertIn("マッチングアプリへの自動送信", visible_text)
                 self.assertIn("プロフィール画像、顔写真、スクリーンショット画像そのものの保存", visible_text)
                 self.assertIn("データはlocal保存", visible_text)
+                self.assertIn("よくある困りごと", visible_text)
+                self.assertIn("start_dating_assistant_gui.bat", visible_text)
+                self.assertIn("入力したプロフィール、会話履歴、送信済み記録、メモ", visible_text)
+                self.assertIn("表示名や自己紹介が少なくてもプロフィールとして保存できます", visible_text)
 
     def test_profile_registration_save_button_accepts_sparse_profiles(self):
         from streamlit.testing.v1 import AppTest
