@@ -1,6 +1,8 @@
 import ast
 import importlib
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -38,6 +40,153 @@ class GuiStreamlitImportTests(unittest.TestCase):
         preflight = importlib.import_module("check_dating_gui_imports")
 
         self.assertEqual(preflight.main(), 0)
+
+    def test_profile_registration_save_button_accepts_sparse_profiles(self):
+        from streamlit.testing.v1 import AppTest
+        from src.loaders import load_target_profile
+        from gui_helpers import (
+            PROFILE_MINIMAL_TEXT,
+            PROFILE_PHOTO_ONLY_TEXT,
+            filter_real_profiles_for_gui,
+            format_partner_preview_for_display,
+        )
+
+        cases = [
+            {
+                "paste": "よろしくお願いします。",
+                "profile_text": "よろしくお願いします。",
+                "hobbies": [],
+                "photos_memo": [],
+            },
+            {
+                "paste": "interests:\n- カフェ",
+                "profile_text": PROFILE_MINIMAL_TEXT,
+                "hobbies": ["カフェ"],
+                "photos_memo": [],
+            },
+            {
+                "paste": "photo_memo:\n- 明るい雰囲気",
+                "profile_text": PROFILE_PHOTO_ONLY_TEXT,
+                "hobbies": [],
+                "photos_memo": ["明るい雰囲気"],
+            },
+            {
+                "paste": "display_name:\n未設定",
+                "profile_text": PROFILE_MINIMAL_TEXT,
+                "hobbies": [],
+                "photos_memo": [],
+            },
+            {
+                "paste": "\n".join(
+                    [
+                        "display_name:",
+                        "未設定",
+                        "",
+                        "app_name:",
+                        "未設定",
+                        "",
+                        "age:",
+                        "未設定",
+                        "",
+                        "area:",
+                        "未設定",
+                        "",
+                        "profile_text:",
+                        "よろしくお願いします。",
+                        "",
+                        "interests:",
+                        "-",
+                        "",
+                        "photo_memo:",
+                        "-",
+                        "",
+                        "conversation_hooks:",
+                        "-",
+                        "",
+                        "first_message_hints:",
+                        "-",
+                        "",
+                        "avoid_topics:",
+                        "-",
+                        "",
+                        "notes:",
+                        "情報少なめ。あとで補完する。",
+                        "",
+                        "privacy_notes:",
+                        "- 個人情報は保存しない",
+                    ]
+                ),
+                "profile_text": "よろしくお願いします。",
+                "hobbies": [],
+                "photos_memo": [],
+                "free_notes_contains": "情報少なめ。あとで補完する。",
+            },
+        ]
+        app_file = APP_DIR / "gui_streamlit_app.py"
+
+        for index, case in enumerate(cases, start=1):
+            with self.subTest(case=index), tempfile.TemporaryDirectory() as tmp:
+                real_dir = Path(tmp) / "real_profiles"
+                partner_dir = Path(tmp) / "partners"
+                with unittest.mock.patch.dict(
+                    os.environ,
+                    {
+                        "DATING_ASSISTANT_REAL_PROFILE_DIR": str(real_dir),
+                        "DATING_ASSISTANT_PARTNER_DIR": str(partner_dir),
+                    },
+                    clear=False,
+                ):
+                    at = AppTest.from_file(str(app_file), default_timeout=20)
+                    at.run()
+                    at.text_area[0].set_value(case["paste"])
+                    at.checkbox[0].set_value(True)
+                    at.button[2].click().run()
+
+                    saved_paths = sorted(real_dir.glob("*.yaml"))
+                    self.assertEqual(len(at.exception), 0)
+                    self.assertEqual(len(at.error), 0)
+                    self.assertGreaterEqual(len(at.warning), 1)
+                    self.assertGreaterEqual(len(at.success), 1)
+                    self.assertEqual(len(saved_paths), 1)
+
+                    label = saved_paths[0].stem
+                    profile = load_target_profile(saved_paths[0])
+                    self.assertEqual(profile.profile_text, case["profile_text"])
+                    self.assertEqual(profile.hobbies, case["hobbies"])
+                    self.assertEqual(profile.photos_memo, case["photos_memo"])
+                    if case.get("free_notes_contains"):
+                        self.assertIn(case["free_notes_contains"], profile.free_notes or "")
+                    self.assertTrue(any(item["label"] == label for item in filter_real_profiles_for_gui(label)))
+
+                    options = []
+                    for selectbox in at.selectbox:
+                        options.extend([str(option) for option in (getattr(selectbox, "options", []) or [])])
+                    self.assertTrue(any(label in option for option in options))
+                    self.assertTrue(format_partner_preview_for_display(label, "", "pairs", "")["summary"])
+
+    def test_profile_registration_save_button_blocks_only_blank_profile(self):
+        from streamlit.testing.v1 import AppTest
+
+        app_file = APP_DIR / "gui_streamlit_app.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            real_dir = Path(tmp) / "real_profiles"
+            partner_dir = Path(tmp) / "partners"
+            with unittest.mock.patch.dict(
+                os.environ,
+                {
+                    "DATING_ASSISTANT_REAL_PROFILE_DIR": str(real_dir),
+                    "DATING_ASSISTANT_PARTNER_DIR": str(partner_dir),
+                },
+                clear=False,
+            ):
+                at = AppTest.from_file(str(app_file), default_timeout=20)
+                at.run()
+                at.checkbox[0].set_value(True)
+                at.button[2].click().run()
+
+                self.assertEqual(len(at.exception), 0)
+                self.assertGreaterEqual(len(at.error), 1)
+                self.assertEqual(list(real_dir.glob("*.yaml")), [])
 
 
 if __name__ == "__main__":

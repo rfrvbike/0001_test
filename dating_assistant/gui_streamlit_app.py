@@ -28,6 +28,7 @@ from gui_helpers import (
     build_profile_ocr_privacy_notes,
     build_profile_ocr_text_preview,
     build_profile_paste_preview,
+    build_profile_save_debug_info,
     build_profile_save_payload,
     build_profile_save_preview,
     build_profile_display_sections,
@@ -550,14 +551,21 @@ def render_profile_registration() -> None:
         st.warning("保存前に見直してください: " + " / ".join(warnings))
 
     if submitted:
+        debug_info = build_profile_save_debug_info(form, errors, warnings, has_profile_input=has_profile_input)
         if not has_profile_input:
             st.error("保存対象のプロフィール情報が空です。貼り付け欄または補助入力欄に1文字以上入力してください。")
+            with st.expander("保存前データ確認", expanded=True):
+                st.json(debug_info)
             return
         if errors:
             st.error("保存できません。保存先labelを確認してください。")
+            with st.expander("保存前データ確認", expanded=True):
+                st.json(debug_info)
             return
         if not confirm_local_save:
             st.error("保存前確認チェックを入れてください。")
+            with st.expander("保存前データ確認", expanded=False):
+                st.json(debug_info)
             return
         try:
             path, save_warnings = save_real_profile_from_form(form)
@@ -566,6 +574,8 @@ def render_profile_registration() -> None:
             return
         except ValueError as error:
             st.error(str(error))
+            with st.expander("保存前データ確認", expanded=True):
+                st.json(debug_info)
             return
         except Exception as error:
             st.error("保存用データの形式に問題があります。プロフィール文内の記号や改行を安全に保存できるよう処理します。")

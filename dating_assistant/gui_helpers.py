@@ -1164,6 +1164,32 @@ def build_profile_save_warnings(form: dict[str, Any]) -> list[str]:
     return ["情報が少ないプロフィールとして保存できます。不足項目はあとで補完できます。", *[f"不足項目: {field}" for field in missing]]
 
 
+def build_profile_save_debug_info(
+    form: dict[str, Any],
+    errors: list[str] | None = None,
+    warnings: list[str] | None = None,
+    has_profile_input: bool = True,
+) -> dict[str, Any]:
+    photo_items = split_form_list(str(form.get("photo_memo", "")))
+    interest_items = split_form_list(str(form.get("interests", "")))
+    missing = _profile_missing_fields(form)
+    validation_errors = list(errors or validate_profile_form(form))
+    return {
+        "save_payload.label": str(form.get("label", "")).strip(),
+        "save_payload.display_name": str(form.get("display_name", "")).strip(),
+        "save_payload.has_profile_text": bool(_profile_text_value(form, "profile_text")),
+        "save_payload.photo_memo_count": len(photo_items),
+        "save_payload.interests_count": len(interest_items),
+        "missing_fields": missing,
+        "profile_status": build_profile_completion_status(form),
+        "validation_result": "ok" if not validation_errors else "error",
+        "validation_errors": validation_errors,
+        "warnings": list(warnings or []),
+        "has_profile_input": has_profile_input,
+        "can_save": has_profile_input and not validation_errors,
+    }
+
+
 def build_profile_completion_status(form: dict[str, Any]) -> str:
     missing = _profile_missing_fields(form)
     has_profile_content = bool(_profile_text_value(form, "profile_text") or split_form_list(str(form.get("photo_memo", ""))))

@@ -1,5 +1,15 @@
 # dating_assistant latest_report
 
+## 作業No.141 プロフィール保存ボタン実経路の固定
+- プロフィール登録画面の保存ボタン押下時に、必ず `build_profile_save_payload` で作った保存用payloadを使う経路であることを再確認し、保存失敗時だけ `save_payload.label` / `display_name` / `profile_text` 有無 / `photo_memo` 件数 / `interests` 件数 / `missing_fields` / `profile_status` / validation結果 / `can_save` を折りたたみ表示できるようにした。
+- 保存ボタン経路に残っていた古い必須チェック文言が、プロフィール保存ブロックには使われていないことを確認した。
+- Streamlit AppTestで、実際のプロフィール登録画面の保存ボタンを押す経路を固定テスト化した。
+- AppTest確認ケース: 「よろしくお願いします。」だけ、`interests: カフェ`だけ、`photo_memo: 明るい雰囲気`だけ、`display_name: 未設定`だけ、ChatGPTプロジェクト風の薄い長文出力、完全空欄。
+- ケースA〜Eは赤エラーなし、warningあり、YAML保存、読み戻し、保存済みプロフィール検索、partner作成タブ表示、partner作成プレビュー表示を確認した。
+- 完全空欄だけは保存対象なしとしてブロックし、YAMLを作成しないことを確認した。
+- テスト用real_profile YAML / partner YAMLは一時ディレクトリで作成し、テスト終了時に削除する。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作は追加していない。
+
 ## 作業No.140 情報少なめプロフィールの正式保存対応
 - プロフィール登録画面で、情報量が少ない相手プロフィールを「下書き」ではなく、1件の正式なプロフィールデータとして保存できるようにした。
 - `label` が空でも保存payloadへ自動生成labelを必ず反映し、`display_name` が空の場合は「表示名未設定」として扱う。
