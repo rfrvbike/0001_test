@@ -183,7 +183,7 @@ class GuiStreamlitImportTests(unittest.TestCase):
                 for selectbox in at.selectbox:
                     selectbox_options.extend([str(option) for option in (getattr(selectbox, "options", []) or [])])
 
-                self.assertIn("保存済みプロフィール管理", visible_text)
+                self.assertIn("登録済み相手の管理", visible_text)
                 self.assertIn("登録済みの相手一覧", visible_text)
                 self.assertIn("通常の候補作成は「相手と会話する」", visible_text)
                 self.assertIn("表示名やメモだけを更新します", visible_text)
@@ -191,6 +191,45 @@ class GuiStreamlitImportTests(unittest.TestCase):
                 self.assertIn("この相手と会話する", button_labels)
                 self.assertTrue(any("ケイコさん" in option for option in selectbox_options))
                 self.assertTrue(any("ケイコさん" in option and "partner_001" not in option for option in selectbox_options))
+
+    def test_navigation_and_help_are_customer_facing(self):
+        from streamlit.testing.v1 import AppTest
+
+        app_file = APP_DIR / "gui_streamlit_app.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            real_dir = Path(tmp) / "real_profiles"
+            partner_dir = Path(tmp) / "partners"
+            with unittest.mock.patch.dict(
+                os.environ,
+                {
+                    "DATING_ASSISTANT_REAL_PROFILE_DIR": str(real_dir),
+                    "DATING_ASSISTANT_PARTNER_DIR": str(partner_dir),
+                },
+                clear=False,
+            ):
+                at = AppTest.from_file(str(app_file), default_timeout=20)
+                at.run()
+
+                self.assertEqual(len(at.exception), 0)
+                self.assertEqual(len(at.error), 0)
+                visible_text = "\n".join(
+                    [item.value for item in at.info]
+                    + [item.value for item in at.caption]
+                    + [item.value for item in at.subheader]
+                    + [item.value for item in at.markdown]
+                )
+                subheaders = [item.value for item in at.subheader]
+
+                self.assertIn("相手と会話する", subheaders)
+                self.assertIn("プロフィール登録", subheaders)
+                self.assertIn("登録済み相手の管理", subheaders)
+                self.assertIn("会話履歴追加", subheaders)
+                self.assertIn("設定・ヘルプ", subheaders)
+                self.assertIn("このツールでできること", visible_text)
+                self.assertIn("このツールでできないこと", visible_text)
+                self.assertIn("マッチングアプリへの自動送信", visible_text)
+                self.assertIn("プロフィール画像、顔写真、スクリーンショット画像そのものの保存", visible_text)
+                self.assertIn("データはlocal保存", visible_text)
 
     def test_profile_registration_save_button_accepts_sparse_profiles(self):
         from streamlit.testing.v1 import AppTest

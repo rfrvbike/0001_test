@@ -12,7 +12,6 @@ import streamlit as st
 
 from gui_helpers import (
     append_conversation_turns_to_partner,
-    build_partner_label,
     build_partner_summary,
     build_conversation_import_preview,
     build_conversation_import_failure_guidance,
@@ -93,8 +92,8 @@ def main() -> None:
         "自動送信は行いません。実際の送信はマッチングアプリ上でユーザー本人が手動で行います。"
     )
 
-    tab_viewer, tab_profile, tab_partner_create, tab_import = st.tabs(
-        ["相手と会話する", "プロフィール登録", "プロフィール管理", "会話履歴インポート"]
+    tab_viewer, tab_profile, tab_partner_create, tab_import, tab_help = st.tabs(
+        ["相手と会話する", "プロフィール登録", "登録済み相手の管理", "会話履歴追加", "設定・ヘルプ"]
     )
 
     with tab_viewer:
@@ -108,6 +107,9 @@ def main() -> None:
 
     with tab_import:
         render_conversation_import()
+
+    with tab_help:
+        render_help()
 
 
 def render_partner_viewer() -> None:
@@ -502,7 +504,7 @@ def render_discard_controls(partner, suggestion: dict) -> None:
     st.divider()
     st.markdown("**候補破棄**")
     st.warning(
-        "この操作は未使用候補をlocal上で破棄するだけです。conversation_historyは削除されません。"
+        "この操作は未使用候補をlocal上で破棄するだけです。会話履歴は削除されません。"
         "マッチングアプリには何も送信・削除しません。"
     )
     reason = st.text_area(
@@ -530,9 +532,9 @@ def render_discard_controls(partner, suggestion: dict) -> None:
             st.error(str(error))
             return
         if result["conversation_history_unchanged"]:
-            st.success(f"{result['suggestion_id']} をlocal上で破棄しました。conversation_historyは変更していません。")
+            st.success(f"{result['suggestion_id']} をlocal上で破棄しました。会話履歴は変更していません。")
         else:
-            st.error("conversation_historyが変化しました。状態を確認してください。")
+            st.error("会話履歴が変化しました。状態を確認してください。")
         st.rerun()
 
 
@@ -678,7 +680,7 @@ def render_profile_registration() -> None:
         except Exception as error:
             st.warning(
                 "プロフィール保存は完了しましたが、会話対象の自動登録に失敗しました。"
-                "プロフィール管理から手動で確認してください。"
+                "登録済み相手の管理から手動で確認してください。"
             )
             with st.expander("会話対象登録エラーの詳細", expanded=False):
                 st.code(f"{type(error).__name__}: {error}")
@@ -764,7 +766,7 @@ def _render_profile_paste_preview_card(preview: dict[str, object]) -> None:
         if preview["warnings"]:
             st.warning("保存前に見直してください: " + " / ".join(preview["warnings"]))
         _render_bullet_items("確認メモ", preview["review_notes"])
-    with st.expander("詳細JSONを表示", expanded=False):
+    with st.expander("詳しい抽出内容を表示", expanded=False):
         st.json(preview["detail"])
 
 
@@ -885,7 +887,7 @@ def _render_profile_ocr_intake() -> None:
 
 
 def render_partner_creation() -> None:
-    st.subheader("保存済みプロフィール管理")
+    st.subheader("登録済み相手の管理")
     st.info(
         "この画面では、登録済みの相手プロフィールと会話対象を確認・整理できます。"
         "通常の候補作成は「相手と会話する」画面で行います。"
@@ -1002,26 +1004,26 @@ def render_partner_creation() -> None:
     selected_profile = st.selectbox("保存済みプロフィール選択", options=list(profile_options.keys()))
     label = profile_options[selected_profile]
     _render_profile_display_card(build_profile_display_sections(label))
-    with st.expander("詳細データを表示", expanded=False):
+    with st.expander("詳しいプロフィール情報を表示", expanded=False):
         st.json(build_real_profile_summary_for_gui(label))
 
     existing_partners = summarize_existing_partner_candidates(label)
     if existing_partners:
         st.warning(
-            "このプロフィールから作成済みと思われるpartnerがあります。"
-            "重複作成しないよう、既存partnerを開くか、新しく作成するか確認してください。"
+            "このプロフィールから作成済みと思われる会話対象があります。"
+            "重複作成しないよう、既存の相手を開くか、新しく作成するか確認してください。"
         )
         st.dataframe(existing_partners, width="stretch", hide_index=True)
 
     st.markdown("**会話対象の手動登録**")
     st.caption("通常は使わなくて大丈夫です。既存データの確認や補助管理が必要な場合だけ使います。")
-    display_name = st.text_input("partner表示名", help="空欄の場合は保存済みプロフィールの表示名を使います。")
+    display_name = st.text_input("会話対象の表示名", help="空欄の場合は保存済みプロフィールの表示名を使います。")
     app_name = st.text_input("アプリ名", help="Pairs、withなど。未設定でも保存できます。")
     source_memo = st.text_area("作成時メモ", height=80, help="相手別メモとしてlocal保存したい補足だけを書きます。個人情報は入れないでください。")
 
     preview = build_partner_creation_preview(label, display_name=display_name, app_name=app_name, source_memo=source_memo)
     _render_partner_preview_card(format_partner_preview_for_display(label, display_name=display_name, app_name=app_name, source_memo=source_memo))
-    with st.expander("保存プレビューの詳細JSONを表示", expanded=False):
+    with st.expander("保存前の詳しい内容を表示", expanded=False):
         st.json(preview)
 
     confirm_create = st.checkbox("保存内容を確認し、会話対象としてlocal保存する")
@@ -1046,14 +1048,18 @@ def render_partner_creation() -> None:
 
 
 def render_conversation_import() -> None:
-    st.subheader("会話履歴インポート")
+    st.subheader("会話履歴追加")
+    st.caption(
+        "相手から返信が来たときや、過去のやり取りを残したいときに使います。"
+        "通常は「相手と会話する」画面内からも追加できます。自動送信ではなくlocalの会話履歴に追加するだけです。"
+    )
 
     partners = load_partner_choices(include_archived=False)
     if not partners:
-        st.info("インポート対象のpartnerがありません。")
+        st.info("会話履歴を追加する相手がまだありません。まずは「プロフィール登録」から相手情報を登録してください。")
         return
 
-    labels = {build_partner_label(partner): partner.partner_id for partner in partners}
+    labels = {build_partner_choice_label(partner): partner.partner_id for partner in partners}
     st.info("スクリーンショット画像ではなく、読み取ったテキストを貼り付けてください。自動送信ではなくlocalの会話履歴に追加するだけです。")
     with st.expander("貼り付け例を表示", expanded=True):
         st.code(
@@ -1069,11 +1075,11 @@ def render_conversation_import() -> None:
             language="text",
         )
     with st.form("conversation_import_form"):
-        selected_label = st.selectbox("対象partner選択", options=list(labels.keys()))
+        selected_label = st.selectbox("会話履歴を追加する相手", options=list(labels.keys()))
         user_label = st.text_input("自分の発話者ラベル", value="自分")
         partner_label = st.text_input("相手の発話者ラベル", value="相手")
         pasted = st.text_area("会話履歴貼り付け欄", height=220)
-        confirm_import = st.checkbox("保存内容を確認し、conversation_historyへ追加する")
+        confirm_import = st.checkbox("保存内容を確認し、会話履歴へ追加する")
         submitted = st.form_submit_button("会話履歴を保存")
 
     normalized = _normalize_conversation_labels(pasted, user_label, partner_label)
@@ -1086,7 +1092,7 @@ def render_conversation_import() -> None:
     if safety_warnings:
         warnings.append("安全チェック: " + " / ".join(safety_warnings))
     if duplicate_warning:
-        warnings.append("既存conversation_history末尾と完全一致する連続turnです。")
+        warnings.append("既存の会話履歴末尾と完全一致する連続発言です。")
 
     if turns:
         st.markdown("**保存プレビュー**")
@@ -1102,7 +1108,7 @@ def render_conversation_import() -> None:
     if safety_warnings:
         st.warning("保存前に見直してください: " + " / ".join(safety_warnings))
     if duplicate_warning:
-        st.warning("既存conversation_history末尾と完全一致する連続turnです。")
+            st.warning("既存の会話履歴末尾と完全一致する連続発言です。")
 
     if submitted:
         if errors:
@@ -1112,11 +1118,11 @@ def render_conversation_import() -> None:
             st.error("保存前確認チェックを入れてください。")
             return
         updated = append_conversation_turns_to_partner(partner.partner_id, turns)
-        st.success(f"保存しました: {updated.partner_id} に {len(turns)} turn 追加")
-        st.info("保存後はpartnerビューで生成前チェックを確認し、3候補生成へ進めます。実際の送信はユーザー本人が手動で行います。")
+        st.success(f"保存しました: {len(turns)}件の会話履歴を追加しました。")
+        st.info("保存後は「相手と会話する」画面で生成前チェックを確認し、3候補生成へ進めます。実際の送信はユーザー本人が手動で行います。")
 
     with st.expander("解析できない場合の手動追加", expanded=bool(errors and (submitted or pasted.strip()))):
-        st.caption("1発言ずつconversation_historyへlocal追加します。自動送信ではありません。")
+        st.caption("1発言ずつlocalの会話履歴へ追加します。自動送信ではありません。")
         manual_speaker_label = st.selectbox("発言者", options=["自分", "相手"], key="manual_turn_speaker")
         manual_text = st.text_area("発言本文", height=100, key="manual_turn_text")
         confirm_manual = st.checkbox("この1発言をlocal会話履歴へ追加する", key="manual_turn_confirm")
@@ -1129,7 +1135,57 @@ def render_conversation_import() -> None:
                 return
             manual_speaker = "user" if manual_speaker_label == "自分" else "partner"
             updated = append_conversation_turns_to_partner(partner.partner_id, [{"speaker": manual_speaker, "text": manual_text.strip()}])
-            st.success(f"保存しました: {updated.partner_id} に1 turn追加")
+            st.success("保存しました: 1件の会話履歴を追加しました。")
+
+
+def render_help() -> None:
+    st.subheader("設定・ヘルプ")
+    st.caption("このツールの使い方、安全な利用方法、local保存の考え方を確認できます。")
+    st.markdown("### このツールでできること")
+    _render_bullet_items(
+        "できること",
+        [
+            "相手プロフィールを文字情報として登録する",
+            "登録済みの相手を選んで、次に送る候補A/B/Cを作る",
+            "実際に送った文だけを送信済みとしてlocal記録する",
+            "相手から返信が来たら会話履歴へ追加する",
+            "会話が終わった相手を非表示にして整理する",
+        ],
+    )
+    st.markdown("### このツールでできないこと")
+    _render_bullet_items(
+        "できないこと",
+        [
+            "マッチングアプリへの自動送信",
+            "マッチングアプリへの直接接続や自動操作",
+            "外部API通信や実LLM API呼び出し",
+            "プロフィール画像、顔写真、スクリーンショット画像そのものの保存",
+            "課金、ユーザー認証、販売ページ作成",
+        ],
+    )
+    st.markdown("### 基本の使い方")
+    _render_bullet_items(
+        "手順",
+        [
+            "初めて使うときは「プロフィール登録」から始める",
+            "ChatGPTで整理したプロフィール文や、アプリ上で読める文字情報を貼り付ける",
+            "保存すると自動で会話対象になる",
+            "普段は「相手と会話する」で相手を選び、候補を作る",
+            "実際の送信はマッチングアプリ上で手動で行う",
+            "送った後だけ、このGUIで送信済みlocal記録を行う",
+        ],
+    )
+    st.markdown("### 安全な使い方")
+    _render_bullet_items(
+        "注意事項",
+        [
+            "本名、勤務先、学校名、LINE ID、SNS ID、住所、電話番号、メールアドレスは保存しない",
+            "情報が少ないプロフィールでも保存でき、あとからメモで補完できる",
+            "候補文は必ず人間が確認し、相手との温度感に合わない場合は送らない",
+            "電話、会う提案、LINE交換、大人っぽい雰囲気は慎重に扱う",
+            "データはlocal保存です。実データをGitに入れないでください",
+        ],
+    )
 
 
 def _normalize_conversation_labels(text: str, user_label: str, partner_label: str) -> str:
