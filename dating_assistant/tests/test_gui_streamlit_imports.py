@@ -132,6 +132,66 @@ class GuiStreamlitImportTests(unittest.TestCase):
                 self.assertEqual(list(real_dir.glob("*.yaml")), [])
                 self.assertEqual(list(partner_dir.glob("partner_*.yaml")), [])
 
+    def test_saved_profile_management_is_customer_friendly(self):
+        from streamlit.testing.v1 import AppTest
+        from src.models import PartnerNote, PartnerProfile, PartnerRecord, SentRecord
+        from src.partner_store import save_partner
+
+        app_file = APP_DIR / "gui_streamlit_app.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            real_dir = Path(tmp) / "real_profiles"
+            partner_dir = Path(tmp) / "partners"
+            with unittest.mock.patch.dict(
+                os.environ,
+                {
+                    "DATING_ASSISTANT_REAL_PROFILE_DIR": str(real_dir),
+                    "DATING_ASSISTANT_PARTNER_DIR": str(partner_dir),
+                },
+                clear=False,
+            ):
+                save_partner(
+                    PartnerRecord(
+                        partner_id="partner_001",
+                        display_name="ケイコさん",
+                        app_name="Pairs",
+                        status="chatting",
+                        updated_at="2026-06-09T10:00:00+09:00",
+                        profile=PartnerProfile(
+                            age=31,
+                            profile_text="カフェが好きです。",
+                            hobbies=["カフェ"],
+                            location_hint="東京",
+                        ),
+                        notes=[PartnerNote("返信は夜が多い")],
+                        sent_records=[SentRecord("sent_001", "custom_text", "送った文", "2026-06-09T11:00:00+09:00")],
+                    )
+                )
+
+                at = AppTest.from_file(str(app_file), default_timeout=20)
+                at.run()
+
+                self.assertEqual(len(at.exception), 0)
+                self.assertEqual(len(at.error), 0)
+                visible_text = "\n".join(
+                    [item.value for item in at.info]
+                    + [item.value for item in at.caption]
+                    + [item.value for item in at.subheader]
+                    + [item.value for item in at.markdown]
+                )
+                button_labels = [button.label for button in at.button]
+                selectbox_options = []
+                for selectbox in at.selectbox:
+                    selectbox_options.extend([str(option) for option in (getattr(selectbox, "options", []) or [])])
+
+                self.assertIn("保存済みプロフィール管理", visible_text)
+                self.assertIn("登録済みの相手一覧", visible_text)
+                self.assertIn("通常の候補作成は「相手と会話する」", visible_text)
+                self.assertIn("表示名やメモだけを更新します", visible_text)
+                self.assertIn("完全削除ではありません", visible_text)
+                self.assertIn("この相手と会話する", button_labels)
+                self.assertTrue(any("ケイコさん" in option for option in selectbox_options))
+                self.assertTrue(any("ケイコさん" in option and "partner_001" not in option for option in selectbox_options))
+
     def test_profile_registration_save_button_accepts_sparse_profiles(self):
         from streamlit.testing.v1 import AppTest
         from src.loaders import load_target_profile

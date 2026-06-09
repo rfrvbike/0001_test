@@ -15,6 +15,7 @@ from gui_helpers import (
     build_discard_suggestion_preview,
     build_mark_sent_preview,
     build_partner_note_preview,
+    build_partner_management_filter_options,
     build_profile_form_from_paste,
     build_profile_label_candidate,
     build_profile_paste_preview,
@@ -56,8 +57,10 @@ from gui_helpers import (
     filter_real_profiles_for_gui,
     find_existing_partners_for_profile,
     summarize_existing_partner_candidates,
+    summarize_partner_management_rows,
     get_generation_mode_for_partner,
     discard_suggestion_from_gui,
+    archive_partner_from_gui,
     get_real_profile_path,
     list_real_profiles_for_gui,
     load_real_profile_for_gui,
@@ -72,6 +75,8 @@ from gui_helpers import (
     SENT_OUTCOME_STATUS_OPTIONS,
     split_form_list,
     add_partner_note_from_gui,
+    unarchive_partner_from_gui,
+    update_partner_management_info_from_gui,
     update_sent_outcome_from_gui,
     validate_imported_turns,
     validate_profile_form,
@@ -104,6 +109,86 @@ class GuiHelperTests(unittest.TestCase):
 
         self.assertEqual([partner.partner_id for partner in load_partner_choices()], ["partner_001"])
         self.assertEqual([partner.partner_id for partner in load_partner_choices(include_archived=True)], ["partner_001", "partner_002"])
+
+    def test_partner_management_rows_filters_and_hides_internal_ids(self):
+        active = PartnerRecord(
+            partner_id="partner_001",
+            display_name="ケイコさん",
+            app_name="Pairs",
+            status="chatting",
+            updated_at="2026-06-09T10:00:00+09:00",
+            profile=PartnerProfile(age=31, profile_text="カフェが好きです。", hobbies=["カフェ"], location_hint="東京"),
+            notes=[PartnerNote("返信は夜が多い")],
+            sent_records=[SentRecord("sent_001", "custom_text", "送った文", "2026-06-09T11:00:00+09:00")],
+        )
+        sparse = PartnerRecord(
+            partner_id="partner_002",
+            display_name="",
+            app_name="with",
+            status="new_profile",
+            profile=PartnerProfile(profile_text="よろしくお願いします。"),
+        )
+        archived = PartnerRecord(partner_id="partner_003", display_name="過去の相手", app_name="Pairs", status="archived")
+        save_partner(active)
+        save_partner(sparse)
+        save_partner(archived)
+
+        rows = summarize_partner_management_rows(query="ケイコ", app_name="すべて", status="すべて", include_archived=False)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["表示名"], "ケイコさん")
+        self.assertEqual(rows[0]["メモ"], "あり")
+        self.assertEqual(rows[0]["最後に送った日"], "2026-06-09T11:00:00+09:00")
+        self.assertNotIn("partner_001", str(rows))
+
+        sparse_rows = summarize_partner_management_rows(sparse_only=True)
+        self.assertEqual([row["表示名"] for row in sparse_rows], ["表示名未設定"])
+        self.assertEqual(sparse_rows[0]["情報量"], "情報少なめ")
+
+        archived_rows = summarize_partner_management_rows(include_archived=True, status="archived")
+        self.assertEqual(archived_rows[0]["ステータス"], "非表示")
+
+        options = build_partner_management_filter_options(include_archived=True)
+        self.assertIn("Pairs", options["app_names"])
+        self.assertIn("archived", options["statuses"])
+
+    def test_partner_management_update_and_archive_are_confirmed_local_actions(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="表示名未設定",
+            app_name="Pairs",
+            status="chatting",
+            conversation=[ConversationTurn("partner", "よろしくお願いします。", "2026-06-09T10:00:00+09:00")],
+        )
+        save_partner(partner)
+
+        with self.assertRaises(ValueError):
+            update_partner_management_info_from_gui("partner_001", "ケイコさん", "Pairs", confirmed=False)
+
+        result = update_partner_management_info_from_gui(
+            "partner_001",
+            "ケイコさん",
+            "with",
+            note="情報をあとで補完する",
+            confirmed=True,
+        )
+        self.assertIn("表示名", result["changed"])
+        self.assertIn("メモ", result["changed"])
+        updated = load_partner("partner_001")
+        self.assertEqual(updated.display_name, "ケイコさん")
+        self.assertEqual(updated.app_name, "with")
+        self.assertEqual(updated.conversation[0].text, "よろしくお願いします。")
+        self.assertTrue(any("情報をあとで補完する" in note.text for note in updated.notes))
+
+        archive_result = archive_partner_from_gui("partner_001", reason="会話が終わったため", confirmed=True)
+        archived = load_partner("partner_001")
+        self.assertEqual(archive_result["partner"].status, "archived")
+        self.assertEqual(archived.status, "archived")
+        self.assertEqual(archived.conversation[0].text, "よろしくお願いします。")
+
+        unarchive_result = unarchive_partner_from_gui("partner_001", confirmed=True)
+        restored = load_partner("partner_001")
+        self.assertEqual(unarchive_result["partner"].status, "paused")
+        self.assertEqual(restored.status, "paused")
 
     def test_build_partner_summary_contains_operational_fields(self):
         partner = PartnerRecord(

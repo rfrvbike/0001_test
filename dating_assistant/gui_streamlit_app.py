@@ -22,6 +22,7 @@ from gui_helpers import (
     build_generation_preflight,
     build_mark_sent_preview,
     build_partner_choice_label,
+    build_partner_management_filter_options,
     build_partner_note_preview,
     build_partner_operational_display,
     build_partner_profile_card,
@@ -61,6 +62,7 @@ from gui_helpers import (
     GENERATION_TONE_OPTIONS,
     get_generation_mode_for_partner,
     discard_suggestion_from_gui,
+    archive_partner_from_gui,
     load_partner_choices,
     load_partner_for_view,
     list_real_profiles_for_gui,
@@ -70,9 +72,12 @@ from gui_helpers import (
     save_real_profile_from_form,
     SENT_OUTCOME_STATUS_OPTIONS,
     summarize_existing_partner_candidates,
+    summarize_partner_management_rows,
     add_partner_note_from_gui,
     mark_custom_text_sent_from_gui,
     mark_suggestion_sent_from_gui,
+    unarchive_partner_from_gui,
+    update_partner_management_info_from_gui,
     update_sent_outcome_from_gui,
     validate_imported_turns,
 )
@@ -882,14 +887,115 @@ def _render_profile_ocr_intake() -> None:
 def render_partner_creation() -> None:
     st.subheader("保存済みプロフィール管理")
     st.info(
-        "通常はプロフィール登録後に自動で会話対象として登録されます。"
-        "ここでは保存済みプロフィールの確認や、必要な場合の手動管理だけを行います。"
+        "この画面では、登録済みの相手プロフィールと会話対象を確認・整理できます。"
+        "通常の候補作成は「相手と会話する」画面で行います。"
+        "プロフィール登録後は自動で会話対象として登録されるため、ここは管理用の補助画面です。"
     )
 
+    st.markdown("### 登録済みの相手一覧")
+    st.caption("複数人を登録したときに、誰が登録されているか、次に何をする相手かを確認できます。内部IDは通常表示では主役にしません。")
+    include_archived_management = st.checkbox("非表示中の相手も一覧に含める", value=False, key="management_include_archived")
+    filter_options = build_partner_management_filter_options(include_archived=include_archived_management)
+    cols = st.columns(4)
+    partner_query = cols[0].text_input("相手を検索", placeholder="表示名 / 趣味 / エリア")
+    app_filter = cols[1].selectbox("アプリで絞り込み", options=filter_options["app_names"])
+    status_filter = cols[2].selectbox("状態で絞り込み", options=filter_options["statuses"])
+    sparse_only = cols[3].checkbox("情報少なめだけ")
+    partner_rows = summarize_partner_management_rows(
+        query=partner_query,
+        app_name=app_filter,
+        status=status_filter,
+        sparse_only=sparse_only,
+        include_archived=include_archived_management,
+    )
+    if partner_rows:
+        st.dataframe(partner_rows, width="stretch", hide_index=True)
+    else:
+        st.info(
+            "登録済みの会話対象がありません。"
+            "まずは「プロフィール登録」から相手情報を登録してください。"
+            "登録すると、自動で「相手と会話する」画面に表示されます。"
+        )
+
+    management_partners = load_partner_choices(include_archived=include_archived_management)
+    if management_partners:
+        st.markdown("### 登録済み相手の整理")
+        management_labels = {build_partner_choice_label(partner): partner.partner_id for partner in management_partners}
+        selected_management_label = st.selectbox("整理する相手を選ぶ", options=list(management_labels.keys()))
+        selected_management_partner = load_partner_for_view(management_labels[selected_management_label])
+        _render_profile_display_card(build_partner_profile_card(selected_management_partner))
+
+        if st.button("この相手と会話する", key=f"manage_open_{selected_management_partner.partner_id}"):
+            st.session_state["selected_partner_id"] = selected_management_partner.partner_id
+            st.info("「相手と会話する」画面でこの相手を選択しました。候補作成や会話履歴追加はそちらで行えます。")
+
+        with st.expander("表示名・アプリ名・管理メモを修正", expanded=False):
+            st.caption("表示名やメモだけを更新します。内部保存IDや会話履歴、送信済み記録は変更しません。")
+            new_display_name = st.text_input(
+                "表示名",
+                value=selected_management_partner.display_name or "表示名未設定",
+                key=f"manage_display_{selected_management_partner.partner_id}",
+            )
+            new_app_name = st.text_input(
+                "アプリ名",
+                value=selected_management_partner.app_name or "",
+                key=f"manage_app_{selected_management_partner.partner_id}",
+            )
+            management_note = st.text_area(
+                "追加メモ",
+                height=80,
+                placeholder="例: 情報少なめ。あとで写真メモを補完する。",
+                key=f"manage_note_{selected_management_partner.partner_id}",
+            )
+            confirm_update = st.checkbox("更新内容を確認しました", key=f"manage_update_confirm_{selected_management_partner.partner_id}")
+            if st.button("表示名・メモを更新", key=f"manage_update_{selected_management_partner.partner_id}"):
+                try:
+                    result = update_partner_management_info_from_gui(
+                        selected_management_partner.partner_id,
+                        new_display_name,
+                        new_app_name,
+                        note=management_note,
+                        confirmed=confirm_update,
+                    )
+                except ValueError as error:
+                    st.error(str(error))
+                else:
+                    st.success(result["message"])
+                    st.rerun()
+
+        with st.expander("この相手を非表示・再表示", expanded=False):
+            st.caption("完全削除ではありません。会話履歴や送信済み記録は残し、通常一覧から非表示にします。")
+            if selected_management_partner.status == "archived":
+                confirm_unarchive = st.checkbox("この相手を再表示することを確認しました", key=f"manage_unarchive_confirm_{selected_management_partner.partner_id}")
+                if st.button("この相手を再表示する", key=f"manage_unarchive_{selected_management_partner.partner_id}"):
+                    try:
+                        result = unarchive_partner_from_gui(selected_management_partner.partner_id, confirmed=confirm_unarchive)
+                    except ValueError as error:
+                        st.error(str(error))
+                    else:
+                        st.success(result["message"])
+                        st.rerun()
+            else:
+                archive_reason = st.text_input("非表示にする理由", placeholder="例: 会話が終わったため", key=f"manage_archive_reason_{selected_management_partner.partner_id}")
+                confirm_archive = st.checkbox("この相手を非表示にしても、会話履歴は削除されないことを確認しました", key=f"manage_archive_confirm_{selected_management_partner.partner_id}")
+                if st.button("この相手を非表示にする", key=f"manage_archive_{selected_management_partner.partner_id}"):
+                    try:
+                        result = archive_partner_from_gui(selected_management_partner.partner_id, reason=archive_reason, confirmed=confirm_archive)
+                    except ValueError as error:
+                        st.error(str(error))
+                    else:
+                        st.success(result["message"])
+                        st.rerun()
+
+    st.markdown("### 保存済みプロフィール")
     search_query = st.text_input("保存済みプロフィール検索", placeholder="表示名 / 趣味 / 年齢などで絞り込み")
     profiles = filter_real_profiles_for_gui(search_query)
     if not profiles:
-        st.info("保存済みプロフィールがありません。先にプロフィール登録を行ってください。")
+        st.info(
+            "まだ登録済みプロフィールはありません。"
+            "まずは「プロフィール登録」から相手情報を登録してください。"
+            "登録すると、自動で「相手と会話する」画面に表示されます。"
+        )
         return
 
     profile_options = {profile["display_label"]: profile["label"] for profile in profiles}

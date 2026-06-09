@@ -14,7 +14,7 @@ from src.conversation_planner import estimate_partner_temperature
 from src.loaders import load_user_profile
 from src.models import ConversationTurn, GenerationRequest, PartnerNote, PartnerRecord, SentRecord, TargetProfile
 from src.partner_store import list_partners, load_partner
-from src.partner_manager import add_partner_note, create_partner_from_target_profile, save_updated_partner
+from src.partner_manager import add_partner_note, archive_partner, create_partner_from_target_profile, save_updated_partner, unarchive_partner
 from src.real_profile_manager import (
     create_real_profile,
     detect_privacy_warnings,
@@ -212,6 +212,114 @@ def build_partner_choice_label(partner: PartnerRecord) -> str:
     app_name = partner.app_name or "アプリ未設定"
     action = build_partner_next_action_label(partner)
     return f"{display_name} / {app_name} / {action}"
+
+
+def build_partner_management_filter_options(include_archived: bool = False) -> dict[str, list[str]]:
+    partners = load_partner_choices(include_archived=include_archived)
+    app_names = sorted({partner.app_name.strip() for partner in partners if partner.app_name.strip()})
+    statuses = sorted({partner.status.strip() for partner in partners if partner.status.strip()})
+    return {
+        "app_names": ["すべて"] + app_names,
+        "statuses": ["すべて"] + statuses,
+    }
+
+
+def summarize_partner_management_rows(
+    query: str = "",
+    app_name: str = "すべて",
+    status: str = "すべて",
+    sparse_only: bool = False,
+    include_archived: bool = False,
+) -> list[dict[str, str]]:
+    query = query.strip().lower()
+    rows = []
+    for partner in load_partner_choices(include_archived=include_archived):
+        profile_card = build_partner_profile_card(partner)
+        info_status = str(next((row["value"] for row in profile_card["summary"] if row["label"] == "情報量"), "未設定"))
+        display_name = partner.display_name or PROFILE_DISPLAY_NAME_UNSET
+        app_value = partner.app_name or "未設定"
+        searchable = " ".join(
+            [
+                display_name,
+                app_value,
+                str(partner.profile.age or ""),
+                partner.profile.location_hint or "",
+                " ".join(partner.profile.hobbies),
+                partner.status,
+                build_partner_next_action_label(partner),
+            ]
+        ).lower()
+        if query and query not in searchable:
+            continue
+        if app_name and app_name != "すべて" and app_value != app_name:
+            continue
+        if status and status != "すべて" and partner.status != status:
+            continue
+        if sparse_only and info_status not in {"情報少なめ", "一部不足"}:
+            continue
+        last_sent = max((record.sent_at for record in partner.sent_records if record.sent_at), default="-")
+        rows.append(
+            {
+                "表示名": display_name,
+                "アプリ": app_value,
+                "年齢": str(partner.profile.age) if partner.profile.age is not None else "未設定",
+                "エリア": partner.profile.location_hint or "未設定",
+                "情報量": info_status,
+                "会話状態": build_partner_next_action_label(partner),
+                "ステータス": "非表示" if partner.status == "archived" else partner.status,
+                "最終更新": partner.updated_at or partner.created_at or "-",
+                "最後に送った日": last_sent,
+                "メモ": "あり" if partner.notes else "なし",
+            }
+        )
+    return rows
+
+
+def update_partner_management_info_from_gui(
+    partner_id: str,
+    display_name: str,
+    app_name: str,
+    note: str = "",
+    confirmed: bool = False,
+) -> dict[str, Any]:
+    if not confirmed:
+        raise ValueError("更新前確認チェックを入れてください。")
+    partner = load_partner(partner_id)
+    changed = []
+    normalized_display_name = display_name.strip() or PROFILE_DISPLAY_NAME_UNSET
+    normalized_app_name = app_name.strip()
+    if partner.display_name != normalized_display_name:
+        partner.display_name = normalized_display_name
+        changed.append("表示名")
+    if partner.app_name != normalized_app_name:
+        partner.app_name = normalized_app_name
+        changed.append("アプリ名")
+    if note.strip():
+        partner.notes.append(PartnerNote(text=f"管理メモ: {note.strip()}", created_at=datetime.now().isoformat(timespec="seconds")))
+        add_activity_event(partner, "note_added", f"管理メモ追加: {note.strip()}")
+        changed.append("メモ")
+    saved = save_updated_partner(partner)
+    return {
+        "partner": saved,
+        "changed": changed,
+        "message": "更新しました" if changed else "変更はありません",
+    }
+
+
+def archive_partner_from_gui(partner_id: str, reason: str = "", confirmed: bool = False) -> dict[str, Any]:
+    if not confirmed:
+        raise ValueError("非表示にする前の確認チェックを入れてください。")
+    partner = load_partner(partner_id)
+    archived = archive_partner(partner, reason.strip() or "管理画面から非表示")
+    return {"partner": archived, "message": "この相手を非表示にしました。会話履歴や送信済み記録は削除していません。"}
+
+
+def unarchive_partner_from_gui(partner_id: str, confirmed: bool = False) -> dict[str, Any]:
+    if not confirmed:
+        raise ValueError("再表示する前の確認チェックを入れてください。")
+    partner = load_partner(partner_id)
+    restored = unarchive_partner(partner, status="paused")
+    return {"partner": restored, "message": "この相手を再表示しました。"}
 
 
 def build_partner_next_action_label(partner: PartnerRecord) -> str:
