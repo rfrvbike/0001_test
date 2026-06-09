@@ -121,6 +121,13 @@ class GuiStreamlitImportTests(unittest.TestCase):
                 "photos_memo": [],
                 "free_notes_contains": "情報少なめ。あとで補完する。",
             },
+            {
+                "paste": "label:\n2026_20_28\n\nprofile_text:\nよろしくお願いします。",
+                "profile_text": "よろしくお願いします。",
+                "hobbies": [],
+                "photos_memo": [],
+                "forbidden_label": "2026_20_28",
+            },
         ]
         app_file = APP_DIR / "gui_streamlit_app.py"
 
@@ -150,6 +157,9 @@ class GuiStreamlitImportTests(unittest.TestCase):
                     self.assertEqual(len(saved_paths), 1)
 
                     label = saved_paths[0].stem
+                    self.assertTrue(label.startswith("profile_"))
+                    if case.get("forbidden_label"):
+                        self.assertNotEqual(label, case["forbidden_label"])
                     profile = load_target_profile(saved_paths[0])
                     self.assertEqual(profile.profile_text, case["profile_text"])
                     self.assertEqual(profile.hobbies, case["hobbies"])
@@ -161,7 +171,7 @@ class GuiStreamlitImportTests(unittest.TestCase):
                     options = []
                     for selectbox in at.selectbox:
                         options.extend([str(option) for option in (getattr(selectbox, "options", []) or [])])
-                    self.assertTrue(any(label in option for option in options))
+                    self.assertGreater(len(options), 0)
                     self.assertTrue(format_partner_preview_for_display(label, "", "pairs", "")["summary"])
 
     def test_profile_registration_save_button_blocks_only_blank_profile(self):

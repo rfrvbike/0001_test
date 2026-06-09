@@ -467,7 +467,7 @@ def render_profile_registration() -> None:
     _render_profile_ocr_intake()
     pasted_seed_form, _seed_warnings = build_profile_form_from_paste(str(st.session_state.get("profile_paste_text", "")))
     label_seed_candidate = None
-    if st.session_state.get("profile_paste_text") and not pasted_seed_form.get("label"):
+    if st.session_state.get("profile_paste_text"):
         label_seed_candidate = build_profile_label_candidate(str(pasted_seed_form.get("display_name", "")))
 
     with st.form("profile_registration_form"):
@@ -489,13 +489,7 @@ def render_profile_registration() -> None:
         with st.expander("不足分・修正欄", expanded=False):
             st.caption("自動抽出できなかった項目だけ、必要に応じて修正してください。")
             if label_seed_candidate:
-                st.info("label が未指定だったため、自動候補を作成しました。保存前に必要なら修正してください。")
-                st.caption(f"label候補: {label_seed_candidate['label']}")
-            label = st.text_input(
-                "label",
-                value=str(label_seed_candidate["label"]) if label_seed_candidate else "",
-                help="英数字・ハイフン・アンダースコアのみ。label未指定時は保存用候補を表示します。",
-            )
+                st.info("保存IDは保存時に自動生成します。labelを入力・修正する必要はありません。")
             display_name = st.text_input("display_name", value=str(pasted_seed_form.get("display_name", "")))
             app_name = st.text_input("app_name", value=str(pasted_seed_form.get("app_name", "")))
             age = st.number_input("age", min_value=18, max_value=120, value=None, step=1)
@@ -509,7 +503,7 @@ def render_profile_registration() -> None:
         submitted = st.form_submit_button("保存")
 
     form = {
-        "label": label,
+        "label": "",
         "display_name": display_name,
         "app_name": app_name,
         "age": "" if age is None else str(age),
@@ -539,7 +533,11 @@ def render_profile_registration() -> None:
     if has_profile_input and not errors:
         preview = build_profile_save_preview(form)
         st.markdown("**保存プレビュー**")
-        st.json(preview)
+        display_preview = dict(preview)
+        display_preview.pop("保存先label", None)
+        display_preview.pop("菫晏ｭ伜・label", None)
+        display_preview["保存ID"] = "自動生成済み"
+        st.json(display_preview)
         if real_profile_exists(preview["保存先label"]):
             errors.append("同じlabelのreal profileが既に存在します。上書きはできません。")
 
@@ -590,10 +588,7 @@ def render_profile_registration() -> None:
 
 
 def _profile_paste_format_example() -> str:
-    return """label:
-sample_001
-
-display_name:
+    return """display_name:
 サンプル
 
 app_name:
@@ -775,7 +770,7 @@ def _render_profile_ocr_intake() -> None:
 def render_partner_creation() -> None:
     st.subheader("プロフィールからpartner作成")
 
-    search_query = st.text_input("保存済みプロフィール検索", placeholder="label / 趣味 / 年齢などで絞り込み")
+    search_query = st.text_input("保存済みプロフィール検索", placeholder="表示名 / 趣味 / 年齢などで絞り込み")
     profiles = filter_real_profiles_for_gui(search_query)
     if not profiles:
         st.info("保存済みreal_profileがありません。先にプロフィール登録を行ってください。")

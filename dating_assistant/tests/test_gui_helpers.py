@@ -371,22 +371,26 @@ privacy_notes:
         self.assertNotIn("interests", extracted["profile_text"])
         self.assertEqual(errors, [])
         self.assertEqual(warnings, [])
-        self.assertEqual(preview["summary"][0]["value"], "nozomi_001")
+        self.assertEqual(preview["summary"][0]["value"], "自動生成予定")
+        self.assertEqual(preview["label_meta"]["ignored_input_label"], "nozomi_001")
         self.assertEqual(preview["profile_text"], extracted["profile_text"])
         self.assertEqual(preview["required_missing_fields"], [])
         self.assertIn("detail", preview)
         self.assertNotIn("path", preview)
 
-    def test_profile_label_candidate_prefers_explicit_label(self):
+    def test_profile_label_candidate_ignores_explicit_label(self):
         pasted = "label:\nnozomi_001\n\ndisplay_name:\nのぞみ\n\nprofile_text:\nこんにちは"
         extracted, _warnings = build_profile_form_from_paste(pasted)
         form, meta = apply_profile_label_candidate(extracted)
         preview = build_profile_paste_preview(pasted)
 
-        self.assertEqual(form["label"], "nozomi_001")
-        self.assertEqual(meta["label_source"], "貼り付け内容または入力欄から取得")
-        self.assertEqual(preview["label_meta"]["label_source"], "貼り付け内容から取得")
-        self.assertEqual(preview["summary"][0]["value"], "nozomi_001")
+        self.assertTrue(form["label"].startswith("profile_"))
+        self.assertNotEqual(form["label"], "nozomi_001")
+        self.assertEqual(meta["label_source"], "自動生成")
+        self.assertEqual(meta["ignored_input_label"], "nozomi_001")
+        self.assertEqual(preview["label_meta"]["label_source"], "自動生成")
+        self.assertEqual(preview["label_meta"]["ignored_input_label"], "nozomi_001")
+        self.assertEqual(preview["summary"][0]["value"], "自動生成予定")
 
     def test_profile_label_candidate_generates_safe_generic_label_for_japanese_name(self):
         from datetime import datetime
@@ -394,7 +398,7 @@ privacy_notes:
         candidate = build_profile_label_candidate("のぞみ / LINE", now=datetime(2026, 6, 8, 12, 34, 56), existing_labels=set())
 
         self.assertEqual(candidate["label"], "profile_20260608_123456")
-        self.assertEqual(candidate["label_source"], "自動候補")
+        self.assertEqual(candidate["label_source"], "自動生成")
         self.assertNotIn("のぞみ", candidate["label"])
         self.assertNotIn("/", candidate["label"])
         self.assertNotIn("LINE", candidate["label"])
@@ -402,10 +406,10 @@ privacy_notes:
     def test_profile_label_candidate_uses_ascii_display_name_and_deduplicates(self):
         from datetime import datetime
 
-        existing = {"cafe_friend_20260608_123456", "cafe_friend_20260608_123456_001"}
+        existing = {"profile_cafe_friend_20260608_123456", "profile_cafe_friend_20260608_123456_001"}
         candidate = build_profile_label_candidate("Cafe Friend!!", now=datetime(2026, 6, 8, 12, 34, 56), existing_labels=existing)
 
-        self.assertEqual(candidate["label"], "cafe_friend_20260608_123456_002")
+        self.assertEqual(candidate["label"], "profile_cafe_friend_20260608_123456_002")
         self.assertNotIn(" ", candidate["label"])
         self.assertNotIn("!", candidate["label"])
 
@@ -419,10 +423,10 @@ privacy_notes:
         form, meta = apply_profile_label_candidate(extracted, candidate)
 
         self.assertEqual(form["label"], "profile_20260608_123456")
-        self.assertEqual(meta["label_source"], "自動候補")
-        self.assertEqual(preview["label_meta"]["label_source"], "自動候補")
-        self.assertEqual(preview["summary"][0]["value"], "profile_20260608_123456")
-        self.assertIn("label種別", [row["label"] for row in preview["summary"]])
+        self.assertEqual(meta["label_source"], "自動生成")
+        self.assertEqual(preview["label_meta"]["label_source"], "自動生成")
+        self.assertEqual(preview["summary"][0]["value"], "自動生成予定")
+        self.assertNotIn("label種別", [row["label"] for row in preview["summary"]])
         self.assertEqual(preview["required_missing_fields"], [])
 
     def test_profile_save_payload_with_label_candidate_passes_validation(self):
@@ -449,6 +453,65 @@ privacy_notes:
         self.assertEqual(split_form_list(form["interests"]), ["自然", "食事"])
         self.assertEqual(label_meta["label"], "profile_20260608_123456")
 
+    def test_profile_save_payload_corrects_invalid_input_labels(self):
+        cases = [
+            "2026_20_28",
+            "のぞみ",
+            "abc 123",
+            "profile_😀",
+        ]
+        for input_label in cases:
+            with self.subTest(input_label=input_label):
+                form, label_meta, errors, warnings = build_profile_save_payload(
+                    {"label": input_label, "display_name": "", "profile_text": "よろしくお願いします。", "photo_memo": ""},
+                    {},
+                    build_profile_label_candidate("", existing_labels=set()),
+                )
+
+                self.assertEqual(errors, [])
+                self.assertTrue(form["label"].startswith("profile_"))
+                self.assertNotEqual(form["label"], input_label)
+                self.assertEqual(label_meta["ignored_input_label"], input_label)
+                self.assertTrue(warnings)
+
+    def test_profile_save_payload_accepts_label_less_japanese_profile_format(self):
+        pasted = """表示名:
+未設定
+
+年齢:
+未設定
+
+エリア:
+未設定
+
+アプリ名:
+未設定
+
+自己紹介:
+よろしくお願いします。
+
+趣味・興味:
+* 未設定
+
+写真から分かる印象メモ:
+* 未設定
+
+保存しない方がよい個人情報・注意:
+* 未設定
+"""
+        extracted, _warnings = build_profile_form_from_paste(pasted)
+        form, label_meta, errors, warnings = build_profile_save_payload(
+            {"label": "", "display_name": "", "profile_text": "", "photo_memo": ""},
+            extracted,
+            build_profile_label_candidate("", existing_labels=set()),
+        )
+
+        self.assertEqual(errors, [])
+        self.assertTrue(form["label"].startswith("profile_"))
+        self.assertEqual(label_meta["label_source"], "自動生成")
+        self.assertIn("よろしくお願いします。", form["profile_text"])
+        self.assertTrue(warnings)
+
     def test_empty_form_fields_do_not_clear_extracted_values(self):
         extracted = {
             "label": "",
@@ -470,7 +533,8 @@ privacy_notes:
 
         self.assertEqual(errors, [])
         self.assertEqual(warnings, [])
-        self.assertEqual(form["label"], "manual_label")
+        self.assertTrue(form["label"].startswith("profile_"))
+        self.assertNotEqual(form["label"], "manual_label")
         self.assertEqual(form["display_name"], "テストさん")
         self.assertEqual(form["profile_text"], "自然が好きです。")
         self.assertEqual(form["photo_memo"], "落ち着いた雰囲気")
@@ -866,7 +930,7 @@ privacy_notes:
         path, profile = load_real_profile_for_gui("profile_001")
 
         self.assertEqual(profiles[0]["label"], "profile_001")
-        self.assertIn("profile_001", profiles[0]["display_label"])
+        self.assertIn("sample", profiles[0]["display_label"])
         self.assertTrue(path.name.endswith("profile_001.yaml"))
         self.assertEqual(profile.profile_text, "カフェが好きです。")
 

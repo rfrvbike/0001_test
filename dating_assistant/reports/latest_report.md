@@ -1,5 +1,14 @@
 # dating_assistant latest_report
 
+## 作業No.142 labelの内部保存ID化
+- プロフィール登録画面の通常導線からlabel入力欄を外し、ユーザーがlabelを入力・確認・修正しなくても保存できる流れにした。
+- ChatGPTプロジェクト出力に `label` がない前提で保存できるようにし、貼り付け内容に `label: 2026_20_28`、日本語label、空白や記号入りlabelが混じっていても保存を止めず、内部保存IDを `profile_...` 形式へ自動補正するようにした。
+- `build_profile_label_candidate` は常に `profile_YYYYMMDD_HHMMSS` または `profile_<safe_hint>_YYYYMMDD_HHMMSS` 形式を返し、重複時は `_001` などのsuffixで回避する。
+- 抽出プレビューではlabel値を主役にせず、「保存ID: 自動生成予定」「ユーザー入力不要」と表示し、実際の内部IDや無視した貼り付けlabelは詳細情報で確認する扱いにした。
+- 保存済みプロフィールの通常表示は表示名・年齢・趣味を中心にし、プロフィールカード通常表示から内部label行を外した。
+- Streamlit AppTestで、本文1行だけ、趣味1件だけ、写真メモ1件だけ、表示名だけ、薄いChatGPTプロジェクト出力、`label: 2026_20_28` 混入、完全空欄ブロックを確認した。
+- 自動送信、外部API通信、実LLM API呼び出し、マッチングアプリ操作機能、画像保存機能は追加していない。
+
 ## 作業No.141 プロフィール保存ボタン実経路の固定
 - プロフィール登録画面の保存ボタン押下時に、必ず `build_profile_save_payload` で作った保存用payloadを使う経路であることを再確認し、保存失敗時だけ `save_payload.label` / `display_name` / `profile_text` 有無 / `photo_memo` 件数 / `interests` 件数 / `missing_fields` / `profile_status` / validation結果 / `can_save` を折りたたみ表示できるようにした。
 - 保存ボタン経路に残っていた古い必須チェック文言が、プロフィール保存ブロックには使われていないことを確認した。
