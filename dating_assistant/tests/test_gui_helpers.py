@@ -41,6 +41,7 @@ from gui_helpers import (
     detect_conversation_safety_warnings,
     detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
+    ensure_conversation_partner_for_profile,
     format_conversation_history,
     format_list_or_empty,
     format_partner_preview_for_display,
@@ -1097,6 +1098,29 @@ privacy_notes:
         self.assertEqual(stored.pending_suggestions, [])
         self.assertEqual(stored.message_state.next_action, "初回候補生成待ち")
         self.assertTrue(any(event.event_type == "partner_created" for event in stored.activity_log))
+
+    def test_ensure_conversation_partner_creates_once_and_reuses_existing(self):
+        save_real_profile_from_form(
+            {
+                "label": "profile_001",
+                "display_name": "sample",
+                "profile_text": "カフェが好きです。",
+                "photo_memo": "",
+                "interests": "カフェ",
+                "app_name": "pairs",
+            }
+        )
+
+        first = ensure_conversation_partner_for_profile("profile_001", app_name="pairs")
+        second = ensure_conversation_partner_for_profile("profile_001", app_name="pairs")
+
+        self.assertTrue(first["created"])
+        self.assertFalse(first["duplicate_prevented"])
+        self.assertEqual(first["partner"].partner_id, "partner_001")
+        self.assertFalse(second["created"])
+        self.assertTrue(second["duplicate_prevented"])
+        self.assertEqual(second["partner"].partner_id, "partner_001")
+        self.assertEqual([partner.partner_id for partner in load_partner_choices()], ["partner_001"])
 
     def test_generation_mode_allows_first_message_for_new_profile(self):
         partner = PartnerRecord(

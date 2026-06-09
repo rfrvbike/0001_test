@@ -206,11 +206,13 @@ class GuiStreamlitImportTests(unittest.TestCase):
                     at.button[2].click().run()
 
                     saved_paths = sorted(real_dir.glob("*.yaml"))
+                    partner_paths = sorted(partner_dir.glob("partner_*.yaml"))
                     self.assertEqual(len(at.exception), 0)
                     self.assertEqual(len(at.error), 0)
                     self.assertGreaterEqual(len(at.warning), 1)
-                    self.assertGreaterEqual(len(at.success), 1)
+                    self.assertGreaterEqual(len(at.success), 2)
                     self.assertEqual(len(saved_paths), 1)
+                    self.assertEqual(len(partner_paths), 1)
 
                     label = saved_paths[0].stem
                     self.assertTrue(label.startswith("profile_"))
@@ -228,6 +230,7 @@ class GuiStreamlitImportTests(unittest.TestCase):
                     for selectbox in at.selectbox:
                         options.extend([str(option) for option in (getattr(selectbox, "options", []) or [])])
                     self.assertGreater(len(options), 0)
+                    self.assertTrue(any("partner_001" not in option for option in options))
                     self.assertTrue(format_partner_preview_for_display(label, "", "pairs", "")["summary"])
 
     def test_profile_registration_save_button_blocks_only_blank_profile(self):
@@ -253,6 +256,7 @@ class GuiStreamlitImportTests(unittest.TestCase):
                 self.assertEqual(len(at.exception), 0)
                 self.assertGreaterEqual(len(at.error), 1)
                 self.assertEqual(list(real_dir.glob("*.yaml")), [])
+                self.assertEqual(list(partner_dir.glob("partner_*.yaml")), [])
 
 
 if __name__ == "__main__":

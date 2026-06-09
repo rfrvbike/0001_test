@@ -1534,6 +1534,42 @@ def save_partner_from_profile(label: str, display_name: str, app_name: str = "",
     return partner
 
 
+def ensure_conversation_partner_for_profile(
+    label: str,
+    display_name: str = "",
+    app_name: str = "",
+    source_memo: str = "",
+) -> dict[str, Any]:
+    existing = find_existing_partners_for_profile(label)
+    if existing:
+        partner = load_partner(existing[0]["partner_id"])
+        return {
+            "created": False,
+            "partner": partner,
+            "partner_id": partner.partner_id,
+            "display_name": partner.display_name,
+            "duplicate_prevented": True,
+            "existing_count": len(existing),
+            "message": "existing_partner_selected",
+        }
+
+    partner = save_partner_from_profile(
+        label,
+        display_name=display_name,
+        app_name=app_name,
+        source_memo=source_memo,
+    )
+    return {
+        "created": True,
+        "partner": partner,
+        "partner_id": partner.partner_id,
+        "display_name": partner.display_name,
+        "duplicate_prevented": False,
+        "existing_count": 0,
+        "message": "partner_created",
+    }
+
+
 def parse_conversation_paste(text: str) -> tuple[list[dict[str, Any]], list[str]]:
     turns: list[dict[str, Any]] = []
     warnings: list[str] = []

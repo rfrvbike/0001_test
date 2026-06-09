@@ -55,6 +55,7 @@ from gui_helpers import (
     generate_suggestion_for_gui,
     generate_suggestion_variants_for_gui,
     extract_profile_text_from_image,
+    ensure_conversation_partner_for_profile,
     format_partner_preview_for_display,
     GENERATION_OBJECTIVE_OPTIONS,
     GENERATION_TONE_OPTIONS,
@@ -67,7 +68,6 @@ from gui_helpers import (
     load_uploaded_image_for_ocr,
     real_profile_exists,
     save_real_profile_from_form,
-    save_partner_from_profile,
     SENT_OUTCOME_STATUS_OPTIONS,
     summarize_existing_partner_candidates,
     add_partner_note_from_gui,
@@ -116,8 +116,12 @@ def render_partner_viewer() -> None:
         if label in labels:
             label = f"{label} ({len(labels) + 1})"
         labels[label] = partner_choice.partner_id
-    selected_label = st.selectbox("相手を選ぶ", options=list(labels.keys()))
+    selected_partner_id = str(st.session_state.get("selected_partner_id", "") or "")
+    label_values = list(labels.values())
+    selected_index = label_values.index(selected_partner_id) if selected_partner_id in label_values else 0
+    selected_label = st.selectbox("相手を選ぶ", options=list(labels.keys()), index=selected_index)
     partner = load_partner_for_view(labels[selected_label])
+    st.session_state["selected_partner_id"] = partner.partner_id
     workspace = build_partner_workspace_overview(partner)
 
     st.markdown(f"### {workspace['title']}")
@@ -638,11 +642,42 @@ def render_profile_registration() -> None:
             with st.expander("開発者向け詳細"):
                 st.code(f"{type(error).__name__}: {error}")
             return
-        st.success(f"保存しました: {path}")
+        st.success(f"プロフィールを保存しました: {path}")
         if save_warnings:
             st.warning("保存内容に注意語が含まれます: " + " / ".join(save_warnings))
+        try:
+            partner_result = ensure_conversation_partner_for_profile(
+                form["label"],
+                display_name=str(form.get("display_name", "")),
+                app_name=str(form.get("app_name", "")),
+                source_memo="プロフィール登録画面から自動で会話対象にしました。",
+            )
+        except Exception as error:
+            st.warning(
+                "プロフィール保存は完了しましたが、会話対象の自動登録に失敗しました。"
+                "プロフィール管理から手動で確認してください。"
+            )
+            with st.expander("会話対象登録エラーの詳細", expanded=False):
+                st.code(f"{type(error).__name__}: {error}")
+            return
+        partner = partner_result["partner"]
+        st.session_state["selected_partner_id"] = partner.partner_id
+        if partner_result["created"]:
+            st.success(f"会話対象として登録しました: {partner.display_name or partner.partner_id}")
+        else:
+            st.info(
+                "このプロフィールはすでに会話対象として登録されています。"
+                "既存の相手画面を開けます。"
+            )
+        st.info(
+            "次は「相手と会話する」画面で初回メッセージ候補を作れます。"
+            "実際の送信はユーザー本人が手動で行います。"
+        )
+        if st.button("この相手と会話する", key=f"open_saved_partner_{partner.partner_id}"):
+            st.session_state["selected_partner_id"] = partner.partner_id
+            st.rerun()
 
-    st.info("保存後は「プロフィールからpartner作成」タブでpartner化できます。")
+    st.info("プロフィールを保存すると、自動で会話対象としてlocal登録します。保存後は「相手と会話する」画面で候補生成へ進めます。")
 
 
 def _profile_paste_format_example() -> str:
@@ -826,16 +861,20 @@ def _render_profile_ocr_intake() -> None:
 
 
 def render_partner_creation() -> None:
-    st.subheader("プロフィールからpartner作成")
+    st.subheader("保存済みプロフィール管理")
+    st.info(
+        "通常はプロフィール登録後に自動で会話対象として登録されます。"
+        "ここでは保存済みプロフィールの確認や、必要な場合の手動管理だけを行います。"
+    )
 
     search_query = st.text_input("保存済みプロフィール検索", placeholder="表示名 / 趣味 / 年齢などで絞り込み")
     profiles = filter_real_profiles_for_gui(search_query)
     if not profiles:
-        st.info("保存済みreal_profileがありません。先にプロフィール登録を行ってください。")
+        st.info("保存済みプロフィールがありません。先にプロフィール登録を行ってください。")
         return
 
     profile_options = {profile["display_label"]: profile["label"] for profile in profiles}
-    selected_profile = st.selectbox("real_profile選択", options=list(profile_options.keys()))
+    selected_profile = st.selectbox("保存済みプロフィール選択", options=list(profile_options.keys()))
     label = profile_options[selected_profile]
     _render_profile_display_card(build_profile_display_sections(label))
     with st.expander("詳細データを表示", expanded=False):
@@ -849,7 +888,8 @@ def render_partner_creation() -> None:
         )
         st.dataframe(existing_partners, width="stretch", hide_index=True)
 
-    st.markdown("**partner作成フォーム**")
+    st.markdown("**会話対象の手動登録**")
+    st.caption("通常は使わなくて大丈夫です。既存データの確認や補助管理が必要な場合だけ使います。")
     display_name = st.text_input("partner表示名", help="空欄の場合は保存済みプロフィールの表示名を使います。")
     app_name = st.text_input("アプリ名", help="Pairs、withなど。未設定でも保存できます。")
     source_memo = st.text_area("作成時メモ", height=80, help="相手別メモとしてlocal保存したい補足だけを書きます。個人情報は入れないでください。")
@@ -865,9 +905,19 @@ def render_partner_creation() -> None:
         if not confirm_create:
             st.error("保存前確認チェックを入れてください。")
             return
-        partner = save_partner_from_profile(label, display_name=display_name, app_name=app_name, source_memo=source_memo)
-        st.success(f"保存しました: {partner.partner_id}")
-        st.info("作成後はpartnerビューでpartnerを選び、会話履歴、相手別メモ、生成前チェック、3候補生成へ進めます。")
+        result = ensure_conversation_partner_for_profile(
+            label,
+            display_name=display_name,
+            app_name=app_name,
+            source_memo=source_memo,
+        )
+        partner = result["partner"]
+        st.session_state["selected_partner_id"] = partner.partner_id
+        if result["created"]:
+            st.success(f"会話対象として登録しました: {partner.display_name or partner.partner_id}")
+        else:
+            st.info("このプロフィールはすでに会話対象として登録されています。既存の相手を選択しました。")
+        st.info("次は「相手と会話する」画面で、会話履歴、相手別メモ、生成前チェック、3候補生成へ進めます。")
 
 
 def render_conversation_import() -> None:
