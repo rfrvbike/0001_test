@@ -1978,15 +1978,15 @@ def _shape_candidate_for_objective(
     if judgement and judgement["status"] in {"まだ早い", "非推奨"}:
         return _safe_reply_variant(partner, base, objective, tone, index)
     if "電話" in objective:
-        return _trim_for_gui("メッセージだと少し伝わりにくいところもあるので、タイミング合えば今度10分くらい軽く話してみませんか？無理なければで大丈夫です。")
+        return _phone_candidate_variant(index)
     if "LINE" in objective:
-        return _trim_for_gui("アプリだと見落としがちなら、話しやすい方に移しても大丈夫です。もちろんこのままアプリでも大丈夫です。")
+        return _line_exchange_candidate_variant(index)
     if "場所" in objective and place:
-        return _trim_for_gui(f"話していて雰囲気が合いそうだなと思いました。もし予定合えば、{place}あたりで短めにお茶かランチでもどうですか？")
+        return _meet_candidate_variant(index, place)
     if "会う" in objective:
-        return _trim_for_gui("話していて雰囲気が合いそうだなと思いました。タイミング合えば、今度軽くお茶でも行けたら嬉しいです。")
+        return _meet_candidate_variant(index, place)
     if "大人" in objective or "大人" in tone:
-        return _trim_for_gui("やり取りしていて、落ち着いて話せそうな感じがしてちょっと気になっています。無理なく話せるペースで続けられたら嬉しいです。")
+        return _adult_candidate_variant(index)
     if "自分の紹介" in objective:
         return _safe_reply_variant(partner, base, objective, tone, index, include_self=True)
     if "ユーモア" in objective or "ユーモア" in tone:
@@ -1998,6 +1998,43 @@ def _shape_candidate_for_objective(
     if index == 2:
         return _safe_reply_variant(partner, base, objective, tone, index, bridge=True)
     return _safe_reply_variant(partner, base, objective, tone, index)
+
+
+def _phone_candidate_variant(index: int) -> str:
+    options = [
+        "もしタイミング合えば、今度10分くらいだけ軽く話してみませんか？無理なければで全然大丈夫です。",
+        "メッセージだと少し伝わりにくいところもあるので、都合が合う時に10分くらい話せたら嬉しいです。もちろん無理なければで大丈夫です。",
+        "話していてもう少し声でも雰囲気を知れたら嬉しいなと思いました。急ぎではないので、負担なければ短く話せたら嬉しいです。",
+    ]
+    return _trim_for_gui(options[index % len(options)], 135)
+
+
+def _meet_candidate_variant(index: int, place: str = "") -> str:
+    place_phrase = f"{place}あたりで" if place else ""
+    options = [
+        f"もし予定が合えば、今度{place_phrase}短めにお茶かランチでもどうですか？もちろん無理なければ大丈夫です。",
+        "話していて雰囲気が合いそうだなと思いました。無理なければ、タイミング合う時に軽くカフェで話せたら嬉しいです。",
+        f"{place_phrase}行きやすければ、今度少しだけお茶でもできたら嬉しいです。難しければ全然大丈夫です。",
+    ]
+    return _trim_for_gui(options[index % len(options)], 135)
+
+
+def _line_exchange_candidate_variant(index: int) -> str:
+    options = [
+        "もしアプリだと見落としやすければ、話しやすい方に移しても大丈夫です。もちろんこのままアプリでも大丈夫です。",
+        "やり取りしやすい方があれば合わせます。無理に移さなくて大丈夫なので、アプリのままでも全然大丈夫です。",
+        "もう少し話しやすくするなら別の連絡先でも大丈夫ですが、安心できる方で大丈夫です。",
+    ]
+    return _trim_for_gui(options[index % len(options)], 135)
+
+
+def _adult_candidate_variant(index: int) -> str:
+    options = [
+        "やり取りしていて、落ち着いて話せそうな感じがしてちょっと気になっています。無理なく話せるペースで続けられたら嬉しいです。",
+        "話していると落ち着くので、もう少しゆっくり知れたら嬉しいです。無理のないペースで大丈夫です。",
+        "少しだけ距離が近づいた感じがして嬉しいです。急がず、自然に話せたらいいなと思っています。",
+    ]
+    return _trim_for_gui(options[index % len(options)], 130)
 
 
 def _first_message_variant(partner: PartnerRecord | None, base: str, objective: str, tone: str, index: int) -> str:
@@ -2024,7 +2061,7 @@ def _safe_reply_variant(
     hook = _conversation_hook_for_candidate(partner) or _profile_hook_for_candidate(partner)
     reaction = _reaction_for_latest(latest)
     if include_self:
-        return _trim_for_gui(f"{reaction} 自分も{hook}みたいな話は好きなので、ゆるく聞いてみたくなりました。最近だとどんな感じが多いですか？", 135)
+        return _trim_for_gui(f"{reaction} {_self_disclosure_for_hook(hook)} 最近だとどんな感じが多いですか？", 135)
     if bridge:
         return _trim_for_gui(f"{reaction} {hook}の話、もう少し聞いてみたいです。無理なく話しやすいところからで大丈夫です。", 120)
     if index == 0:
@@ -2048,10 +2085,19 @@ def _profile_hook_for_candidate(partner: PartnerRecord | None) -> str:
 
 def _conversation_hook_for_candidate(partner: PartnerRecord | None) -> str:
     text = _latest_partner_text(partner)
+    for phrase in ["静かなカフェ", "落ち着いたカフェ", "落ち着いた雰囲気"]:
+        if phrase in text:
+            return phrase
     for keyword in ["カフェ", "映画", "旅行", "ご飯", "食べ物", "自然", "散歩", "仕事", "休日", "音楽", "料理"]:
         if keyword in text:
             return keyword
     return ""
+
+
+def _self_disclosure_for_hook(hook: str) -> str:
+    if hook in {"カフェ", "静かなカフェ", "落ち着いたカフェ", "落ち着いた雰囲気", "自然", "散歩"}:
+        return f"自分も{hook}みたいな雰囲気は好きなので、ゆるく聞いてみたくなりました。"
+    return f"自分も{hook}の話は好きなので、ゆるく聞いてみたくなりました。"
 
 
 def _latest_partner_text(partner: PartnerRecord | None) -> str:

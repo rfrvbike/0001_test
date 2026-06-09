@@ -1405,6 +1405,114 @@ privacy_notes:
         self.assertNotIn("ホテル", adult)
         self.assertNotIn("大人の関係", adult)
 
+    def test_customer_facing_candidate_quality_patterns_are_sendable_and_safe(self):
+        sparse = PartnerRecord(
+            partner_id="partner_001",
+            display_name="表示名未設定",
+            status="new_profile",
+            profile=PartnerProfile(profile_text="よろしくお願いします。"),
+        )
+        hobby = PartnerRecord(
+            partner_id="partner_002",
+            display_name="ケイコさん",
+            app_name="Pairs",
+            status="new_profile",
+            profile=PartnerProfile(
+                profile_text="休日はカフェ巡りや映画を見ることが多いです。落ち着いた雰囲気の場所が好きです。",
+                hobbies=["カフェ", "映画", "散歩"],
+                free_notes="conversation_hooks:\n- 最近行ったカフェ\n- 好きな映画\n- 休日の過ごし方",
+            ),
+        )
+        reply = PartnerRecord(
+            partner_id="partner_003",
+            display_name="ケイコさん",
+            app_name="Pairs",
+            status="chatting",
+            profile=hobby.profile,
+            conversation=[
+                ConversationTurn("user", "はじめまして。カフェ巡り好きなんですね。", "2026-06-10T10:00:00+09:00"),
+                ConversationTurn("partner", "はい、休日によく行きます。静かなカフェが好きです。", "2026-06-10T10:01:00+09:00"),
+            ],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+        warm = PartnerRecord(
+            partner_id="partner_004",
+            display_name="ケイコさん",
+            status="chatting",
+            profile=hobby.profile,
+            conversation=[
+                ConversationTurn("partner", "静かなカフェが好きです。", "2026-06-10T10:00:00+09:00"),
+                ConversationTurn("user", "落ち着きますよね。", "2026-06-10T10:01:00+09:00"),
+                ConversationTurn("partner", "そうなんです。話しやすいです。", "2026-06-10T10:02:00+09:00"),
+                ConversationTurn("user", "嬉しいです。", "2026-06-10T10:03:00+09:00"),
+                ConversationTurn("partner", "また話したいです。", "2026-06-10T10:04:00+09:00"),
+                ConversationTurn("user", "自分もです。", "2026-06-10T10:05:00+09:00"),
+                ConversationTurn("partner", "カフェも詳しいんですね？", "2026-06-10T10:06:00+09:00"),
+                ConversationTurn("user", "少しだけです。", "2026-06-10T10:07:00+09:00"),
+                ConversationTurn("partner", "おすすめ気になります。", "2026-06-10T10:08:00+09:00"),
+            ],
+            sent_records=[
+                SentRecord(
+                    sent_id="sent_generated_000001",
+                    source_type="generated_suggestion",
+                    text="カフェの話",
+                    sent_at="2026-06-10T10:03:00+09:00",
+                    outcome_status="反応よかった",
+                    outcome_memo="返信あり",
+                )
+            ],
+            message_state=MessageState(awaiting_user_action=True),
+        )
+        for partner in [sparse, hobby, reply, warm]:
+            save_partner(partner)
+
+        sparse_result = generate_suggestion_variants_for_gui("partner_001", ["相手のプロフィールに触れる", "質問を1つ入れる"], "自然", "")
+        hobby_result = generate_suggestion_variants_for_gui("partner_002", ["相手のプロフィールに触れる", "質問を1つ入れる"], "自然", "")
+        reply_result = generate_suggestion_variants_for_gui("partner_003", ["質問を1つ入れる"], "自然", "")
+
+        sparse_texts = "\n".join(variant["text"] for variant in sparse_result["variants"])
+        hobby_texts = "\n".join(variant["text"] for variant in hobby_result["variants"])
+        reply_texts = "\n".join(variant["text"] for variant in reply_result["variants"])
+
+        self.assertIn("プロフィールの雰囲気", sparse_texts)
+        self.assertNotIn("電話", sparse_texts)
+        self.assertNotIn("LINE", sparse_texts)
+        self.assertNotIn("お茶でも", sparse_texts)
+        self.assertTrue(any(topic in hobby_texts for topic in ["カフェ", "映画"]))
+        self.assertIn("静かなカフェ", reply_texts)
+        self.assertTrue(all(variant["text"].count("？") <= 1 for variant in sparse_result["variants"]))
+        self.assertTrue(all(variant["text"].count("？") <= 1 for variant in hobby_result["variants"]))
+        self.assertTrue(all(variant["text"].count("？") <= 1 for variant in reply_result["variants"]))
+        self.assertEqual([variant["title"].split(":")[0] for variant in hobby_result["variants"]], ["候補A", "候補B", "候補C"])
+        self.assertEqual(len({variant["text"] for variant in hobby_result["variants"]}), 3)
+
+        risky_results = {}
+        for objective in ["電話に誘う", "会う提案をする", "LINE交換を提案する", "少し大人っぽい雰囲気にする"]:
+            current = load_partner("partner_004")
+            current.pending_suggestions.clear()
+            save_partner(current, allow_overwrite=True)
+            risky_results[objective] = generate_suggestion_variants_for_gui("partner_004", [objective], "自然", "新宿")
+
+        phone_texts = [variant["text"] for variant in risky_results["電話に誘う"]["variants"]]
+        meet_texts = [variant["text"] for variant in risky_results["会う提案をする"]["variants"]]
+        line_texts = [variant["text"] for variant in risky_results["LINE交換を提案する"]["variants"]]
+        adult_texts = [variant["text"] for variant in risky_results["少し大人っぽい雰囲気にする"]["variants"]]
+
+        self.assertEqual(len(set(phone_texts)), 3)
+        self.assertEqual(len(set(meet_texts)), 3)
+        self.assertEqual(len(set(line_texts)), 3)
+        self.assertEqual(len(set(adult_texts)), 3)
+        self.assertTrue(all(any(word in text for word in ["無理", "負担", "大丈夫"]) for text in phone_texts))
+        self.assertTrue(all(any(word in text for word in ["無理", "難しければ", "大丈夫"]) for text in meet_texts))
+        self.assertTrue(all("アプリ" in text or "安心" in text for text in line_texts))
+        self.assertTrue(all("大丈夫" in text or "急がず" in text or "無理なく" in text for text in adult_texts))
+        for text in "\n".join(phone_texts + meet_texts + line_texts + adult_texts).splitlines():
+            self.assertNotIn("ホテル", text)
+            self.assertNotIn("自宅", text)
+            self.assertNotIn("LINE教えて", text)
+            self.assertNotIn("体", text)
+            self.assertNotIn("身体", text)
+
     def test_conversation_stage_summary_changes_by_turn_count_and_reply_wait(self):
         first = PartnerRecord(partner_id="partner_001", display_name="first", status="new_profile")
         one_round = PartnerRecord(
