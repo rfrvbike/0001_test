@@ -82,6 +82,11 @@ def main() -> None:
     st.set_page_config(page_title="dating_assistant", layout="wide")
     st.title("dating_assistant")
     st.caption("ローカルGUI")
+    st.info(
+        "このツールは、マッチングアプリ上で送るメッセージ候補を作るための補助画面です。"
+        "まず「プロフィール登録」で相手情報を登録し、保存後に「相手と会話する」で候補を作ります。"
+        "自動送信は行いません。実際の送信はマッチングアプリ上でユーザー本人が手動で行います。"
+    )
 
     tab_viewer, tab_profile, tab_partner_create, tab_import = st.tabs(
         ["相手と会話する", "プロフィール登録", "プロフィール管理", "会話履歴インポート"]
@@ -107,7 +112,11 @@ def render_partner_viewer() -> None:
     include_archived = st.checkbox("アーカイブ済みの相手も表示", value=False)
     partners = load_partner_choices(include_archived=include_archived)
     if not partners:
-        st.info("表示できる相手がまだありません。プロフィール登録から相手を追加してください。")
+        st.info(
+            "まだ会話対象が登録されていません。"
+            "まず「プロフィール登録」で相手のプロフィール情報を貼り付けて保存してください。"
+            "保存後、この画面に自動で表示され、初回メッセージ候補を作れます。"
+        )
         return
 
     labels: dict[str, str] = {}
@@ -536,7 +545,8 @@ def render_profile_registration() -> None:
     with st.form("profile_registration_form"):
         st.markdown("### まずここにプロフィールを貼り付け")
         st.info(
-            "アプリのプロフィール文、趣味、写真を見て分かる印象メモ、会話に使えそうな情報をまとめて貼り付けます。"
+            "ChatGPTプロジェクトで整理したプロフィール文や、アプリ上で読める自己紹介・趣味・写真の印象メモをここに貼り付けます。"
+            "情報が少なくても保存できます。保存IDやlabelを入力する必要はありません。"
             "下の入力欄は、自動抽出できなかった項目だけ補助的に使います。"
         )
         profile_paste = st.text_area(
@@ -678,8 +688,9 @@ def render_profile_registration() -> None:
                 "既存の相手画面を開けます。"
             )
         st.info(
-            "次は「相手と会話する」画面で初回メッセージ候補を作れます。"
-            "実際の送信はユーザー本人が手動で行います。"
+            "次は「相手と会話する」画面で、この相手向けの初回メッセージ候補を作れます。"
+            "候補はlocalに記録されるだけで、自動送信はしません。"
+            "実際の送信はユーザー本人がマッチングアプリ上で手動で行います。"
         )
         if st.button("この相手と会話する", key=f"open_saved_partner_{partner.partner_id}"):
             st.session_state["selected_partner_id"] = partner.partner_id

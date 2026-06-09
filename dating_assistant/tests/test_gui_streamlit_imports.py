@@ -97,6 +97,41 @@ class GuiStreamlitImportTests(unittest.TestCase):
                 self.assertTrue(any("候補と送信済み記録" in value for value in markdowns))
                 self.assertTrue(any("自動送信" in value for value in captions))
 
+    def test_first_run_guidance_explains_customer_flow_without_partner_data(self):
+        from streamlit.testing.v1 import AppTest
+
+        app_file = APP_DIR / "gui_streamlit_app.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            real_dir = Path(tmp) / "real_profiles"
+            partner_dir = Path(tmp) / "partners"
+            with unittest.mock.patch.dict(
+                os.environ,
+                {
+                    "DATING_ASSISTANT_REAL_PROFILE_DIR": str(real_dir),
+                    "DATING_ASSISTANT_PARTNER_DIR": str(partner_dir),
+                },
+                clear=False,
+            ):
+                at = AppTest.from_file(str(app_file), default_timeout=20)
+                at.run()
+
+                self.assertEqual(len(at.exception), 0)
+                self.assertEqual(len(at.error), 0)
+                visible_text = "\n".join(
+                    [item.value for item in at.info]
+                    + [item.value for item in at.caption]
+                    + [item.value for item in at.subheader]
+                    + [item.value for item in at.markdown]
+                )
+                self.assertIn("まず「プロフィール登録」", visible_text)
+                self.assertIn("保存後", visible_text)
+                self.assertIn("相手と会話する", visible_text)
+                self.assertIn("初回メッセージ候補", visible_text)
+                self.assertIn("自動送信", visible_text)
+                self.assertNotIn("partner_id", visible_text)
+                self.assertEqual(list(real_dir.glob("*.yaml")), [])
+                self.assertEqual(list(partner_dir.glob("partner_*.yaml")), [])
+
     def test_profile_registration_save_button_accepts_sparse_profiles(self):
         from streamlit.testing.v1 import AppTest
         from src.loaders import load_target_profile
