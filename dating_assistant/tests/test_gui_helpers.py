@@ -7,6 +7,7 @@ from gui_helpers import (
     GENERATION_OBJECTIVE_OPTIONS,
     append_conversation_turns_to_partner,
     build_partner_label,
+    build_partner_choice_label,
     build_partner_creation_preview,
     build_conversation_stage_summary,
     build_generation_status_message,
@@ -23,6 +24,8 @@ from gui_helpers import (
     build_conversation_import_preview,
     build_conversation_import_failure_guidance,
     build_partner_operational_display,
+    build_partner_profile_card,
+    build_partner_workspace_overview,
     apply_profile_label_candidate,
     build_profile_ocr_failure_guidance,
     build_profile_ocr_privacy_notes,
@@ -182,6 +185,43 @@ class GuiHelperTests(unittest.TestCase):
         partner = PartnerRecord(partner_id="partner_001", display_name="sample", status="chatting")
 
         self.assertEqual(build_partner_label(partner), "partner_001 / sample / chatting")
+
+    def test_partner_choice_label_hides_internal_id_and_shows_next_action(self):
+        partner = PartnerRecord(partner_id="partner_001", display_name="sample", app_name="pairs", status="chatting")
+        partner.message_state.awaiting_user_action = True
+
+        label = build_partner_choice_label(partner)
+        overview = build_partner_workspace_overview(partner)
+
+        self.assertNotIn("partner_001", label)
+        self.assertIn("sample", label)
+        self.assertIn("pairs", label)
+        self.assertEqual(overview["next_action"], "返信を考える")
+        self.assertEqual(overview["title"], "sample")
+        self.assertIn({"label": "今やること", "value": "返信を考える"}, overview["summary_rows"])
+
+    def test_partner_profile_card_is_user_facing_without_raw_ids(self):
+        partner = PartnerRecord(
+            partner_id="partner_001",
+            display_name="sample",
+            app_name="pairs",
+            profile=PartnerProfile(
+                age=31,
+                profile_text="カフェが好きです。",
+                hobbies=["カフェ"],
+                photos_memo=["明るい雰囲気"],
+                location_hint="Tokyo",
+                free_notes="conversation_hooks:\n- カフェの話\nfirst_message_hints:\n- 軽い質問",
+            ),
+        )
+
+        card = build_partner_profile_card(partner)
+
+        self.assertEqual(card["title"], "sample")
+        self.assertIn({"label": "アプリ", "value": "pairs"}, card["summary"])
+        self.assertNotIn("partner_001", str(card["summary"]))
+        self.assertIn("カフェが好きです。", card["profile_text"])
+        self.assertTrue(any(section["title"] == "会話に使えそうな話題" for section in card["sections"]))
 
     def test_partner_notes_can_be_saved_loaded_and_warn_on_privacy_words(self):
         partner = PartnerRecord(partner_id="partner_001", display_name="sample", status="chatting")

@@ -21,8 +21,11 @@ from gui_helpers import (
     build_discard_suggestion_preview,
     build_generation_preflight,
     build_mark_sent_preview,
+    build_partner_choice_label,
     build_partner_note_preview,
     build_partner_operational_display,
+    build_partner_profile_card,
+    build_partner_workspace_overview,
     build_profile_form_from_paste,
     build_profile_ocr_failure_guidance,
     build_profile_ocr_privacy_notes,
@@ -81,7 +84,7 @@ def main() -> None:
     st.caption("ローカルGUI")
 
     tab_viewer, tab_profile, tab_partner_create, tab_import = st.tabs(
-        ["partnerビュー", "プロフィール登録", "プロフィールからpartner作成", "会話履歴インポート"]
+        ["相手と会話する", "プロフィール登録", "プロフィール管理", "会話履歴インポート"]
     )
 
     with tab_viewer:
@@ -98,81 +101,136 @@ def main() -> None:
 
 
 def render_partner_viewer() -> None:
-    st.subheader("partnerビュー")
+    st.subheader("相手と会話する")
+    st.caption("相手を選び、プロフィールと会話履歴を見ながら、次に送る文を作る画面です。実際の送信はマッチングアプリ上で手動で行います。")
 
-    include_archived = st.sidebar.checkbox("archivedを含める", value=False)
-    if st.sidebar.button("更新"):
-        st.rerun()
-
+    include_archived = st.checkbox("アーカイブ済みの相手も表示", value=False)
     partners = load_partner_choices(include_archived=include_archived)
     if not partners:
-        st.info("表示できるpartnerがありません。")
+        st.info("表示できる相手がまだありません。プロフィール登録から相手を追加してください。")
         return
 
-    labels = {build_partner_label(partner): partner.partner_id for partner in partners}
-    selected_label = st.sidebar.selectbox("partner選択", options=list(labels.keys()))
+    labels: dict[str, str] = {}
+    for partner_choice in partners:
+        label = build_partner_choice_label(partner_choice)
+        if label in labels:
+            label = f"{label} ({len(labels) + 1})"
+        labels[label] = partner_choice.partner_id
+    selected_label = st.selectbox("相手を選ぶ", options=list(labels.keys()))
     partner = load_partner_for_view(labels[selected_label])
+    workspace = build_partner_workspace_overview(partner)
 
-    summary = build_partner_summary(partner)
-    status_display = build_partner_operational_display(partner)
-    st.subheader("状態")
+    st.markdown(f"### {workspace['title']}")
+    st.caption(workspace["subtitle"])
     cols = st.columns(4)
-    cols[0].metric("partner_id", summary["partner_id"])
-    cols[1].metric("状態", summary["status"])
-    cols[2].metric("温度感", status_display["basic"][3]["value"])
-    cols[3].metric("未送信候補", summary["pending_suggestions_count"])
+    cols[0].metric("今やること", workspace["next_action"])
+    cols[1].metric("会話ステージ", workspace["conversation_stage"])
+    cols[2].metric("温度感", workspace["temperature"])
+    cols[3].metric("未確認候補", workspace["pending_count"])
 
     with st.container(border=True):
-        st.markdown("**基本情報**")
-        _render_summary_rows(status_display["basic"])
-        st.markdown("**会話状態**")
-        _render_summary_rows(status_display["conversation"])
-    with st.expander("状態の詳細JSONを表示", expanded=False):
-        st.json(status_display["detail"])
+        st.markdown("**次にやること**")
+        _render_summary_rows(workspace["summary_rows"])
+        st.caption("この画面はlocal記録用です。マッチングアプリへの自動送信や外部通信は行いません。")
 
-    render_partner_notes(partner)
+    left, right = st.columns([1, 1.25])
+    with left:
+        st.markdown("### 相手のプロフィール")
+        _render_profile_display_card(build_partner_profile_card(partner))
+        render_partner_notes(partner)
+
+    with right:
+        st.markdown("### 会話履歴")
+        render_conversation_history_section(partner)
+        render_inline_conversation_import(partner)
+
+    st.divider()
     render_generation_controls(partner)
 
-    tab_history, tab_suggestions, tab_sent_outcomes, tab_timeline = st.tabs(["会話履歴", "未送信候補", "送信結果メモ", "timeline"])
+    st.divider()
+    st.markdown("### 候補と送信済み記録")
+    suggestions = format_pending_suggestions(partner)
+    if not suggestions:
+        st.info("未使用の候補はありません。必要なら上の「次に送る文を作る」から候補を作れます。")
+    for index, suggestion in enumerate(suggestions, start=1):
+        title = f"候補{index}: {suggestion['purpose']}"
+        with st.expander(title, expanded=True):
+            st.caption(f"作成日時: {suggestion['created_at']}")
+            st.text_area(
+                "候補本文",
+                suggestion["text"],
+                height=150,
+                disabled=True,
+                key=f"suggestion_{suggestion['suggestion_id']}",
+            )
+            render_sent_recording_controls(partner, suggestion)
+            render_discard_controls(partner, suggestion)
 
-    with tab_history:
-        rows = format_conversation_history(partner)
-        if not rows:
-            st.info("conversation_history は空です。")
-        for row in rows:
-            title = f"{row['index']}. {row['speaker_label']}"
-            if row["timestamp"]:
-                title += f" / {row['timestamp']}"
-            with st.expander(title, expanded=True):
-                st.text_area("本文", row["text"], height=120, disabled=True, key=f"turn_{row['index']}")
+    render_sent_outcome_controls(partner)
 
-    with tab_suggestions:
-        suggestions = format_pending_suggestions(partner)
-        if not suggestions:
-            st.info("pending_suggestions はありません。")
-        for suggestion in suggestions:
-            title = f"{suggestion['suggestion_id']} / {suggestion['purpose']} / {suggestion['created_at']}"
-            with st.expander(title, expanded=True):
-                st.write(f"**status:** {suggestion['status']}")
-                st.text_area(
-                    "候補本文",
-                    suggestion["text"],
-                    height=150,
-                    disabled=True,
-                    key=f"suggestion_{suggestion['suggestion_id']}",
-                )
-                render_sent_recording_controls(partner, suggestion)
-                render_discard_controls(partner, suggestion)
-
-    with tab_sent_outcomes:
-        render_sent_outcome_controls(partner)
-
-    with tab_timeline:
+    with st.expander("詳細情報", expanded=False):
+        status_display = build_partner_operational_display(partner)
+        st.json(status_display["detail"])
         timeline = format_timeline_items(partner)
-        if not timeline:
-            st.info("timeline は空です。")
-        else:
+        if timeline:
             st.dataframe(timeline, width="stretch", hide_index=True)
+
+
+def render_conversation_history_section(partner) -> None:
+    rows = format_conversation_history(partner)
+    if not rows:
+        st.info("まだ会話履歴はありません。会話履歴が少なくても候補は作れます。")
+        return
+    for row in rows[-8:]:
+        speaker = row["speaker_label"]
+        label = "自分" if row["speaker"] == "user" else "相手"
+        with st.container(border=True):
+            st.caption(f"{row['index']}. {label}" + (f" / {row['timestamp']}" if row["timestamp"] else ""))
+            st.write(row["text"])
+
+
+def render_inline_conversation_import(partner) -> None:
+    with st.expander("相手から返信が来たら会話履歴に追加", expanded=False):
+        st.caption("「自分:」「相手:」形式で貼り付けると、この相手のlocal会話履歴に追加できます。自動送信ではありません。")
+        pasted = st.text_area(
+            "会話履歴を貼り付け",
+            height=160,
+            placeholder="自分: はじめまして。\n相手: よろしくお願いします。",
+            key=f"inline_conversation_paste_{partner.partner_id}",
+        )
+        if pasted.strip():
+            parsed = parse_conversation_paste(pasted)
+            preview = build_conversation_import_preview(parsed["turns"])
+            errors = validate_imported_turns(parsed["turns"])
+            warnings = detect_conversation_safety_warnings(pasted)
+            if parsed["unknown_lines"]:
+                guidance = build_conversation_import_failure_guidance()
+                st.warning("読み取れない行があります。自分: / 相手: の形に直すと追加しやすくなります。")
+                with st.expander("直し方のヒント", expanded=False):
+                    st.json(guidance)
+            if errors:
+                for error in errors:
+                    st.error(error)
+            if warnings:
+                st.warning("保存前に確認してください: " + " / ".join(warnings))
+            with st.expander("追加前プレビュー", expanded=False):
+                st.json(preview)
+            confirm = st.checkbox(
+                "この会話履歴をlocalに追加する",
+                key=f"inline_conversation_confirm_{partner.partner_id}",
+            )
+            if st.button(
+                "会話履歴を追加",
+                disabled=bool(errors) or not confirm,
+                key=f"inline_conversation_button_{partner.partner_id}",
+            ):
+                try:
+                    result = append_conversation_turns_to_partner(partner.partner_id, parsed["turns"])
+                except ValueError as error:
+                    st.error(str(error))
+                    return
+                st.success(f"{result['added_count']}件の会話履歴をlocalに追加しました。")
+                st.rerun()
 
 
 def render_partner_notes(partner) -> None:
@@ -219,22 +277,22 @@ def render_partner_notes(partner) -> None:
 
 
 def render_generation_controls(partner) -> None:
-    st.subheader("候補生成")
+    st.subheader("次に送る文を作る")
     mode = get_generation_mode_for_partner(partner)
-    mode_label = {"first": "初回メッセージ候補", "reply": "返信候補", "blocked": "生成不可"}[mode]
-    button_label = f"{mode_label}を3つ生成する" if mode in {"first", "reply"} else "候補生成不可"
+    mode_label = {"first": "初回メッセージ", "reply": "返信", "blocked": "今は候補を作れません"}[mode]
+    button_label = f"この人向けの候補を3つ作る" if mode in {"first", "reply"} else "候補を作れません"
     st.write(f"**現在:** {build_generation_status_message(partner)}")
-    st.write(f"**生成タイプ:** {mode_label}")
+    st.write(f"**作る文:** {mode_label}")
     objectives = st.multiselect(
-        "今回の目的（上の方ほど日常会話向け）",
+        "どんな会話にしたいか",
         options=GENERATION_OBJECTIVE_OPTIONS,
         default=["相手のプロフィールに触れる", "質問を1つ入れる"],
         help="電話、会う提案、LINE交換、大人っぽい雰囲気は下の方に置いています。会話の温度感が十分ある場合だけ選んでください。",
         key=f"generation_objectives_{partner.partner_id}",
     )
-    st.caption("電話・会う提案・LINE交換・大人っぽい雰囲気は、相手の反応が良い場合だけ使います。")
+    st.caption("電話・会う提案・LINE交換・大人っぽい雰囲気は、相手の反応が良い場合だけ慎重に使います。")
     tone = st.selectbox(
-        "文章の雰囲気",
+        "文の雰囲気",
         options=GENERATION_TONE_OPTIONS,
         index=0,
         key=f"generation_tone_{partner.partner_id}",
@@ -267,8 +325,8 @@ def render_generation_controls(partner) -> None:
             st.warning(warning)
         with st.expander("詳細データ", expanded=False):
             st.json(preflight)
-    st.caption("候補生成はlocalのpending_suggestionsへ保存するだけです。自動送信ではありません。")
-    confirm = st.checkbox("自動送信ではないことを確認し、候補をlocal保存する", key=f"generate_confirm_{partner.partner_id}")
+    st.caption("候補はlocalに保存されるだけです。実際に送る文は、ユーザー本人がマッチングアプリ上で手動送信してください。")
+    confirm = st.checkbox("自動送信ではないことを確認して候補を作る", key=f"generate_confirm_{partner.partner_id}")
     if st.button(button_label, disabled=not (can_generate_suggestion(partner) and confirm), key=f"generate_button_{partner.partner_id}"):
         try:
             generated = generate_suggestion_variants_for_gui(
@@ -280,7 +338,7 @@ def render_generation_controls(partner) -> None:
         except ValueError as error:
             st.error(str(error))
             return
-        st.success("3候補をpending_suggestionsへ保存しました。")
+        st.success("この人向けの候補を3つ作りました。")
         for variant in generated["variants"]:
             with st.expander(f"{variant['title']} / {variant['suggestion_id']}", expanded=True):
                 st.write(f"**使いどころ:** {variant['use_case']}")
@@ -297,7 +355,7 @@ def render_generation_controls(partner) -> None:
                 for check in variant["quality_check"]:
                     st.write(f"- {check}")
                 st.write("注意: " + " / ".join(variant["safety_notes"]))
-        st.info("実際に手動送信した後、pending_suggestions欄から送信済みとしてlocal記録できます。")
+        st.info("実際に手動送信した後、この画面の候補欄から送信済みとしてlocal記録できます。")
 
 
 def render_sent_recording_controls(partner, suggestion: dict) -> None:

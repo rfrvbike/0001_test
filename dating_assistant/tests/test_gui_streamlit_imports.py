@@ -41,6 +41,62 @@ class GuiStreamlitImportTests(unittest.TestCase):
 
         self.assertEqual(preflight.main(), 0)
 
+    def test_partner_view_is_conversation_workspace(self):
+        from streamlit.testing.v1 import AppTest
+        from src.models import ConversationTurn, PartnerProfile, PartnerRecord, PendingSuggestion
+        from src.partner_store import save_partner
+
+        app_file = APP_DIR / "gui_streamlit_app.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            real_dir = Path(tmp) / "real_profiles"
+            partner_dir = Path(tmp) / "partners"
+            with unittest.mock.patch.dict(
+                os.environ,
+                {
+                    "DATING_ASSISTANT_REAL_PROFILE_DIR": str(real_dir),
+                    "DATING_ASSISTANT_PARTNER_DIR": str(partner_dir),
+                },
+                clear=False,
+            ):
+                partner = PartnerRecord(
+                    partner_id="partner_001",
+                    display_name="ケイコさん",
+                    app_name="pairs",
+                    status="chatting",
+                    profile=PartnerProfile(
+                        age=31,
+                        profile_text="カフェが好きです。",
+                        hobbies=["カフェ"],
+                        photos_memo=["明るい雰囲気"],
+                    ),
+                    conversation=[
+                        ConversationTurn("user", "はじめまして。", "2026-06-09T10:00:00+09:00"),
+                        ConversationTurn("partner", "よろしくお願いします。", "2026-06-09T10:05:00+09:00"),
+                    ],
+                    pending_suggestions=[
+                        PendingSuggestion("suggestion_001", "reply", "カフェいいですね。", "2026-06-09T10:10:00+09:00")
+                    ],
+                )
+                partner.message_state.awaiting_user_action = True
+                save_partner(partner)
+
+                at = AppTest.from_file(str(app_file), default_timeout=20)
+                at.run()
+
+                self.assertEqual(len(at.exception), 0)
+                options = [str(option) for option in at.selectbox[0].options]
+                self.assertTrue(any("ケイコさん" in option for option in options))
+                self.assertFalse(any("partner_001" in option for option in options))
+                subheaders = [item.value for item in at.subheader]
+                markdowns = [item.value for item in at.markdown]
+                captions = [item.value for item in at.caption]
+                self.assertIn("相手と会話する", subheaders)
+                self.assertIn("次に送る文を作る", subheaders)
+                self.assertTrue(any("相手のプロフィール" in value for value in markdowns))
+                self.assertTrue(any("会話履歴" in value for value in markdowns))
+                self.assertTrue(any("候補と送信済み記録" in value for value in markdowns))
+                self.assertTrue(any("自動送信" in value for value in captions))
+
     def test_profile_registration_save_button_accepts_sparse_profiles(self):
         from streamlit.testing.v1 import AppTest
         from src.loaders import load_target_profile
@@ -146,7 +202,7 @@ class GuiStreamlitImportTests(unittest.TestCase):
                     at = AppTest.from_file(str(app_file), default_timeout=20)
                     at.run()
                     at.text_area[0].set_value(case["paste"])
-                    at.checkbox[0].set_value(True)
+                    at.checkbox[1].set_value(True)
                     at.button[2].click().run()
 
                     saved_paths = sorted(real_dir.glob("*.yaml"))
@@ -191,7 +247,7 @@ class GuiStreamlitImportTests(unittest.TestCase):
             ):
                 at = AppTest.from_file(str(app_file), default_timeout=20)
                 at.run()
-                at.checkbox[0].set_value(True)
+                at.checkbox[1].set_value(True)
                 at.button[2].click().run()
 
                 self.assertEqual(len(at.exception), 0)

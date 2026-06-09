@@ -207,6 +207,90 @@ def build_partner_label(partner: PartnerRecord) -> str:
     return f"{partner.partner_id} / {name} / {partner.status}"
 
 
+def build_partner_choice_label(partner: PartnerRecord) -> str:
+    display_name = partner.display_name or PROFILE_DISPLAY_NAME_UNSET
+    app_name = partner.app_name or "アプリ未設定"
+    action = build_partner_next_action_label(partner)
+    return f"{display_name} / {app_name} / {action}"
+
+
+def build_partner_next_action_label(partner: PartnerRecord) -> str:
+    message_state = partner.message_state
+    pending_count = len(get_pending_suggestions(partner))
+    if message_state.awaiting_partner_reply:
+        return "相手の返信待ち"
+    if message_state.awaiting_user_action:
+        return "返信を考える"
+    if pending_count:
+        return "候補を確認"
+    if partner.conversation:
+        return "次の返信候補を作る"
+    if partner.status == "archived":
+        return "アーカイブ済み"
+    return "初回メッセージ候補を作る"
+
+
+def build_partner_workspace_overview(partner: PartnerRecord) -> dict[str, Any]:
+    stage = build_conversation_stage_summary(partner)
+    pending_count = len(get_pending_suggestions(partner))
+    return {
+        "title": partner.display_name or PROFILE_DISPLAY_NAME_UNSET,
+        "subtitle": f"{partner.app_name or 'アプリ未設定'} / {build_partner_next_action_label(partner)}",
+        "next_action": build_partner_next_action_label(partner),
+        "conversation_stage": stage["conversation_stage"] or "未設定",
+        "temperature": stage["temperature"] or "不明",
+        "pending_count": pending_count,
+        "conversation_count": len(partner.conversation),
+        "sent_count": len(partner.sent_records),
+        "summary_rows": [
+            {"label": "今やること", "value": build_partner_next_action_label(partner)},
+            {"label": "会話ステージ", "value": stage["conversation_stage"] or "未設定"},
+            {"label": "温度感", "value": stage["temperature"] or "不明"},
+            {"label": "未確認候補", "value": f"{pending_count}件"},
+        ],
+        "detail": {
+            "partner_id": partner.partner_id,
+            "status": partner.status,
+            "message_state": asdict(partner.message_state),
+            "conversation_stage": stage,
+        },
+    }
+
+
+def build_partner_profile_card(partner: PartnerRecord) -> dict[str, Any]:
+    profile = partner.profile
+    content_count = _partner_profile_content_count(partner)
+    if content_count <= 1:
+        info_status = "情報少なめ"
+    elif content_count <= 3:
+        info_status = "一部不足"
+    else:
+        info_status = "ある程度あり"
+    return {
+        "title": partner.display_name or PROFILE_DISPLAY_NAME_UNSET,
+        "summary": [
+            {"label": "表示名", "value": partner.display_name or PROFILE_DISPLAY_NAME_UNSET},
+            {"label": "年齢", "value": profile.age if profile.age is not None else "未設定"},
+            {"label": "エリア", "value": profile.location_hint or "未設定"},
+            {"label": "アプリ", "value": partner.app_name or "未設定"},
+            {"label": "情報量", "value": info_status},
+        ],
+        "profile_text": profile.profile_text.strip() or "プロフィール本文未設定",
+        "sections": [
+            {"title": "趣味・興味", "items": format_list_or_empty(profile.hobbies)},
+            {"title": "写真から分かる印象メモ", "items": format_list_or_empty(profile.photos_memo)},
+            {"title": "会話に使えそうな話題", "items": format_list_or_empty(_free_note_list(profile.free_notes or "", "conversation_hooks"))},
+            {"title": "初回メッセージのヒント", "items": format_list_or_empty(_free_note_list(profile.free_notes or "", "first_message_hints"))},
+            {"title": "避けた方がよさそうな話題", "items": format_list_or_empty(_free_note_list(profile.free_notes or "", "avoid_topics"))},
+        ],
+        "notes": profile.free_notes or "",
+        "detail": {
+            "partner_id": partner.partner_id,
+            "status": partner.status,
+        },
+    }
+
+
 def build_partner_summary(partner: PartnerRecord) -> dict[str, Any]:
     pending = get_pending_suggestions(partner)
     return {
@@ -1710,6 +1794,29 @@ def _first_free_note_value(text: str, key: str) -> str:
         if line.startswith(prefix):
             return line[len(prefix) :].strip()
     return ""
+
+
+def _free_note_list(text: str, key: str) -> list[str]:
+    sections = _parse_free_note_sections(text)
+    return sections.get(key, [])
+
+
+def _partner_profile_content_count(partner: PartnerRecord) -> int:
+    profile = partner.profile
+    count = 0
+    if partner.display_name.strip():
+        count += 1
+    if profile.profile_text.strip():
+        count += 1
+    if profile.hobbies:
+        count += 1
+    if profile.photos_memo:
+        count += 1
+    if profile.location_hint:
+        count += 1
+    if profile.free_notes:
+        count += 1
+    return count
 
 
 def _free_note_body(text: str) -> str:
