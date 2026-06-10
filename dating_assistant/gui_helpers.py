@@ -13,7 +13,7 @@ from src.app_core import generate
 from src.conversation_planner import estimate_partner_temperature
 from src.loaders import load_user_profile
 from src.models import ConversationTurn, GenerationRequest, PartnerNote, PartnerRecord, SentRecord, TargetProfile
-from src.partner_store import list_partners, load_partner
+from src.partner_store import get_skipped_partner_files, list_partners, load_partner
 from src.partner_manager import add_partner_note, archive_partner, create_partner_from_target_profile, save_updated_partner, unarchive_partner
 from src.real_profile_manager import (
     create_real_profile,
@@ -109,6 +109,8 @@ PROFILE_UNSET_VALUES = {"", "-", "未設定", "なし", "無し", "不明", "n/a
 PROFILE_MINIMAL_TEXT = "プロフィール本文未設定。あとで補完できます。"
 PROFILE_PHOTO_ONLY_TEXT = "プロフィール本文なし。写真メモのみ登録。"
 PROFILE_DISPLAY_NAME_UNSET = "表示名未設定"
+PROFILE_NORMALIZED_PLACEHOLDER_TEXTS = {PROFILE_MINIMAL_TEXT, PROFILE_PHOTO_ONLY_TEXT}
+PARTNER_SOURCE_PROFILE_EVENT = "partner_created_from_profile"
 PROFILE_PASTE_LABELS = {
     "label": "label",
     "display_name": "表示名",
@@ -1336,12 +1338,12 @@ def validate_profile_form(form: dict[str, Any]) -> list[str]:
     errors = []
     label = str(form.get("label", "")).strip()
     if not label:
-        errors.append("保存先labelを自動生成できませんでした。")
+        errors.append("保存IDを自動生成できませんでした。もう一度試すか、アプリを再起動してください。")
     else:
         try:
             validate_real_profile_label(label)
         except ValueError:
-            errors.append("label は英数字・ハイフン・アンダースコアのみで入力してください。")
+            errors.append("保存IDの形式が正しくありません。もう一度試すか、アプリを再起動してください。")
     return errors
 
 
@@ -1548,11 +1550,31 @@ def build_profile_display_sections(label: str) -> dict[str, Any]:
     }
 
 
+def _partner_source_profile_labels(partner: PartnerRecord) -> set[str]:
+    return {
+        event.related_id
+        for event in partner.activity_log
+        if event.event_type == PARTNER_SOURCE_PROFILE_EVENT and event.related_id
+    }
+
+
 def find_existing_partners_for_profile(label: str) -> list[dict[str, str]]:
     _path, profile = load_real_profile_for_gui(label)
+    # 本文が共通の補完文に正規化された情報少なめプロフィール同士は、
+    # 内容一致では同一人物と判定しない（label紐付けのみで同定する）。
+    allow_content_match = (
+        profile.profile_text.strip() != ""
+        and profile.profile_text not in PROFILE_NORMALIZED_PLACEHOLDER_TEXTS
+    )
     matches = []
     for partner in list_partners():
-        if partner.profile.profile_text == profile.profile_text and partner.profile.hobbies == profile.hobbies:
+        linked_by_label = label in _partner_source_profile_labels(partner)
+        content_match = (
+            allow_content_match
+            and partner.profile.profile_text == profile.profile_text
+            and partner.profile.hobbies == profile.hobbies
+        )
+        if linked_by_label or content_match:
             matches.append(
                 {
                     "partner_id": partner.partner_id,
@@ -1634,6 +1656,7 @@ def save_partner_from_profile(label: str, display_name: str, app_name: str = "",
     chosen_display_name = display_name.strip() or profile.name_or_label or label
     partner = create_partner_from_target_profile(profile, display_name=chosen_display_name, app_name=app_name.strip())
     partner.message_state.next_action = "初回候補生成待ち"
+    add_activity_event(partner, PARTNER_SOURCE_PROFILE_EVENT, f"元プロフィール {label} から作成", label)
     if source_memo.strip():
         partner.notes.append(
             PartnerNote(text=f"source memo: {source_memo.strip()}", created_at=partner.created_at)

@@ -1,5 +1,7 @@
 # Dating Assistant
 
+**バージョン:** v1.0.0-beta　**リリース日:** 2026-06-11　**問い合わせ先:** -
+
 ## No.151 販売前ベータ版で最初に読むこと
 
 dating_assistantは、マッチングアプリ上の相手プロフィールや会話履歴をもとに、次に送る文章の候補を作り、送信済みメモをPC内に残すlocalツールです。マッチングアプリへ直接接続したり、自動送信したり、外部サービスへ勝手に送ったりしません。
@@ -859,6 +861,65 @@ cd "C:\Users\oyue_\OneDrive\ドキュメント\GitHub\0001_test"
 
 ## テスト方法
 
+まず仮想環境を有効化してください。
+
 ```powershell
-python -m unittest discover tests
+# Windows
+.venv_dating_gui\Scripts\Activate.ps1
 ```
+
+```bash
+# Mac / Linux
+source .venv_dating_gui/bin/activate
+```
+
+有効化後にテストを実行します。
+
+```powershell
+# Windows（venvのpythonを直接指定する場合）
+.venv_dating_gui\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+```bash
+# Mac / Linux（venvのpythonを直接指定する場合）
+.venv_dating_gui/bin/python -m unittest discover -s tests -v
+```
+
+> **注意**: システムの `python` コマンドではなく、必ず venv 内の `python` を使用してください。
+> システム Python では `streamlit` が未インストールのため、テストがエラーになります。
+
+## 配布・インストール手順
+
+1. このフォルダ（`dating_assistant/`）を配布先PCにコピーする
+
+2. venv を作成する
+
+   ```powershell
+   python -m venv .venv_dating_gui
+   ```
+
+3. 依存パッケージをインストールする
+
+   ```powershell
+   # Windows
+   .venv_dating_gui\Scripts\pip install -r requirements-gui.txt
+   ```
+
+   ```bash
+   # Mac / Linux
+   .venv_dating_gui/bin/pip install -r requirements-gui.txt
+   ```
+
+4. 起動する
+
+   `start_dating_assistant_gui.bat` をダブルクリックする（Windowsのみ）
+
+   Mac / Linux の場合は以下を実行する。
+
+   ```bash
+   .venv_dating_gui/bin/streamlit run gui_streamlit_app.py
+   ```
+
+5. 初回起動時はAPIキーの設定は不要
+
+   このツールはルールベース生成のため外部APIを使用しません。起動直後から利用できます。

@@ -60,6 +60,7 @@ from gui_helpers import (
     GENERATION_OBJECTIVE_OPTIONS,
     GENERATION_TONE_OPTIONS,
     get_generation_mode_for_partner,
+    get_skipped_partner_files,
     discard_suggestion_from_gui,
     archive_partner_from_gui,
     load_partner_choices,
@@ -118,6 +119,7 @@ def render_partner_viewer() -> None:
 
     include_archived = st.checkbox("アーカイブ済みの相手も表示", value=False)
     partners = load_partner_choices(include_archived=include_archived)
+    _render_skipped_partner_warning()
     if not partners:
         st.info(
             "まだ会話対象が登録されていません。"
@@ -130,7 +132,11 @@ def render_partner_viewer() -> None:
     for partner_choice in partners:
         label = build_partner_choice_label(partner_choice)
         if label in labels:
-            label = f"{label} ({len(labels) + 1})"
+            base = label
+            counter = 2
+            while f"{base} ({counter})" in labels:
+                counter += 1
+            label = f"{base} ({counter})"
         labels[label] = partner_choice.partner_id
     selected_partner_id = str(st.session_state.get("selected_partner_id", "") or "")
     label_values = list(labels.values())
@@ -181,14 +187,14 @@ def render_partner_viewer() -> None:
                 suggestion["text"],
                 height=150,
                 disabled=True,
-                key=f"suggestion_{suggestion['suggestion_id']}",
+                key=f"suggestion_{partner.partner_id}_{suggestion['suggestion_id']}",
             )
             render_sent_recording_controls(partner, suggestion)
             render_discard_controls(partner, suggestion)
 
     render_sent_outcome_controls(partner)
 
-    with st.expander("詳細情報", expanded=False):
+    with st.expander("詳細情報（開発者向け）", expanded=False):
         status_display = build_partner_operational_display(partner)
         st.json(status_display["detail"])
         timeline = format_timeline_items(partner)
@@ -220,21 +226,24 @@ def render_inline_conversation_import(partner) -> None:
         )
         if pasted.strip():
             turns, parse_warnings = parse_conversation_paste(pasted)
-            errors = validate_imported_turns(turns)
+            duplicate_warning = detect_duplicate_turn_sequence(partner, turns)
+            errors = validate_imported_turns(turns, parse_warnings)
             warnings = list(parse_warnings)
             warnings.extend(detect_conversation_safety_warnings(pasted))
             preview = build_conversation_import_preview(partner, turns, warnings)
             if parse_warnings:
                 guidance = build_conversation_import_failure_guidance()
                 st.warning("読み取れない行があります。自分: / 相手: の形に直すと追加しやすくなります。")
-                with st.expander("直し方のヒント", expanded=False):
+                with st.expander("直し方のヒント（詳細）", expanded=False):
                     st.json(guidance)
             if errors:
                 for error in errors:
                     st.error(error)
+            if duplicate_warning:
+                st.warning("同じ会話履歴がすでに登録されています。")
             if warnings:
                 st.warning("保存前に確認してください: " + " / ".join(warnings))
-            with st.expander("追加前プレビュー", expanded=False):
+            with st.expander("追加前プレビュー（開発者向け詳細）", expanded=False):
                 st.json(preview)
             confirm = st.checkbox(
                 "この会話履歴をlocalに追加する",
@@ -242,7 +251,7 @@ def render_inline_conversation_import(partner) -> None:
             )
             if st.button(
                 "会話履歴を追加",
-                disabled=bool(errors) or not confirm,
+                disabled=bool(errors) or duplicate_warning or not confirm,
                 key=f"inline_conversation_button_{partner.partner_id}",
             ):
                 try:
@@ -272,7 +281,7 @@ def render_partner_notes(partner) -> None:
         key=f"partner_note_text_{partner.partner_id}",
     )
     if new_note.strip():
-        with st.expander("相手別メモ保存プレビュー", expanded=False):
+        with st.expander("相手別メモ保存プレビュー（開発者向け詳細）", expanded=False):
             preview = build_partner_note_preview(new_note)
             for warning in preview["warnings"]:
                 st.warning(warning)
@@ -344,7 +353,7 @@ def render_generation_controls(partner) -> None:
         st.dataframe(action_rows, width="stretch", hide_index=True)
         for warning in preflight["warnings"]:
             st.warning(warning)
-        with st.expander("詳細データ", expanded=False):
+        with st.expander("詳細データ（開発者向け）", expanded=False):
             st.json(preflight)
     st.caption("候補はlocalに保存されるだけです。実際に送る文は、ユーザー本人がマッチングアプリ上で手動送信してください。")
     confirm = st.checkbox("自動送信ではないことを確認して候補を作る", key=f"generate_confirm_{partner.partner_id}")
@@ -370,7 +379,7 @@ def render_generation_controls(partner) -> None:
                     variant["text"],
                     height=120,
                     disabled=True,
-                    key=f"generated_{variant['suggestion_id']}",
+                    key=f"generated_{partner.partner_id}_{variant['suggestion_id']}",
                 )
                 st.write("**品質チェック:**")
                 for check in variant["quality_check"]:
@@ -389,7 +398,7 @@ def render_sent_recording_controls(partner, suggestion: dict) -> None:
         "私はこの文をマッチングアプリ上で手動送信しました",
         key=f"mark_sent_confirm_{partner.partner_id}_{suggestion_id}",
     )
-    with st.expander("送信済み記録プレビュー", expanded=False):
+    with st.expander("送信済み記録プレビュー（開発者向け詳細）", expanded=False):
         st.json(build_mark_sent_preview(partner, suggestion_id=suggestion_id))
 
     if st.button(
@@ -411,7 +420,7 @@ def render_sent_recording_controls(partner, suggestion: dict) -> None:
         key=f"mark_sent_custom_text_{partner.partner_id}_{suggestion_id}",
     )
     if custom_text.strip():
-        with st.expander("修正文の送信済み記録プレビュー", expanded=False):
+        with st.expander("修正文の送信済み記録プレビュー（開発者向け詳細）", expanded=False):
             st.json(build_mark_sent_preview(partner, custom_text=custom_text))
         st.info("実際に送信した文を別入力で記録するため、元候補が未使用候補として残る場合があります。")
     if st.button(
@@ -468,7 +477,7 @@ def render_sent_outcome_controls(partner) -> None:
                 key=f"outcome_memo_{partner.partner_id}_{suggestion['sent_id']}",
             )
             if outcome_memo.strip():
-                with st.expander("送信結果メモ保存プレビュー", expanded=False):
+                with st.expander("送信結果メモ保存プレビュー（開発者向け詳細）", expanded=False):
                     preview = build_sent_outcome_preview(partner, suggestion["sent_id"], outcome_status, outcome_memo)
                     for warning in preview["warnings"]:
                         st.warning(warning)
@@ -517,7 +526,7 @@ def render_discard_controls(partner, suggestion: dict) -> None:
         "この候補を未使用候補として破棄します",
         key=f"discard_confirm_{partner.partner_id}_{suggestion_id}",
     )
-    with st.expander("候補破棄プレビュー", expanded=False):
+    with st.expander("候補破棄プレビュー（開発者向け詳細）", expanded=False):
         st.json(build_discard_suggestion_preview(partner, suggestion_id, reason=reason))
     if partner.status == "archived":
         st.warning("archivedのpartnerでは候補破棄できません。")
@@ -553,7 +562,7 @@ def render_profile_registration() -> None:
         st.markdown("### まずここにプロフィールを貼り付け")
         st.info(
             "ChatGPTプロジェクトで整理したプロフィール文や、アプリ上で読める自己紹介・趣味・写真の印象メモをここに貼り付けます。"
-            "情報が少なくても保存できます。保存IDやlabelを入力する必要はありません。"
+            "情報が少なくても保存できます。保存IDは自動生成するため、入力する必要はありません。"
             "下の入力欄は、自動抽出できなかった項目だけ補助的に使います。"
         )
         profile_paste = st.text_area(
@@ -563,13 +572,14 @@ def render_profile_registration() -> None:
             help="マッチングアプリ上のプロフィール文、自己紹介、趣味、エリア、年齢、写真の印象メモなどをまとめて貼り付けます。画像そのものは保存しません。",
         )
         st.caption("スクリーンショット画像や顔写真そのものは保存しません。読み取ったテキストとメモだけを貼り付けてください。")
+        st.caption("テキストを貼り付けて「保存」を押すと、内容のプレビューが表示されます。")
         with st.expander("貼り付け形式の例", expanded=False):
             st.caption("ChatGPTプロジェクトから出力する場合は、この形式がおすすめです。")
             st.code(_profile_paste_format_example(), language="text")
         with st.expander("不足分・修正欄", expanded=False):
             st.caption("自動抽出できなかった項目だけ、必要に応じて修正してください。")
             if label_seed_candidate:
-                st.info("保存IDは保存時に自動生成します。labelを入力・修正する必要はありません。")
+                st.info("保存IDは保存時に自動生成します。入力・修正する必要はありません。")
             display_name = st.text_input("display_name", value=str(pasted_seed_form.get("display_name", "")))
             app_name = st.text_input("app_name", value=str(pasted_seed_form.get("app_name", "")))
             age = st.number_input("age", min_value=18, max_value=120, value=None, step=1)
@@ -615,21 +625,20 @@ def render_profile_registration() -> None:
         st.markdown("**保存前の確認**")
         display_preview = dict(preview)
         display_preview.pop("保存先label", None)
-        display_preview.pop("菫晏ｭ伜・label", None)
         display_preview["保存ID"] = "自動生成済み"
         st.write(f"表示名: {form.get('display_name') or '表示名未設定'}")
         st.write(f"自己紹介: {form.get('profile_text') or 'プロフィール本文未設定'}")
         st.write(f"状態: {form.get('profile_status') or '情報確認中'}")
         st.caption("保存IDは自動生成します。情報が少ない場合も、あとから補完できます。")
-        with st.expander("保存前データの詳細を表示", expanded=False):
+        with st.expander("保存前データの詳細を表示（開発者向け）", expanded=False):
             st.json(display_preview)
         if real_profile_exists(preview["保存先label"]):
-            errors.append("同じlabelのreal profileが既に存在します。上書きはできません。")
+            errors.append("同じ保存IDのプロフィールが既に存在します。上書きはできません。")
 
     if submitted and errors:
         for error in errors:
             st.error(error)
-        st.error("保存先labelを安全に決められないため保存できません。")
+        st.error("保存IDを自動生成できませんでした。もう一度試すか、アプリを再起動してください。")
     if submitted and warnings:
         st.warning("保存前に見直してください: " + " / ".join(warnings))
 
@@ -637,27 +646,27 @@ def render_profile_registration() -> None:
         debug_info = build_profile_save_debug_info(form, errors, warnings, has_profile_input=has_profile_input)
         if not has_profile_input:
             st.error("保存対象のプロフィール情報が空です。貼り付け欄または補助入力欄に1文字以上入力してください。")
-            with st.expander("保存前データ確認", expanded=True):
+            with st.expander("保存前データ確認（開発者向け詳細）", expanded=True):
                 st.json(debug_info)
             return
         if errors:
-            st.error("保存できません。保存先labelを確認してください。")
-            with st.expander("保存前データ確認", expanded=True):
+            st.error("保存できません。入力内容を確認してください。")
+            with st.expander("保存前データ確認（開発者向け詳細）", expanded=True):
                 st.json(debug_info)
             return
         if not confirm_local_save:
             st.error("保存前確認チェックを入れてください。")
-            with st.expander("保存前データ確認", expanded=False):
+            with st.expander("保存前データ確認（開発者向け詳細）", expanded=False):
                 st.json(debug_info)
             return
         try:
             path, save_warnings = save_real_profile_from_form(form)
         except FileExistsError:
-            st.error("同じlabelのreal profileが既に存在します。")
+            st.error("同じ保存IDのプロフィールが既に存在します。")
             return
         except ValueError as error:
             st.error(str(error))
-            with st.expander("保存前データ確認", expanded=True):
+            with st.expander("保存前データ確認（開発者向け詳細）", expanded=True):
                 st.json(debug_info)
             return
         except Exception as error:
@@ -701,7 +710,7 @@ def render_profile_registration() -> None:
         )
         if st.button("この相手と会話する", key=f"open_saved_partner_{partner.partner_id}"):
             st.session_state["selected_partner_id"] = partner.partner_id
-            st.rerun()
+            st.info("上の「相手と会話する」タブを開いてください。相手の選択は切り替わっています。")
 
     st.info("プロフィールを保存すると、自動で会話対象としてlocal登録します。保存後は「相手と会話する」画面で候補生成へ進めます。")
 
@@ -766,7 +775,7 @@ def _render_profile_paste_preview_card(preview: dict[str, object]) -> None:
         if preview["warnings"]:
             st.warning("保存前に見直してください: " + " / ".join(preview["warnings"]))
         _render_bullet_items("確認メモ", preview["review_notes"])
-    with st.expander("詳しい抽出内容を表示", expanded=False):
+    with st.expander("詳しい抽出内容を表示（開発者向け）", expanded=False):
         st.json(preview["detail"])
 
 
@@ -920,6 +929,7 @@ def render_partner_creation() -> None:
         )
 
     management_partners = load_partner_choices(include_archived=include_archived_management)
+    _render_skipped_partner_warning()
     if management_partners:
         st.markdown("### 登録済み相手の整理")
         management_labels = {build_partner_choice_label(partner): partner.partner_id for partner in management_partners}
@@ -929,7 +939,7 @@ def render_partner_creation() -> None:
 
         if st.button("この相手と会話する", key=f"manage_open_{selected_management_partner.partner_id}"):
             st.session_state["selected_partner_id"] = selected_management_partner.partner_id
-            st.info("「相手と会話する」画面でこの相手を選択しました。候補作成や会話履歴追加はそちらで行えます。")
+            st.info("上の「相手と会話する」タブを開いてください。相手の選択は切り替わっています。")
 
         with st.expander("表示名・アプリ名・管理メモを修正", expanded=False):
             st.caption("表示名やメモだけを更新します。内部保存IDや会話履歴、送信済み記録は変更しません。")
@@ -1004,7 +1014,7 @@ def render_partner_creation() -> None:
     selected_profile = st.selectbox("保存済みプロフィール選択", options=list(profile_options.keys()))
     label = profile_options[selected_profile]
     _render_profile_display_card(build_profile_display_sections(label))
-    with st.expander("詳しいプロフィール情報を表示", expanded=False):
+    with st.expander("詳しいプロフィール情報を表示（開発者向け）", expanded=False):
         st.json(build_real_profile_summary_for_gui(label))
 
     existing_partners = summarize_existing_partner_candidates(label)
@@ -1023,7 +1033,7 @@ def render_partner_creation() -> None:
 
     preview = build_partner_creation_preview(label, display_name=display_name, app_name=app_name, source_memo=source_memo)
     _render_partner_preview_card(format_partner_preview_for_display(label, display_name=display_name, app_name=app_name, source_memo=source_memo))
-    with st.expander("保存前の詳しい内容を表示", expanded=False):
+    with st.expander("保存前の詳しい内容を表示（開発者向け）", expanded=False):
         st.json(preview)
 
     confirm_create = st.checkbox("保存内容を確認し、会話対象としてlocal保存する")
@@ -1055,6 +1065,7 @@ def render_conversation_import() -> None:
     )
 
     partners = load_partner_choices(include_archived=False)
+    _render_skipped_partner_warning()
     if not partners:
         st.info("会話履歴を追加する相手がまだありません。まずは「プロフィール登録」から相手情報を登録してください。")
         return
@@ -1095,8 +1106,13 @@ def render_conversation_import() -> None:
         warnings.append("既存の会話履歴末尾と完全一致する連続発言です。")
 
     if turns:
+        preview_data = build_conversation_import_preview(partner, turns, warnings)
         st.markdown("**保存プレビュー**")
-        st.json(build_conversation_import_preview(partner, turns, warnings))
+        with st.container(border=True):
+            st.write(f"追加予定: {preview_data['追加予定turn数']}件（自分: {preview_data['speakerごとの発話数']['user']}件 / 相手: {preview_data['speakerごとの発話数']['partner']}件）")
+            st.write(f"保存先: {preview_data['保存先']}")
+            if preview_data["警告一覧"]:
+                st.caption("確認事項: " + " / ".join(preview_data["警告一覧"]))
     if errors and (submitted or pasted.strip()):
         st.error("会話履歴を解析できませんでした。")
         guidance = build_conversation_import_failure_guidance()
@@ -1120,6 +1136,7 @@ def render_conversation_import() -> None:
         updated = append_conversation_turns_to_partner(partner.partner_id, turns)
         st.success(f"保存しました: {len(turns)}件の会話履歴を追加しました。")
         st.info("保存後は「相手と会話する」画面で生成前チェックを確認し、3候補生成へ進めます。実際の送信はユーザー本人が手動で行います。")
+        st.rerun()
 
     with st.expander("解析できない場合の手動追加", expanded=bool(errors and (submitted or pasted.strip()))):
         st.caption("1発言ずつlocalの会話履歴へ追加します。自動送信ではありません。")
@@ -1136,6 +1153,12 @@ def render_conversation_import() -> None:
             manual_speaker = "user" if manual_speaker_label == "自分" else "partner"
             updated = append_conversation_turns_to_partner(partner.partner_id, [{"speaker": manual_speaker, "text": manual_text.strip()}])
             st.success("保存しました: 1件の会話履歴を追加しました。")
+
+
+def _render_skipped_partner_warning() -> None:
+    skipped = get_skipped_partner_files()
+    if skipped:
+        st.warning("一部のデータが読み込めませんでした。該当ファイル: " + ", ".join(skipped))
 
 
 def render_help() -> None:
@@ -1188,6 +1211,7 @@ def render_help() -> None:
             "候補文は必ず人間が確認し、相手との温度感に合わない場合は送らない",
             "電話、会う提案、LINE交換、大人っぽい雰囲気は慎重に扱う",
             "データはlocal保存です。実データをGitに入れないでください",
+            "データファイル（data/local/内）は直接編集しないでください。編集が必要な場合はアプリ内の機能を使ってください",
         ],
     )
     st.markdown("### よくある困りごと")
@@ -1220,6 +1244,24 @@ def render_help() -> None:
             "使えます。表示名や自己紹介が少なくてもプロフィールとして保存できます。"
             "不足している内容は警告として表示され、あとから補完できます。"
         )
+
+    st.divider()
+    st.markdown("### データのバックアップ")
+    with st.container(border=True):
+        st.write("以下のフォルダをコピーして保存してください。")
+        st.code("data/local/", language="text")
+        st.write(
+            "PC買い替え時やトラブル時は、このフォルダを同じ場所に戻すことでデータを復元できます。"
+        )
+        st.caption("バックアップ対象: プロフィール情報、会話履歴、送信済み記録、メモ")
+
+    st.divider()
+    st.markdown("### バージョン情報")
+    with st.container(border=True):
+        st.write("**バージョン:** v1.0.0-beta")
+        st.write("**リリース日:** 2026-06-11")
+        st.write("**問い合わせ先:** -")
+    st.caption("このツールはlocalで動作するルールベース生成ツールです。外部APIへの通信は行いません。")
 
 
 def _normalize_conversation_labels(text: str, user_label: str, partner_label: str) -> str:

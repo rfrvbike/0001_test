@@ -723,7 +723,7 @@ privacy_notes:
         errors = validate_profile_form({"label": "", "display_name": "", "profile_text": "", "photo_memo": ""})
         warnings = build_profile_save_warnings({"label": "", "display_name": "", "profile_text": "", "photo_memo": ""})
 
-        self.assertIn("保存先labelを自動生成できませんでした。", errors)
+        self.assertIn("保存IDを自動生成できませんでした。もう一度試すか、アプリを再起動してください。", errors)
         self.assertNotIn("display_name は必須です。", errors)
         self.assertNotIn("profile_text または photo_memo のどちらかは必須です。", errors)
         self.assertTrue(any("display_name" in warning for warning in warnings))

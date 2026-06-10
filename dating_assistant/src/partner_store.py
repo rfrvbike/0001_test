@@ -23,6 +23,12 @@ from .models import (
 ROOT = Path(__file__).resolve().parents[1]
 PARTNER_FILE_RE = re.compile(r"^partner_(\d+)\.yaml$")
 
+_skipped_partner_files: list[str] = []
+
+
+def get_skipped_partner_files() -> list[str]:
+    return list(_skipped_partner_files)
+
 
 def get_partner_dir() -> Path:
     override = os.environ.get("DATING_ASSISTANT_PARTNER_DIR")
@@ -63,7 +69,15 @@ def load_partner(partner_id: str) -> PartnerRecord:
 
 
 def list_partners() -> list[PartnerRecord]:
-    return [partner_from_mapping(_load_mapping(path)) for path in sorted(get_partner_dir().glob("partner_*.yaml"))]
+    global _skipped_partner_files
+    _skipped_partner_files = []
+    result = []
+    for path in sorted(get_partner_dir().glob("partner_*.yaml")):
+        try:
+            result.append(partner_from_mapping(_load_mapping(path)))
+        except Exception:
+            _skipped_partner_files.append(path.name)
+    return result
 
 
 def partner_from_mapping(data: dict[str, Any]) -> PartnerRecord:
@@ -96,6 +110,8 @@ def partner_from_mapping(data: dict[str, Any]) -> PartnerRecord:
         turn_data = dict(turn)
         turn_data["timestamp"] = turn_data.pop("created_at", turn_data.get("timestamp"))
         turns.append(ConversationTurn(**_known_fields(ConversationTurn, turn_data)))
+    if "partner_id" not in data:
+        raise ValueError("partner_id is missing")
     return PartnerRecord(
         partner_id=str(data["partner_id"]),
         display_name=str(data.get("display_name", "")),
