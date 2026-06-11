@@ -21,7 +21,6 @@ from gui_helpers import (
     build_conversation_import_preview,
     build_conversation_import_failure_guidance,
     build_partner_creation_preview,
-    build_generation_preflight,
     build_partner_choice_label,
     build_partner_management_filter_options,
     build_partner_profile_card,
@@ -250,25 +249,6 @@ def render_generation_controls(partner) -> None:
             placeholder="例: 新宿あたり / 近場のカフェ / 仕事帰りに寄りやすい場所",
             key=f"generation_place_{partner.partner_id}",
         )
-    preflight = build_generation_preflight(partner, objectives, tone, place_hint)
-    with st.expander("生成前チェック", expanded=True):
-        st.markdown(f"**会話ステージ:** {preflight['conversation_stage']}")
-        st.markdown(f"**温度感:** {preflight['temperature']['label']}")
-        for reason in preflight["temperature"]["reasons"]:
-            st.markdown(f"- {reason}")
-        st.markdown(f"**次の一手おすすめ:** {preflight['next_recommendation']}")
-        st.markdown("**注意すべき点**")
-        for caution in preflight["caution_points"]:
-            st.markdown(f"- {caution}")
-        st.markdown("**誘い系アクションの可否**")
-        action_rows = [
-            {"action": action, "status": judgement["status"], "reason": judgement["reason"]}
-            for action, judgement in preflight["action_judgements"].items()
-            if action in {"電話に誘う", "会う提案をする", "場所を指定して会う提案をする", "LINE交換を提案する", "少し大人っぽい雰囲気にする", "恋愛観に軽く触れる"}
-        ]
-        st.dataframe(action_rows, width="stretch", hide_index=True)
-        for warning in preflight["warnings"]:
-            st.warning(warning)
     st.caption("候補はlocalに保存されるだけです。実際に送る文は、ユーザー本人がマッチングアプリ上で手動送信してください。")
     if st.button("返信候補を生成する", key=f"generate_button_{partner.partner_id}"):
         if not is_api_key_configured():
@@ -295,8 +275,7 @@ def render_generation_controls(partner) -> None:
                 st.text_area(
                     "候補本文",
                     variant["text"],
-                    height=100,
-                    disabled=True,
+                    height=150,
                     key=f"generated_{partner.partner_id}_{variant['suggestion_id']}",
                 )
 
