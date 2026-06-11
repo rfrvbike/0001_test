@@ -25,6 +25,7 @@ data/reference_posts/*.local.*
 data/*.lock
 data/*.tmp
 dating_assistant/data/local/*
+dating_assistant/data/local/user_profile.json
 !dating_assistant/data/local/conversations.example.json
 !dating_assistant/data/local/partners/
 dating_assistant/data/local/partners/*

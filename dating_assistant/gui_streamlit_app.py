@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import sys
 import zipfile
 from datetime import datetime
@@ -8,6 +9,7 @@ from pathlib import Path
 
 
 APP_DIR = Path(__file__).resolve().parent
+_USER_PROFILE_PATH = APP_DIR / "data" / "local" / "user_profile.json"
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
@@ -838,6 +840,22 @@ def _render_skipped_partner_warning() -> None:
         st.warning("一部のデータが読み込めませんでした。該当ファイル: " + ", ".join(skipped))
 
 
+def _load_user_profile_data() -> dict:
+    if not _USER_PROFILE_PATH.exists():
+        return {}
+    try:
+        return json.loads(_USER_PROFILE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_user_profile_data(data: dict) -> None:
+    _USER_PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _USER_PROFILE_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
 def _create_local_backup_zip() -> bytes:
     buf = io.BytesIO()
     local_dir = APP_DIR / "data" / "local"
@@ -875,6 +893,50 @@ def _extract_backup_zip(zip_bytes: bytes) -> tuple[bool, str]:
 def render_help() -> None:
     st.subheader("設定・ヘルプ")
     st.caption("このツールの使い方、安全な利用方法、local保存の考え方を確認できます。")
+
+    st.markdown("### あなたのプロフィール設定")
+    st.write("あなたの名前を設定すると、返信候補にあなたの名前が反映されます。")
+    user_profile = _load_user_profile_data()
+    saved_name = str(user_profile.get("name", "") or "")
+    saved_age = user_profile.get("age") or None
+    saved_intro = str(user_profile.get("self_intro", "") or "")
+    with st.container(border=True):
+        current_name = st.text_input(
+            "あなたの名前（ニックネームでOK）",
+            value=saved_name,
+            placeholder="例: 太郎、たろう など",
+            key="user_profile_name",
+        )
+        current_age = st.number_input(
+            "年齢（任意）",
+            min_value=18,
+            max_value=120,
+            value=int(saved_age) if saved_age is not None else None,
+            step=1,
+            key="user_profile_age",
+        )
+        current_intro = st.text_area(
+            "自己紹介（任意）",
+            value=saved_intro,
+            placeholder="趣味や仕事など、簡単に",
+            height=80,
+            key="user_profile_intro",
+        )
+        if st.button("プロフィールを保存する", key="user_profile_save"):
+            _save_user_profile_data({
+                "name": current_name.strip(),
+                "age": int(current_age) if current_age else None,
+                "self_intro": current_intro.strip(),
+            })
+            st.success("プロフィールを保存しました")
+            st.rerun()
+        if saved_name:
+            age_str = f"（{int(saved_age)}歳）" if saved_age is not None else ""
+            st.info(f"現在の設定: {saved_name}さん{age_str}")
+        else:
+            st.warning("名前が設定されていません。設定すると返信候補に名前が反映されます。")
+
+    st.divider()
     st.info(
         "まずは「プロフィール登録」で相手情報を保存し、普段は「相手と会話する」で候補作成と記録を行います。"
         "実際の送信は必ずユーザー本人がマッチングアプリ上で手動で行います。"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -11,6 +12,7 @@ from .partner_store import load_partner
 from .suggestion_manager import add_suggestion
 
 _ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+_USER_PROFILE_PATH = Path(__file__).resolve().parents[1] / "data" / "local" / "user_profile.json"
 
 
 def _get_api_key() -> str | None:
@@ -29,9 +31,20 @@ def is_api_key_configured() -> bool:
     return bool(_get_api_key())
 
 
+def _load_user_name() -> str:
+    if not _USER_PROFILE_PATH.exists():
+        return ""
+    try:
+        data = json.loads(_USER_PROFILE_PATH.read_text(encoding="utf-8"))
+        return str(data.get("name", "") or "")
+    except Exception:
+        return ""
+
+
 def _build_system_prompt(partner: PartnerRecord, tone: str, objectives: list[str]) -> str:
     partner_name = partner.display_name or "相手"
     profile_text = partner.profile.profile_text or "プロフィール情報なし"
+    user_name = _load_user_name()
 
     conversation_lines = []
     for turn in partner.conversation[-10:]:
@@ -57,10 +70,13 @@ def _build_system_prompt(partner: PartnerRecord, tone: str, objectives: list[str
         if last_partner_message else ""
     )
 
+    user_name_line = f"- ユーザーの名前: {user_name}\n" if user_name else ""
+
     return (
         "あなたはマッチングアプリでメッセージを送るユーザーの返信を考えるアシスタントです。\n\n"
         "【重要な前提】\n"
         "- ユーザー（あなたが返信を考える人）: 会話履歴で「ユーザー:」と書かれた発言をしている人\n"
+        f"{user_name_line}"
         f"- 相手（マッチングした人）の名前: {partner_name}\n"
         f"- 相手のプロフィール情報: {profile_text}\n\n"
         f"【会話履歴（上が古く、下が最新）】\n{conversation_history}\n\n"
