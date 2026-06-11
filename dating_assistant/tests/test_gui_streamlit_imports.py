@@ -94,7 +94,6 @@ class GuiStreamlitImportTests(unittest.TestCase):
                 self.assertIn("次に送る文を作る", subheaders)
                 self.assertTrue(any("相手のプロフィール" in value for value in markdowns))
                 self.assertTrue(any("会話履歴" in value for value in markdowns))
-                self.assertTrue(any("候補と送信済み記録" in value for value in markdowns))
                 self.assertTrue(any("自動送信" in value for value in captions))
 
     def test_first_run_guidance_explains_customer_flow_without_partner_data(self):

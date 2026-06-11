@@ -22,13 +22,10 @@ from gui_helpers import (
     build_conversation_import_failure_guidance,
     build_partner_creation_preview,
     build_generation_status_message,
-    build_discard_suggestion_preview,
     build_generation_preflight,
-    build_mark_sent_preview,
     build_partner_choice_label,
     build_partner_management_filter_options,
     build_partner_note_preview,
-    build_partner_operational_display,
     build_partner_profile_card,
     build_partner_workspace_overview,
     build_profile_form_from_paste,
@@ -41,24 +38,16 @@ from gui_helpers import (
     build_profile_save_preview,
     build_profile_display_sections,
     build_real_profile_summary_for_gui,
-    build_sent_outcome_preview,
     filter_real_profiles_for_gui,
-    can_discard_suggestion,
     can_generate_suggestion,
-    can_mark_suggestion_sent,
     detect_conversation_safety_warnings,
     detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
     format_conversation_history,
     format_partner_notes,
-    format_pending_suggestions,
-    format_sent_suggestions_for_outcomes,
-    format_timeline_items,
     build_profile_label_candidate,
     get_profile_ocr_environment_status,
     get_clipboard_image_for_ocr,
-    generate_suggestion_for_gui,
-    generate_suggestion_variants_for_gui,
     extract_profile_text_from_image,
     ensure_conversation_partner_for_profile,
     format_partner_preview_for_display,
@@ -66,7 +55,6 @@ from gui_helpers import (
     GENERATION_TONE_OPTIONS,
     get_generation_mode_for_partner,
     get_skipped_partner_files,
-    discard_suggestion_from_gui,
     archive_partner_from_gui,
     load_partner_choices,
     load_partner_for_view,
@@ -75,15 +63,11 @@ from gui_helpers import (
     load_uploaded_image_for_ocr,
     real_profile_exists,
     save_real_profile_from_form,
-    SENT_OUTCOME_STATUS_OPTIONS,
     summarize_existing_partner_candidates,
     summarize_partner_management_rows,
     add_partner_note_from_gui,
-    mark_custom_text_sent_from_gui,
-    mark_suggestion_sent_from_gui,
     unarchive_partner_from_gui,
     update_partner_management_info_from_gui,
-    update_sent_outcome_from_gui,
     validate_imported_turns,
 )
 
@@ -178,46 +162,32 @@ def render_partner_viewer() -> None:
     st.divider()
     render_generation_controls(partner)
 
-    st.divider()
-    st.markdown("### 候補と送信済み記録")
-    suggestions = format_pending_suggestions(partner)
-    if not suggestions:
-        st.info("未使用の候補はありません。必要なら上の「次に送る文を作る」から候補を作れます。")
-    for index, suggestion in enumerate(suggestions, start=1):
-        title = f"候補{index}: {suggestion['purpose']}"
-        with st.expander(title, expanded=True):
-            st.caption(f"作成日時: {suggestion['created_at']}")
-            st.text_area(
-                "候補本文",
-                suggestion["text"],
-                height=150,
-                disabled=True,
-                key=f"suggestion_{partner.partner_id}_{suggestion['suggestion_id']}",
-            )
-            render_sent_recording_controls(partner, suggestion)
-            render_discard_controls(partner, suggestion)
-
-    render_sent_outcome_controls(partner)
-
-    with st.expander("詳細情報（開発者向け）", expanded=False):
-        status_display = build_partner_operational_display(partner)
-        st.json(status_display["detail"])
-        timeline = format_timeline_items(partner)
-        if timeline:
-            st.dataframe(timeline, width="stretch", hide_index=True)
-
 
 def render_conversation_history_section(partner) -> None:
     rows = format_conversation_history(partner)
     if not rows:
         st.info("まだ会話履歴はありません。会話履歴が少なくても候補は作れます。")
         return
-    for row in rows[-8:]:
-        speaker = row["speaker_label"]
-        label = "自分" if row["speaker"] == "user" else "相手"
-        with st.container(border=True):
-            st.caption(f"{row['index']}. {label}" + (f" / {row['timestamp']}" if row["timestamp"] else ""))
-            st.write(row["text"])
+    chat_parts = []
+    for row in rows[-20:]:
+        is_user = row["speaker"] == "user"
+        align = "flex-end" if is_user else "flex-start"
+        bg = "#DCF8C6" if is_user else "#FFFFFF"
+        name = "自分" if is_user else "相手"
+        text = row["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+        chat_parts.append(
+            f'<div style="display:flex;justify-content:{align};margin-bottom:8px;">'
+            f'<div style="max-width:75%;background:{bg};border-radius:12px;padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.15);">'
+            f'<div style="font-size:11px;color:#888;margin-bottom:2px;">{name}</div>'
+            f'<div style="font-size:14px;line-height:1.5;">{text}</div>'
+            f"</div></div>"
+        )
+    st.markdown(
+        '<div style="height:400px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;padding:12px;background:#ECE5DD;">'
+        + "".join(chat_parts)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_inline_conversation_import(partner) -> None:
@@ -358,11 +328,8 @@ def render_generation_controls(partner) -> None:
         st.dataframe(action_rows, width="stretch", hide_index=True)
         for warning in preflight["warnings"]:
             st.warning(warning)
-        with st.expander("詳細データ（開発者向け）", expanded=False):
-            st.json(preflight)
     st.caption("候補はlocalに保存されるだけです。実際に送る文は、ユーザー本人がマッチングアプリ上で手動送信してください。")
-    confirm = st.checkbox("自動送信ではないことを確認して候補を作る", key=f"generate_confirm_{partner.partner_id}")
-    if st.button(button_label, disabled=not (can_generate_suggestion(partner) and confirm), key=f"generate_button_{partner.partner_id}"):
+    if st.button("返信候補を生成する", disabled=not can_generate_suggestion(partner), key=f"generate_button_{partner.partner_id}"):
         if not is_api_key_configured():
             st.error(
                 "APIキーが設定されていません。"
@@ -370,7 +337,7 @@ def render_generation_controls(partner) -> None:
             )
             return
         try:
-            with st.spinner("返信候補を生成中..."):
+            with st.spinner("Claude AIが返信を考えています..."):
                 generated = generate_reply_candidates_for_gui(
                     partner.partner_id,
                     objectives=objectives,
@@ -380,183 +347,17 @@ def render_generation_controls(partner) -> None:
         except ValueError as error:
             st.error(f"生成中にエラーが発生しました。{error}")
             return
-        st.success("この人向けの候補を3つ作りました。")
+        st.success("返信候補を3つ作りました。気に入った文をコピーして、マッチングアプリで手動送信してください。")
         for variant in generated["variants"]:
-            with st.expander(f"{variant['title']} / {variant['suggestion_id']}", expanded=True):
-                st.write(f"**使いどころ:** {variant['use_case']}")
-                st.write(f"**狙い:** {variant['aim']}")
-                st.write(f"**会話ステージとの相性:** {variant['compatibility']}")
+            with st.container(border=True):
+                st.markdown(f"**{variant['title']}**")
                 st.text_area(
                     "候補本文",
                     variant["text"],
-                    height=120,
+                    height=100,
                     disabled=True,
                     key=f"generated_{partner.partner_id}_{variant['suggestion_id']}",
                 )
-                st.write("**品質チェック:**")
-                for check in variant["quality_check"]:
-                    st.write(f"- {check}")
-                st.write("注意: " + " / ".join(variant["safety_notes"]))
-        st.info("実際に手動送信した後、この画面の候補欄から送信済みとしてlocal記録できます。")
-
-
-def render_sent_recording_controls(partner, suggestion: dict) -> None:
-    suggestion_id = suggestion["suggestion_id"]
-    st.warning(
-        "この操作はlocal記録のみです。マッチングアプリへの送信は行いません。"
-        "実際に送っていない文を送信済みにしないでください。"
-    )
-    confirm = st.checkbox(
-        "私はこの文をマッチングアプリ上で手動送信しました",
-        key=f"mark_sent_confirm_{partner.partner_id}_{suggestion_id}",
-    )
-    with st.expander("送信済み記録プレビュー（開発者向け詳細）", expanded=False):
-        st.json(build_mark_sent_preview(partner, suggestion_id=suggestion_id))
-
-    if st.button(
-        "この候補を送信済みとして記録",
-        disabled=not can_mark_suggestion_sent(partner, suggestion_id, confirmed=confirm),
-        key=f"mark_sent_button_{partner.partner_id}_{suggestion_id}",
-    ):
-        try:
-            result = mark_suggestion_sent_from_gui(partner.partner_id, suggestion_id, confirmed=confirm)
-        except ValueError as error:
-            st.error(str(error))
-            return
-        st.success(f"{result['suggestion_id']} を送信済みとしてlocal記録しました。")
-        st.rerun()
-
-    custom_text = st.text_area(
-        "実際に送った文（修正した場合のみ入力）",
-        height=100,
-        key=f"mark_sent_custom_text_{partner.partner_id}_{suggestion_id}",
-    )
-    if custom_text.strip():
-        with st.expander("修正文の送信済み記録プレビュー（開発者向け詳細）", expanded=False):
-            st.json(build_mark_sent_preview(partner, custom_text=custom_text))
-        st.info("実際に送信した文を別入力で記録するため、元候補が未使用候補として残る場合があります。")
-    if st.button(
-        "入力文を送信済みとして記録",
-        disabled=not (confirm and custom_text.strip()),
-        key=f"mark_custom_sent_button_{partner.partner_id}_{suggestion_id}",
-    ):
-        try:
-            result = mark_custom_text_sent_from_gui(partner.partner_id, custom_text, confirmed=confirm)
-        except ValueError as error:
-            st.error(str(error))
-            return
-        st.success("入力文を送信済みとしてlocal記録しました。")
-        if result["remaining_pending_suggestions"]:
-            st.info("元候補はpendingに残っています。下の候補破棄から未使用候補として整理できます。")
-        st.rerun()
-
-
-def render_sent_outcome_controls(partner) -> None:
-    st.subheader("送信結果メモ")
-    sent_suggestions = format_sent_suggestions_for_outcomes(partner)
-    if not sent_suggestions:
-        st.info("送信済みlocal記録はまだありません。実際に手動送信した文だけ、結果メモを残せます。")
-        return
-
-    for suggestion in sent_suggestions:
-        title = f"{suggestion['sent_id']} / {suggestion['source_label']} / {suggestion['outcome_status']} / {suggestion['sent_at'] or 'sent_atなし'}"
-        with st.expander(title, expanded=True):
-            st.markdown(f"**sent_id:** {suggestion['sent_id']}")
-            st.markdown(f"**種別:** {suggestion['source_label']}")
-            if suggestion["source_suggestion_id"]:
-                st.markdown(f"**source_suggestion_id:** {suggestion['source_suggestion_id']}")
-            st.markdown(f"**sent_at:** {suggestion['sent_at'] or '-'}")
-            st.markdown(f"**outcome_updated_at:** {suggestion['outcome_updated_at'] or '-'}")
-            st.text_area(
-                "送信文",
-                suggestion["text"],
-                height=100,
-                disabled=True,
-                key=f"sent_text_{partner.partner_id}_{suggestion['sent_id']}",
-            )
-            current_index = SENT_OUTCOME_STATUS_OPTIONS.index(suggestion["outcome_status"]) if suggestion["outcome_status"] in SENT_OUTCOME_STATUS_OPTIONS else 0
-            outcome_status = st.selectbox(
-                "結果ステータス",
-                options=SENT_OUTCOME_STATUS_OPTIONS,
-                index=current_index,
-                key=f"outcome_status_{partner.partner_id}_{suggestion['sent_id']}",
-            )
-            outcome_memo = st.text_area(
-                "送信結果メモ",
-                value=suggestion["outcome_memo"],
-                height=90,
-                placeholder="例: 旅行の話題は反応よかった。次も広げてよさそう。",
-                key=f"outcome_memo_{partner.partner_id}_{suggestion['sent_id']}",
-            )
-            if outcome_memo.strip():
-                with st.expander("送信結果メモ保存プレビュー（開発者向け詳細）", expanded=False):
-                    preview = build_sent_outcome_preview(partner, suggestion["sent_id"], outcome_status, outcome_memo)
-                    for warning in preview["warnings"]:
-                        st.warning(warning)
-                    st.json(preview)
-            confirm = st.checkbox(
-                "個人情報を含めず、送信結果メモをlocal保存する",
-                key=f"outcome_confirm_{partner.partner_id}_{suggestion['sent_id']}",
-            )
-            if st.button(
-                "送信結果メモを更新",
-                disabled=not confirm,
-                key=f"outcome_button_{partner.partner_id}_{suggestion['sent_id']}",
-            ):
-                try:
-                    result = update_sent_outcome_from_gui(
-                        partner.partner_id,
-                        suggestion["sent_id"],
-                        outcome_status,
-                        outcome_memo,
-                        confirmed=confirm,
-                    )
-                except ValueError as error:
-                    st.error(str(error))
-                    return
-                for warning in result["warnings"]:
-                    st.warning(warning)
-                st.success("送信結果メモをlocal保存しました。")
-                st.rerun()
-
-
-def render_discard_controls(partner, suggestion: dict) -> None:
-    suggestion_id = suggestion["suggestion_id"]
-    st.divider()
-    st.markdown("**候補破棄**")
-    st.warning(
-        "この操作は未使用候補をlocal上で破棄するだけです。会話履歴は削除されません。"
-        "マッチングアプリには何も送信・削除しません。"
-    )
-    reason = st.text_area(
-        "破棄理由",
-        value="GUIから未使用候補として破棄",
-        height=80,
-        key=f"discard_reason_{partner.partner_id}_{suggestion_id}",
-    )
-    confirm = st.checkbox(
-        "この候補を未使用候補として破棄します",
-        key=f"discard_confirm_{partner.partner_id}_{suggestion_id}",
-    )
-    with st.expander("候補破棄プレビュー（開発者向け詳細）", expanded=False):
-        st.json(build_discard_suggestion_preview(partner, suggestion_id, reason=reason))
-    if partner.status == "archived":
-        st.warning("archivedのpartnerでは候補破棄できません。")
-    if st.button(
-        "候補を破棄",
-        disabled=not can_discard_suggestion(partner, suggestion_id, confirmed=confirm),
-        key=f"discard_button_{partner.partner_id}_{suggestion_id}",
-    ):
-        try:
-            result = discard_suggestion_from_gui(partner.partner_id, suggestion_id, confirmed=confirm, reason=reason)
-        except ValueError as error:
-            st.error(str(error))
-            return
-        if result["conversation_history_unchanged"]:
-            st.success(f"{result['suggestion_id']} をlocal上で破棄しました。会話履歴は変更していません。")
-        else:
-            st.error("会話履歴が変化しました。状態を確認してください。")
-        st.rerun()
 
 
 def render_profile_registration() -> None:

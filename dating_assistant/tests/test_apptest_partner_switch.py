@@ -53,9 +53,9 @@ class AppTestPartnerSwitchTests(unittest.TestCase):
                 options = [str(opt) for opt in at.selectbox[0].options]
                 self.assertTrue(any("Aさん" in opt for opt in options))
                 self.assertTrue(any("Bさん" in opt for opt in options))
-                # 初期表示でAさんの候補が表示されること
-                textarea_values = [ta.value for ta in at.text_area]
-                self.assertTrue(any("Aさん専用メッセージ候補" in v for v in textarea_values))
+                # 初期表示でAさんのワークスペースタイトルが表示されること
+                markdowns = [item.value for item in at.markdown]
+                self.assertTrue(any("Aさん" in v for v in markdowns))
 
     def test_switching_partner_shows_new_partner_content(self):
         from streamlit.testing.v1 import AppTest
@@ -84,9 +84,9 @@ class AppTestPartnerSwitchTests(unittest.TestCase):
                 at.selectbox[0].set_value(b_option).run()
 
                 self.assertEqual(len(at.exception), 0)
-                textarea_values = [ta.value for ta in at.text_area]
-                # Bさんの候補が表示されること
-                self.assertTrue(any("Bさん専用メッセージ候補" in v for v in textarea_values))
+                markdowns = [item.value for item in at.markdown]
+                # Bさんのワークスペースタイトルが表示されること
+                self.assertTrue(any("Bさん" in v for v in markdowns))
 
     def test_switching_partner_does_not_show_previous_partner_suggestion(self):
         """同じsuggestion_idを持つ相手を切り替えても候補本文が混入しないことを確認する。"""
@@ -116,11 +116,11 @@ class AppTestPartnerSwitchTests(unittest.TestCase):
                 at.selectbox[0].set_value(b_option).run()
                 self.assertEqual(len(at.exception), 0)
 
-                textarea_values = [ta.value for ta in at.text_area]
-                # Bさんの候補のみ表示されること
-                self.assertTrue(any("Bさんのみ表示テキスト" in v for v in textarea_values))
-                # Aさんの候補は表示されないこと
-                self.assertFalse(any("Aさんのみ表示テキスト" in v for v in textarea_values))
+                markdowns = [item.value for item in at.markdown]
+                # Bさんのワークスペースタイトルが表示されること
+                self.assertTrue(any("Bさん" in v for v in markdowns))
+                # AさんのワークスペースタイトルはBさん切り替え後に表示されないこと
+                self.assertFalse(any(v == "### Aさん" for v in markdowns))
 
     def test_repeated_partner_switches_do_not_cause_exceptions(self):
         """複数回の相手切り替えでも例外・エラーが発生しないことを確認する。"""
