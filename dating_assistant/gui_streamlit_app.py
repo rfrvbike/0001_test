@@ -21,11 +21,9 @@ from gui_helpers import (
     build_conversation_import_preview,
     build_conversation_import_failure_guidance,
     build_partner_creation_preview,
-    build_generation_status_message,
     build_generation_preflight,
     build_partner_choice_label,
     build_partner_management_filter_options,
-    build_partner_note_preview,
     build_partner_profile_card,
     build_partner_workspace_overview,
     build_profile_form_from_paste,
@@ -39,12 +37,10 @@ from gui_helpers import (
     build_profile_display_sections,
     build_real_profile_summary_for_gui,
     filter_real_profiles_for_gui,
-    can_generate_suggestion,
     detect_conversation_safety_warnings,
     detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
     format_conversation_history,
-    format_partner_notes,
     build_profile_label_candidate,
     get_profile_ocr_environment_status,
     get_clipboard_image_for_ocr,
@@ -53,7 +49,6 @@ from gui_helpers import (
     format_partner_preview_for_display,
     GENERATION_OBJECTIVE_OPTIONS,
     GENERATION_TONE_OPTIONS,
-    get_generation_mode_for_partner,
     get_skipped_partner_files,
     archive_partner_from_gui,
     load_partner_choices,
@@ -65,7 +60,6 @@ from gui_helpers import (
     save_real_profile_from_form,
     summarize_existing_partner_candidates,
     summarize_partner_management_rows,
-    add_partner_note_from_gui,
     unarchive_partner_from_gui,
     update_partner_management_info_from_gui,
     validate_imported_turns,
@@ -143,16 +137,10 @@ def render_partner_viewer() -> None:
     cols[2].metric("温度感", workspace["temperature"])
     cols[3].metric("未確認候補", workspace["pending_count"])
 
-    with st.container(border=True):
-        st.markdown("**次にやること**")
-        _render_summary_rows(workspace["summary_rows"])
-        st.caption("この画面はlocal記録用です。マッチングアプリへの自動送信や外部通信は行いません。")
-
     left, right = st.columns([1, 1.25])
     with left:
         st.markdown("### 相手のプロフィール")
         _render_profile_display_card(build_partner_profile_card(partner))
-        render_partner_notes(partner)
 
     with right:
         st.markdown("### 会話履歴")
@@ -238,56 +226,9 @@ def render_inline_conversation_import(partner) -> None:
                 st.rerun()
 
 
-def render_partner_notes(partner) -> None:
-    st.subheader("相手別メモ")
-    notes = format_partner_notes(partner)
-    if not notes:
-        st.info("まだメモはありません。返信傾向、反応がよい話題、避けたい誘い方などをlocalに残せます。")
-    else:
-        for note in notes:
-            title = f"{note['index']}. {note['created_at'] or '時刻なし'}"
-            with st.expander(title, expanded=False):
-                st.write(note["text"])
-
-    new_note = st.text_area(
-        "相手別メモを追加",
-        height=100,
-        placeholder="例: 返信は夜が多い。旅行の話題に反応がよい。電話はまだ早そう。",
-        key=f"partner_note_text_{partner.partner_id}",
-    )
-    if new_note.strip():
-        with st.expander("相手別メモ保存プレビュー（開発者向け詳細）", expanded=False):
-            preview = build_partner_note_preview(new_note)
-            for warning in preview["warnings"]:
-                st.warning(warning)
-            st.json(preview)
-    confirm = st.checkbox(
-        "個人情報を含めず、相手別メモをlocal保存する",
-        key=f"partner_note_confirm_{partner.partner_id}",
-    )
-    if st.button(
-        "相手別メモを更新",
-        disabled=not (new_note.strip() and confirm),
-        key=f"partner_note_button_{partner.partner_id}",
-    ):
-        try:
-            result = add_partner_note_from_gui(partner.partner_id, new_note, confirmed=confirm)
-        except ValueError as error:
-            st.error(str(error))
-            return
-        for warning in result["warnings"]:
-            st.warning(warning)
-        st.success("相手別メモをlocal保存しました。")
-        st.rerun()
-
 
 def render_generation_controls(partner) -> None:
     st.subheader("次に送る文を作る")
-    mode = get_generation_mode_for_partner(partner)
-    mode_label = {"first": "初回メッセージ", "reply": "返信", "blocked": "今は候補を作れません"}[mode]
-    button_label = f"この人向けの候補を3つ作る" if mode in {"first", "reply"} else "候補を作れません"
-    st.write(f"**現在:** {build_generation_status_message(partner)}")
-    st.write(f"**作る文:** {mode_label}")
     objectives = st.multiselect(
         "どんな会話にしたいか",
         options=GENERATION_OBJECTIVE_OPTIONS,
@@ -329,7 +270,7 @@ def render_generation_controls(partner) -> None:
         for warning in preflight["warnings"]:
             st.warning(warning)
     st.caption("候補はlocalに保存されるだけです。実際に送る文は、ユーザー本人がマッチングアプリ上で手動送信してください。")
-    if st.button("返信候補を生成する", disabled=not can_generate_suggestion(partner), key=f"generate_button_{partner.partner_id}"):
+    if st.button("返信候補を生成する", key=f"generate_button_{partner.partner_id}"):
         if not is_api_key_configured():
             st.error(
                 "APIキーが設定されていません。"
