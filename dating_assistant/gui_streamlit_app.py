@@ -20,8 +20,6 @@ from src.claude_generator import generate_reply_candidates_for_gui, is_api_key_c
 from gui_helpers import (
     append_conversation_turns_to_partner,
     build_partner_summary,
-    build_conversation_import_preview,
-    build_conversation_import_failure_guidance,
     build_partner_creation_preview,
     build_partner_choice_label,
     build_partner_management_filter_options,
@@ -38,11 +36,11 @@ from gui_helpers import (
     build_profile_display_sections,
     build_real_profile_summary_for_gui,
     filter_real_profiles_for_gui,
-    detect_conversation_safety_warnings,
     detect_duplicate_turn_sequence,
     detect_profile_safety_warnings,
     format_conversation_history,
     build_profile_label_candidate,
+
     get_profile_ocr_environment_status,
     get_clipboard_image_for_ocr,
     extract_profile_text_from_image,
@@ -55,7 +53,6 @@ from gui_helpers import (
     load_partner_choices,
     load_partner_for_view,
     list_real_profiles_for_gui,
-    parse_conversation_paste,
     load_uploaded_image_for_ocr,
     real_profile_exists,
     save_real_profile_from_form,
@@ -63,7 +60,6 @@ from gui_helpers import (
     summarize_partner_management_rows,
     unarchive_partner_from_gui,
     update_partner_management_info_from_gui,
-    validate_imported_turns,
 )
 
 
@@ -180,51 +176,32 @@ def render_conversation_history_section(partner) -> None:
 
 
 def render_inline_conversation_import(partner) -> None:
-    with st.expander("相手から返信が来たら会話履歴に追加", expanded=False):
-        st.caption("「自分:」「相手:」形式で貼り付けると、この相手のlocal会話履歴に追加できます。自動送信ではありません。")
-        pasted = st.text_area(
-            "会話履歴を貼り付け",
-            height=160,
-            placeholder="自分: はじめまして。\n相手: よろしくお願いします。",
-            key=f"inline_conversation_paste_{partner.partner_id}",
+    with st.expander("新しいメッセージを追加する", expanded=False):
+        speaker_option = st.radio(
+            "発言者",
+            options=["相手から届いたメッセージ", "自分が送ったメッセージ"],
+            key=f"inline_conv_speaker_{partner.partner_id}",
+            horizontal=True,
         )
-        if pasted.strip():
-            turns, parse_warnings = parse_conversation_paste(pasted)
-            duplicate_warning = detect_duplicate_turn_sequence(partner, turns)
-            errors = validate_imported_turns(turns, parse_warnings)
-            warnings = list(parse_warnings)
-            warnings.extend(detect_conversation_safety_warnings(pasted))
-            preview = build_conversation_import_preview(partner, turns, warnings)
-            if parse_warnings:
-                guidance = build_conversation_import_failure_guidance()
-                st.warning("読み取れない行があります。自分: / 相手: の形に直すと追加しやすくなります。")
-                with st.expander("直し方のヒント（詳細）", expanded=False):
-                    st.json(guidance)
-            if errors:
-                for error in errors:
-                    st.error(error)
-            if duplicate_warning:
-                st.warning("同じ会話履歴がすでに登録されています。")
-            if warnings:
-                st.warning("保存前に確認してください: " + " / ".join(warnings))
-            with st.expander("追加前プレビュー（開発者向け詳細）", expanded=False):
-                st.json(preview)
-            confirm = st.checkbox(
-                "この会話履歴をlocalに追加する",
-                key=f"inline_conversation_confirm_{partner.partner_id}",
-            )
-            if st.button(
-                "会話履歴を追加",
-                disabled=bool(errors) or duplicate_warning or not confirm,
-                key=f"inline_conversation_button_{partner.partner_id}",
-            ):
-                try:
-                    result = append_conversation_turns_to_partner(partner.partner_id, turns)
-                except ValueError as error:
-                    st.error(str(error))
-                    return
-                st.success(f"{len(turns)}件の会話履歴をlocalに追加しました。")
-                st.rerun()
+        message_text = st.text_area(
+            "メッセージ",
+            placeholder="メッセージを貼り付けてください",
+            height=100,
+            key=f"inline_conv_text_{partner.partner_id}",
+        )
+        if st.button("追加する", type="primary", key=f"inline_conv_add_{partner.partner_id}"):
+            if not message_text.strip():
+                st.error("メッセージを入力してください")
+                return
+            speaker = "partner" if speaker_option == "相手から届いたメッセージ" else "user"
+            new_turn = {"speaker": speaker, "text": message_text.strip()}
+            reload_partner = load_partner_for_view(partner.partner_id)
+            if detect_duplicate_turn_sequence(reload_partner, [new_turn]):
+                st.warning("同じ内容がすでに登録されています")
+                return
+            append_conversation_turns_to_partner(partner.partner_id, [new_turn])
+            st.success("追加しました")
+            st.rerun()
 
 
 
@@ -270,16 +247,30 @@ def render_generation_controls(partner) -> None:
         except ValueError as error:
             st.error(f"生成中にエラーが発生しました。{error}")
             return
+        st.session_state[f"last_generated_{partner.partner_id}"] = generated["variants"]
         st.success("返信候補を3つ作りました。気に入った文をコピーして、マッチングアプリで手動送信してください。")
-        for variant in generated["variants"]:
-            with st.container(border=True):
-                st.markdown(f"**{variant['title']}**")
-                st.text_area(
-                    "候補本文",
-                    variant["text"],
-                    height=200,
-                    key=f"generated_{partner.partner_id}_{variant['suggestion_id']}",
-                )
+
+    variants = st.session_state.get(f"last_generated_{partner.partner_id}", [])
+    for variant in variants:
+        text_key = f"generated_{partner.partner_id}_{variant['suggestion_id']}"
+        with st.container(border=True):
+            st.markdown(f"**{variant['title']}**")
+            st.text_area(
+                "候補本文",
+                variant["text"],
+                height=200,
+                key=text_key,
+            )
+            if st.button("✓ この文章を送った", key=f"sent_{partner.partner_id}_{variant['suggestion_id']}"):
+                sent_text = st.session_state.get(text_key, variant["text"])
+                new_turn = {"speaker": "user", "text": sent_text.strip()}
+                reload_partner = load_partner_for_view(partner.partner_id)
+                if detect_duplicate_turn_sequence(reload_partner, [new_turn]):
+                    st.warning("同じ内容がすでに登録されています")
+                else:
+                    append_conversation_turns_to_partner(partner.partner_id, [new_turn])
+                    st.success("送信済みとして登録しました")
+                    st.rerun()
 
 
 def render_profile_registration() -> None:
