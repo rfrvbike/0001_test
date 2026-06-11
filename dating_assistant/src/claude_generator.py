@@ -47,7 +47,7 @@ def _build_system_prompt(partner: PartnerRecord, tone: str, objectives: list[str
 
     return (
         "あなたはマッチングアプリの返信を考えるアシスタントです。\n"
-        "以下の情報をもとに、自然で魅力的な返信候補を3件考えてください。\n\n"
+        "以下の情報をもとに、返信候補を3つ考えてください。\n\n"
         f"【相手のプロフィール】\n{profile_text}\n\n"
         f"【会話履歴】\n{conversation_history}\n\n"
         f"【返信スタイル】\n{reply_style}\n\n"
@@ -56,14 +56,24 @@ def _build_system_prompt(partner: PartnerRecord, tone: str, objectives: list[str
         "- 相手の最後のメッセージに対して適切に返す\n"
         "- 質問には答え、自然に会話を広げる\n"
         "- テンプレート感が出ないようにする\n"
-        "- 絵文字は控えめに使う\n"
+        "- 絵文字は相手のメッセージに合わせて控えめに使う\n"
         "- 自動送信ではないため、送信前にユーザーが確認する\n\n"
-        "候補1・候補2・候補3の形式で返してください。"
+        "以下の形式で返してください。\n\n"
+        "候補1:\n"
+        "（返信文をここに書く）\n\n"
+        "候補2:\n"
+        "（返信文をここに書く）\n\n"
+        "候補3:\n"
+        "（返信文をここに書く）\n\n"
+        "【重要】\n"
+        "- マークダウン記号（#・*・-・---）は使わない\n"
+        "- 候補1:・候補2:・候補3: 以外の見出しは書かない\n"
+        "- 返信文は自然な日本語のみ\n"
     )
 
 
 def _parse_candidates(response_text: str) -> list[str]:
-    parts = re.split(r"候補[１-３1-3][\s:：]", response_text)
+    parts = re.split(r"候補[１-３1-3]\s*[:：]", response_text)
     candidates = [p.strip() for p in parts[1:] if p.strip()]
     return candidates[:3] if candidates else [response_text.strip()]
 

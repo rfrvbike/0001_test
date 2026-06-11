@@ -275,7 +275,7 @@ def render_generation_controls(partner) -> None:
                 st.text_area(
                     "候補本文",
                     variant["text"],
-                    height=150,
+                    height=200,
                     key=f"generated_{partner.partner_id}_{variant['suggestion_id']}",
                 )
 
