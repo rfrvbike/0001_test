@@ -927,6 +927,26 @@ source .venv_dating_gui/bin/activate
    .venv_dating_gui/bin/streamlit run gui_streamlit_app.py
    ```
 
-5. 初回起動時はAPIキーの設定は不要
+5. APIキーを設定する（返信生成に必要）
 
-   このツールはルールベース生成のため外部APIを使用しません。起動直後から利用できます。
+   返信候補の生成にはClaude APIキーが必要です。
+   `dating_assistant` フォルダ内に `.env` ファイルを作成し、以下を記載してください。
+
+   ```
+   ANTHROPIC_API_KEY=your_api_key_here
+   ```
+
+   `your_api_key_here` を実際のAPIキーに置き換えてください。
+   `.env` ファイルは絶対に他人に共有しないでください。
+
+## APIキーの設定
+
+1. `dating_assistant` フォルダ内に `.env` ファイルを作成する
+2. 以下の内容を記載する
+
+   ```
+   ANTHROPIC_API_KEY=your_api_key_here
+   ```
+
+3. `your_api_key_here` を実際のAPIキーに置き換える
+4. `.env` ファイルは絶対に他人に共有しないこと

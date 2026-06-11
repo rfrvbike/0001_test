@@ -13,6 +13,8 @@ if str(APP_DIR) not in sys.path:
 
 import streamlit as st
 
+from src.claude_generator import generate_reply_candidates_for_gui, is_api_key_configured
+
 from gui_helpers import (
     append_conversation_turns_to_partner,
     build_partner_summary,
@@ -361,15 +363,22 @@ def render_generation_controls(partner) -> None:
     st.caption("候補はlocalに保存されるだけです。実際に送る文は、ユーザー本人がマッチングアプリ上で手動送信してください。")
     confirm = st.checkbox("自動送信ではないことを確認して候補を作る", key=f"generate_confirm_{partner.partner_id}")
     if st.button(button_label, disabled=not (can_generate_suggestion(partner) and confirm), key=f"generate_button_{partner.partner_id}"):
-        try:
-            generated = generate_suggestion_variants_for_gui(
-                partner.partner_id,
-                objectives=objectives,
-                tone=tone,
-                place_hint=place_hint,
+        if not is_api_key_configured():
+            st.error(
+                "APIキーが設定されていません。"
+                "設定・ヘルプタブでAPIキーの設定方法を確認してください。"
             )
+            return
+        try:
+            with st.spinner("返信候補を生成中..."):
+                generated = generate_reply_candidates_for_gui(
+                    partner.partner_id,
+                    objectives=objectives,
+                    tone=tone,
+                    place_hint=place_hint,
+                )
         except ValueError as error:
-            st.error(str(error))
+            st.error(f"生成中にエラーが発生しました。{error}")
             return
         st.success("この人向けの候補を3つ作りました。")
         for variant in generated["variants"]:
@@ -1266,12 +1275,23 @@ def render_help() -> None:
                     st.error(msg)
 
     st.divider()
+    st.markdown("### APIキー設定状態")
+    with st.container(border=True):
+        if is_api_key_configured():
+            st.success("APIキーが設定されています。")
+        else:
+            st.warning(
+                "APIキーが設定されていません。"
+                "返信生成を使うには .env ファイルに ANTHROPIC_API_KEY を設定してください。"
+            )
+
+    st.divider()
     st.markdown("### バージョン情報")
     with st.container(border=True):
         st.write("**バージョン:** v1.0.0-beta")
         st.write("**リリース日:** 2026-06-11")
         st.write("**問い合わせ先:** -")
-    st.caption("このツールはlocalで動作するルールベース生成ツールです。外部APIへの通信は行いません。")
+    st.caption("このツールはlocalで動作します。返信生成にはClaude APIを使用します。")
 
 
 def _normalize_conversation_labels(text: str, user_label: str, partner_label: str) -> str:
