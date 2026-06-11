@@ -1064,7 +1064,7 @@ def render_conversation_import() -> None:
     st.subheader("会話履歴追加")
     st.caption(
         "相手から返信が来たときや、過去のやり取りを残したいときに使います。"
-        "通常は「相手と会話する」画面内からも追加できます。自動送信ではなくlocalの会話履歴に追加するだけです。"
+        "自動送信ではなく、localの会話履歴に追加するだけです。"
     )
 
     partners = load_partner_choices(include_archived=False)
@@ -1074,88 +1074,32 @@ def render_conversation_import() -> None:
         return
 
     labels = {build_partner_choice_label(partner): partner.partner_id for partner in partners}
-    st.info("スクリーンショット画像ではなく、読み取ったテキストを貼り付けてください。自動送信ではなくlocalの会話履歴に追加するだけです。")
-    with st.expander("貼り付け例を表示", expanded=True):
-        st.code(
-            "自分:\n"
-            "はじめまして。カフェ好きなんですね。\n\n"
-            "相手:\n"
-            "はい、休日によく行きます。\n\n"
-            "自分:\n"
-            "落ち着いたカフェいいですよね。よく行くエリアありますか？\n\n"
-            "または:\n"
-            "自分：はじめまして。カフェ好きなんですね。\n"
-            "相手：はい、休日によく行きます。",
-            language="text",
-        )
-    with st.form("conversation_import_form"):
-        selected_label = st.selectbox("会話履歴を追加する相手", options=list(labels.keys()))
-        user_label = st.text_input("自分の発話者ラベル", value="自分")
-        partner_label = st.text_input("相手の発話者ラベル", value="相手")
-        pasted = st.text_area("会話履歴貼り付け欄", height=220)
-        confirm_import = st.checkbox("保存内容を確認し、会話履歴へ追加する")
-        submitted = st.form_submit_button("会話履歴を保存")
-
-    normalized = _normalize_conversation_labels(pasted, user_label, partner_label)
-    turns, parse_warnings = parse_conversation_paste(normalized)
-    safety_warnings = detect_conversation_safety_warnings(pasted)
+    selected_label = st.selectbox("会話を追加する相手", options=list(labels.keys()), key="conv_import_partner")
     partner = load_partner_for_view(labels[selected_label])
-    errors = validate_imported_turns(turns, parse_warnings)
-    duplicate_warning = detect_duplicate_turn_sequence(partner, turns)
-    warnings = list(parse_warnings)
-    if safety_warnings:
-        warnings.append("安全チェック: " + " / ".join(safety_warnings))
-    if duplicate_warning:
-        warnings.append("既存の会話履歴末尾と完全一致する連続発言です。")
 
-    if turns:
-        preview_data = build_conversation_import_preview(partner, turns, warnings)
-        st.markdown("**保存プレビュー**")
-        with st.container(border=True):
-            st.write(f"追加予定: {preview_data['追加予定turn数']}件（自分: {preview_data['speakerごとの発話数']['user']}件 / 相手: {preview_data['speakerごとの発話数']['partner']}件）")
-            st.write(f"保存先: {preview_data['保存先']}")
-            if preview_data["警告一覧"]:
-                st.caption("確認事項: " + " / ".join(preview_data["警告一覧"]))
-    if errors and (submitted or pasted.strip()):
-        st.error("会話履歴を解析できませんでした。")
-        guidance = build_conversation_import_failure_guidance()
-        with st.container(border=True):
-            _render_bullet_items("考えられる理由", guidance["考えられる理由"])
-            _render_bullet_items("対処", guidance["対処"])
-        for error in errors:
-            st.error(error)
-    if safety_warnings:
-        st.warning("保存前に見直してください: " + " / ".join(safety_warnings))
-    if duplicate_warning:
-            st.warning("既存の会話履歴末尾と完全一致する連続発言です。")
+    st.write("マッチングアプリで会話した内容を1件ずつ登録してください。")
 
-    if submitted:
-        if errors:
-            st.error("保存できません。貼り付け内容を確認してください。")
+    speaker_label = st.selectbox("発言者", options=["自分", "相手"], key="conv_import_speaker")
+    message_text = st.text_area(
+        "メッセージ内容",
+        placeholder="ここにメッセージを貼り付けてください",
+        height=100,
+        key="conv_import_text",
+    )
+
+    if st.button("この1件を追加する", type="primary", key="conv_import_add"):
+        if not message_text.strip():
+            st.error("メッセージを入力してください")
             return
-        if not confirm_import:
-            st.error("保存前確認チェックを入れてください。")
+        speaker = "user" if speaker_label == "自分" else "partner"
+        new_turn = {"speaker": speaker, "text": message_text.strip()}
+        reload_partner = load_partner_for_view(partner.partner_id)
+        if detect_duplicate_turn_sequence(reload_partner, [new_turn]):
+            st.warning("同じ内容がすでに登録されています")
             return
-        updated = append_conversation_turns_to_partner(partner.partner_id, turns)
-        st.success(f"保存しました: {len(turns)}件の会話履歴を追加しました。")
-        st.info("保存後は「相手と会話する」画面で生成前チェックを確認し、3候補生成へ進めます。実際の送信はユーザー本人が手動で行います。")
+        append_conversation_turns_to_partner(partner.partner_id, [new_turn])
+        st.success("追加しました")
         st.rerun()
-
-    with st.expander("解析できない場合の手動追加", expanded=bool(errors and (submitted or pasted.strip()))):
-        st.caption("1発言ずつlocalの会話履歴へ追加します。自動送信ではありません。")
-        manual_speaker_label = st.selectbox("発言者", options=["自分", "相手"], key="manual_turn_speaker")
-        manual_text = st.text_area("発言本文", height=100, key="manual_turn_text")
-        confirm_manual = st.checkbox("この1発言をlocal会話履歴へ追加する", key="manual_turn_confirm")
-        if st.button("1発言を追加", key="manual_turn_add"):
-            if not manual_text.strip():
-                st.error("発言本文を入力してください。")
-                return
-            if not confirm_manual:
-                st.error("追加前確認チェックを入れてください。")
-                return
-            manual_speaker = "user" if manual_speaker_label == "自分" else "partner"
-            updated = append_conversation_turns_to_partner(partner.partner_id, [{"speaker": manual_speaker, "text": manual_text.strip()}])
-            st.success("保存しました: 1件の会話履歴を追加しました。")
 
 
 def _render_skipped_partner_warning() -> None:
