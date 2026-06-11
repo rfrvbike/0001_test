@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
 import sys
+import zipfile
+from datetime import datetime
 from pathlib import Path
 
 
@@ -1161,6 +1164,40 @@ def _render_skipped_partner_warning() -> None:
         st.warning("一部のデータが読み込めませんでした。該当ファイル: " + ", ".join(skipped))
 
 
+def _create_local_backup_zip() -> bytes:
+    buf = io.BytesIO()
+    local_dir = APP_DIR / "data" / "local"
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file_path in sorted(local_dir.rglob("*")):
+            if file_path.is_file():
+                zf.write(file_path, file_path.relative_to(APP_DIR))
+    buf.seek(0)
+    return buf.read()
+
+
+def _has_existing_local_data() -> bool:
+    local_dir = APP_DIR / "data" / "local"
+    return any(local_dir.rglob("*.yaml"))
+
+
+def _extract_backup_zip(zip_bytes: bytes) -> tuple[bool, str]:
+    buf = io.BytesIO(zip_bytes)
+    try:
+        with zipfile.ZipFile(buf, "r") as zf:
+            valid = [n for n in zf.namelist() if n.startswith("data/local/") and not n.endswith("/")]
+            if not valid:
+                return False, "このzipファイルにはdating_assistantのデータが含まれていません。"
+            for name in valid:
+                target = APP_DIR / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(zf.read(name))
+    except zipfile.BadZipFile:
+        return False, "zipファイルが壊れているか、形式が正しくありません。"
+    except Exception as e:
+        return False, f"展開中にエラーが発生しました: {e}"
+    return True, f"{len(valid)}件のファイルを復元しました。"
+
+
 def render_help() -> None:
     st.subheader("設定・ヘルプ")
     st.caption("このツールの使い方、安全な利用方法、local保存の考え方を確認できます。")
@@ -1246,14 +1283,43 @@ def render_help() -> None:
         )
 
     st.divider()
-    st.markdown("### データのバックアップ")
+    st.markdown("### データのバックアップ・復元")
+
     with st.container(border=True):
-        st.write("以下のフォルダをコピーして保存してください。")
-        st.code("data/local/", language="text")
+        st.markdown("**データをエクスポートする**")
         st.write(
-            "PC買い替え時やトラブル時は、このフォルダを同じ場所に戻すことでデータを復元できます。"
+            "すべての相手データ・会話履歴をzipファイルにまとめてダウンロードできます。"
+            "PC買い替えや移行時にご利用ください。"
         )
-        st.caption("バックアップ対象: プロフィール情報、会話履歴、送信済み記録、メモ")
+        zip_filename = f"dating_assistant_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        zip_bytes = _create_local_backup_zip()
+        st.download_button(
+            label="データをバックアップする",
+            data=zip_bytes,
+            file_name=zip_filename,
+            mime="application/zip",
+        )
+
+    st.write("")
+
+    with st.container(border=True):
+        st.markdown("**バックアップからデータを復元する**")
+        st.write("バックアップしたzipファイルを選択してください。既存のデータは上書きされます。")
+        uploaded = st.file_uploader(
+            "バックアップzipファイル",
+            type=["zip"],
+            key="backup_restore_uploader",
+        )
+        if uploaded is not None:
+            if _has_existing_local_data():
+                st.warning("既存のデータが上書きされます。続ける場合は「復元を実行」を押してください。")
+            if st.button("復元を実行", key="backup_restore_execute"):
+                ok, msg = _extract_backup_zip(uploaded.read())
+                if ok:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
 
     st.divider()
     st.markdown("### バージョン情報")
