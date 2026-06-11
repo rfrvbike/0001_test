@@ -25,10 +25,17 @@ dating_assistantは、マッチングアプリ上の相手プロフィールや�
 
 ### 起動方法
 
-1. `start_dating_assistant_gui.bat` をダブルクリックします。
+1. `start_dating_assistant_gui.bat` をダブルクリックします。（Windowsのみ）
 2. ブラウザで `http://localhost:8501` を開きます。
 3. Streamlitの初回メール入力が出た場合は、何も入力せずEnterで進めます。
 4. 古い画面が残る場合は、ブラウザを再読み込みしてください。
+
+Mac / Linux の場合:
+
+```bash
+chmod +x start_dating_assistant_gui.sh
+./start_dating_assistant_gui.sh
+```
 
 起動できない場合は、もう一度 `start_dating_assistant_gui.bat` から起動し直してください。このbatは古いStreamlit画面が残っている場合の停止処理と、GUIのimport確認を行ってから起動します。
 
