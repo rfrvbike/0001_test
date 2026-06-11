@@ -30,13 +30,20 @@ def is_api_key_configured() -> bool:
 
 
 def _build_system_prompt(partner: PartnerRecord, tone: str, objectives: list[str]) -> str:
+    partner_name = partner.display_name or "相手"
     profile_text = partner.profile.profile_text or "プロフィール情報なし"
 
     conversation_lines = []
     for turn in partner.conversation[-10:]:
-        label = "自分" if turn.speaker == "user" else "相手"
+        label = "ユーザー" if turn.speaker == "user" else f"相手（{partner_name}）"
         conversation_lines.append(f"{label}: {turn.text}")
     conversation_history = "\n".join(conversation_lines) if conversation_lines else "会話履歴なし"
+
+    last_partner_message = ""
+    for turn in reversed(partner.conversation):
+        if turn.speaker == "partner":
+            last_partner_message = turn.text
+            break
 
     style_parts = []
     if tone:
@@ -45,30 +52,36 @@ def _build_system_prompt(partner: PartnerRecord, tone: str, objectives: list[str
         style_parts.append("目的: " + "、".join(objectives))
     reply_style = "、".join(style_parts) if style_parts else "自然な返信"
 
+    last_message_section = (
+        f"【最新の相手のメッセージ】\n{last_partner_message}\n\n"
+        if last_partner_message else ""
+    )
+
     return (
-        "あなたはマッチングアプリの返信を考えるアシスタントです。\n"
-        "以下の情報をもとに、返信候補を3つ考えてください。\n\n"
-        f"【相手のプロフィール】\n{profile_text}\n\n"
-        f"【会話履歴】\n{conversation_history}\n\n"
+        "あなたはマッチングアプリでメッセージを送るユーザーの返信を考えるアシスタントです。\n\n"
+        "【重要な前提】\n"
+        "- ユーザー（あなたが返信を考える人）: 会話履歴で「ユーザー:」と書かれた発言をしている人\n"
+        f"- 相手（マッチングした人）の名前: {partner_name}\n"
+        f"- 相手のプロフィール情報: {profile_text}\n\n"
+        f"【会話履歴（上が古く、下が最新）】\n{conversation_history}\n\n"
+        f"{last_message_section}"
         f"【返信スタイル】\n{reply_style}\n\n"
+        "【タスク】\n"
+        f"最新の相手のメッセージに対して、ユーザーが{partner_name}さんへ送る返信候補を3つ考えてください。\n\n"
         "【ルール】\n"
-        "- 返信は1〜3文程度の自然な長さにする\n"
-        "- 相手の最後のメッセージに対して適切に返す\n"
-        "- 質問には答え、自然に会話を広げる\n"
-        "- テンプレート感が出ないようにする\n"
-        "- 絵文字は相手のメッセージに合わせて控えめに使う\n"
-        "- 自動送信ではないため、送信前にユーザーが確認する\n\n"
-        "以下の形式で返してください。\n\n"
-        "候補1:\n"
-        "（返信文をここに書く）\n\n"
-        "候補2:\n"
-        "（返信文をここに書く）\n\n"
-        "候補3:\n"
-        "（返信文をここに書く）\n\n"
-        "【重要】\n"
+        "- 返信はユーザー視点で書く（相手に送るメッセージとして書く）\n"
+        "- 相手の質問には必ず答える\n"
+        "- 自然な会話の流れを維持する\n"
         "- マークダウン記号（#・*・-・---）は使わない\n"
         "- 候補1:・候補2:・候補3: 以外の見出しは書かない\n"
-        "- 返信文は自然な日本語のみ\n"
+        "- 返信は1〜3文程度\n\n"
+        "以下の形式で返してください。\n\n"
+        "候補1:\n"
+        "（返信文）\n\n"
+        "候補2:\n"
+        "（返信文）\n\n"
+        "候補3:\n"
+        "（返信文）\n"
     )
 
 
