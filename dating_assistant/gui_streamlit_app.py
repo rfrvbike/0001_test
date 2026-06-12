@@ -868,38 +868,41 @@ def render_partner_creation() -> None:
             st.session_state["selected_partner_id"] = selected_management_partner.partner_id
             st.info("上の「相手と会話する」タブを開いてください。相手の選択は切り替わっています。")
 
-        with st.expander("プロフィール写真を登録・変更", expanded=False):
-            st.caption("写真はこのPC内（local）にだけ保存します。外部には送信しません。")
-            current_photo = get_partner_photo_path(selected_management_partner.partner_id)
-            if current_photo:
-                st.image(str(current_photo), width=120, caption="現在の写真")
-            uploaded_photo = st.file_uploader(
-                "プロフィール写真を登録する",
-                type=["jpg", "jpeg", "png"],
-                key=f"photo_{selected_management_partner.partner_id}",
+        photo_saved_flag = f"photo_saved_{selected_management_partner.partner_id}"
+        if st.session_state.pop(photo_saved_flag, False):
+            st.success("写真を登録しました")
+        current_photo = get_partner_photo_path(selected_management_partner.partner_id)
+        if current_photo:
+            encoded_photo = base64.b64encode(current_photo.read_bytes()).decode("ascii")
+            st.markdown(
+                f'<img src="data:image/jpeg;base64,{encoded_photo}" '
+                f'style="width:80px;height:80px;border-radius:50%;object-fit:cover;'
+                f'border:2px solid #F8A5C2;">',
+                unsafe_allow_html=True,
             )
-            if st.button("写真を保存する", key=f"photo_save_{selected_management_partner.partner_id}"):
-                if uploaded_photo is None:
-                    st.error("画像ファイルを選択してください")
+            st.caption("現在の写真")
+        else:
+            st.markdown("写真未登録")
+        uploaded_photo = st.file_uploader(
+            "📷 プロフィール写真を登録する",
+            type=["jpg", "jpeg", "png"],
+            help="ドラッグ&ドロップまたはクリックしてファイルを選択できます",
+            key=f"photo_{selected_management_partner.partner_id}",
+        )
+        if uploaded_photo is not None:
+            if st.button("登録する", type="primary", key=f"photo_save_{selected_management_partner.partner_id}"):
+                try:
+                    save_partner_photo_from_gui(selected_management_partner.partner_id, uploaded_photo.getvalue())
+                except ValueError:
+                    st.error("写真の登録に失敗しました")
                 else:
-                    try:
-                        save_partner_photo_from_gui(selected_management_partner.partner_id, uploaded_photo.getvalue())
-                    except ValueError as error:
-                        st.error(str(error))
-                    else:
-                        st.success("写真を保存しました")
-                        st.rerun()
-            if current_photo:
-                delete_flag_key = f"photo_delete_confirm_{selected_management_partner.partner_id}"
-                if st.button("写真を削除する", key=f"photo_delete_{selected_management_partner.partner_id}"):
-                    st.session_state[delete_flag_key] = True
-                if st.session_state.get(delete_flag_key):
-                    st.warning("この写真を削除します。元に戻せません。よろしいですか？")
-                    if st.button("はい、削除する", key=f"photo_delete_yes_{selected_management_partner.partner_id}"):
-                        delete_partner_photo_from_gui(selected_management_partner.partner_id)
-                        st.session_state[delete_flag_key] = False
-                        st.success("写真を削除しました")
-                        st.rerun()
+                    st.session_state[photo_saved_flag] = True
+                    st.rerun()
+        if current_photo:
+            delete_cols = st.columns([1, 4])
+            if delete_cols[0].button("写真を削除する", key=f"photo_delete_{selected_management_partner.partner_id}"):
+                delete_partner_photo_from_gui(selected_management_partner.partner_id)
+                st.rerun()
 
         with st.expander("表示名・アプリ名・管理メモを修正", expanded=False):
             st.caption("表示名やメモだけを更新します。内部保存IDや会話履歴、送信済み記録は変更しません。")
