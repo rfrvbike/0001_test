@@ -862,11 +862,6 @@ def render_partner_creation() -> None:
         management_labels = {build_partner_choice_label(partner): partner.partner_id for partner in management_partners}
         selected_management_label = st.selectbox("整理する相手を選ぶ", options=list(management_labels.keys()))
         selected_management_partner = load_partner_for_view(management_labels[selected_management_label])
-        _render_profile_display_card(build_partner_profile_card(selected_management_partner))
-
-        if st.button("この相手と会話する", key=f"manage_open_{selected_management_partner.partner_id}"):
-            st.session_state["selected_partner_id"] = selected_management_partner.partner_id
-            st.info("上の「相手と会話する」タブを開いてください。相手の選択は切り替わっています。")
 
         photo_saved_flag = f"photo_saved_{selected_management_partner.partner_id}"
         if st.session_state.pop(photo_saved_flag, False):
@@ -876,21 +871,28 @@ def render_partner_creation() -> None:
             encoded_photo = base64.b64encode(current_photo.read_bytes()).decode("ascii")
             st.markdown(
                 f'<img src="data:image/jpeg;base64,{encoded_photo}" '
-                f'style="width:80px;height:80px;border-radius:50%;object-fit:cover;'
+                f'style="width:100px;height:100px;border-radius:50%;object-fit:cover;'
                 f'border:2px solid #F8A5C2;">',
                 unsafe_allow_html=True,
             )
             st.caption("現在の写真")
         else:
-            st.markdown("写真未登録")
+            st.markdown(
+                '<div style="width:100px;height:100px;border-radius:50%;background:#FDEFF4;'
+                'border:2px solid #F8A5C2;display:flex;align-items:center;justify-content:center;'
+                'font-size:48px;">😊</div>',
+                unsafe_allow_html=True,
+            )
         uploaded_photo = st.file_uploader(
-            "📷 プロフィール写真を登録する",
+            "📷 写真を登録・変更する",
             type=["jpg", "jpeg", "png"],
             help="ドラッグ&ドロップまたはクリックしてファイルを選択できます",
             key=f"photo_{selected_management_partner.partner_id}",
         )
-        if uploaded_photo is not None:
-            if st.button("登録する", type="primary", key=f"photo_save_{selected_management_partner.partner_id}"):
+        if st.button("登録する", type="primary", key=f"photo_save_{selected_management_partner.partner_id}"):
+            if uploaded_photo is None:
+                st.warning("写真を選択してください")
+            else:
                 try:
                     save_partner_photo_from_gui(selected_management_partner.partner_id, uploaded_photo.getvalue())
                 except ValueError:
@@ -900,9 +902,16 @@ def render_partner_creation() -> None:
                     st.rerun()
         if current_photo:
             delete_cols = st.columns([1, 4])
-            if delete_cols[0].button("写真を削除する", key=f"photo_delete_{selected_management_partner.partner_id}"):
+            if delete_cols[0].button("削除する", key=f"photo_delete_{selected_management_partner.partner_id}"):
                 delete_partner_photo_from_gui(selected_management_partner.partner_id)
                 st.rerun()
+
+        if st.button("この相手と会話する", key=f"manage_open_{selected_management_partner.partner_id}"):
+            st.session_state["selected_partner_id"] = selected_management_partner.partner_id
+            st.info("上の「相手と会話する」タブを開いてください。相手の選択は切り替わっています。")
+
+        with st.expander("プロフィール詳細", expanded=False):
+            _render_profile_display_card(build_partner_profile_card(selected_management_partner))
 
         with st.expander("表示名・アプリ名・管理メモを修正", expanded=False):
             st.caption("表示名やメモだけを更新します。内部保存IDや会話履歴、送信済み記録は変更しません。")
