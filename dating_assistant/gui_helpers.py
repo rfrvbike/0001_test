@@ -1826,6 +1826,37 @@ def delete_conversation_turn_from_gui(partner_id: str, turn_index: int) -> Partn
     return save_updated_partner(partner)
 
 
+_PARTNER_PHOTO_DIR = Path(__file__).resolve().parent / "data" / "local" / "partner_photos"
+
+
+def get_partner_photo_path(partner_id: str) -> Path | None:
+    path = _PARTNER_PHOTO_DIR / f"{partner_id}.jpg"
+    return path if path.exists() else None
+
+
+def save_partner_photo_from_gui(partner_id: str, image_bytes: bytes) -> Path:
+    from PIL import Image, ImageOps
+
+    try:
+        image = Image.open(BytesIO(image_bytes))
+    except Exception:
+        raise ValueError("画像ファイルを読み込めませんでした。jpg / jpeg / png 形式の画像を選択してください。")
+    image = ImageOps.exif_transpose(image).convert("RGB")
+    image = ImageOps.fit(image, (400, 400))
+    _PARTNER_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+    path = _PARTNER_PHOTO_DIR / f"{partner_id}.jpg"
+    image.save(path, format="JPEG", quality=90)
+    return path
+
+
+def delete_partner_photo_from_gui(partner_id: str) -> bool:
+    path = _PARTNER_PHOTO_DIR / f"{partner_id}.jpg"
+    if path.exists():
+        path.unlink()
+        return True
+    return False
+
+
 def _parse_optional_int(value: Any) -> int | None:
     if value is None:
         return None

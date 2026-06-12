@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import io
 import json
 import sys
@@ -20,6 +21,9 @@ from src.claude_generator import generate_reply_candidates_for_gui, is_api_key_c
 from gui_helpers import (
     append_conversation_turns_to_partner,
     delete_conversation_turn_from_gui,
+    get_partner_photo_path,
+    save_partner_photo_from_gui,
+    delete_partner_photo_from_gui,
     build_partner_summary,
     build_partner_creation_preview,
     build_partner_choice_label,
@@ -275,12 +279,30 @@ def render_partner_viewer() -> None:
             ("未確認候補", workspace["pending_count"]),
         ]
     )
+    photo_path = get_partner_photo_path(partner.partner_id)
+    if photo_path:
+        encoded_photo = base64.b64encode(photo_path.read_bytes()).decode("ascii")
+        avatar_html = (
+            f'<img src="data:image/jpeg;base64,{encoded_photo}" '
+            f'style="width:80px;height:80px;border-radius:50%;object-fit:cover;'
+            f'border:2px solid #F8A5C2;flex-shrink:0;">'
+        )
+    else:
+        avatar_html = (
+            '<div style="width:80px;height:80px;border-radius:50%;background:#FDEFF4;'
+            'border:2px solid #F8A5C2;display:flex;align-items:center;justify-content:center;'
+            'font-size:36px;flex-shrink:0;">😊</div>'
+        )
     st.markdown(
         f'<div style="background:#FFFFFF;border:1px solid #F0E4E9;border-radius:14px;'
-        f'padding:16px 20px;margin:8px 0 16px 0;box-shadow:0 2px 8px rgba(0,0,0,0.06);">'
+        f'padding:16px 20px;margin:8px 0 16px 0;box-shadow:0 2px 8px rgba(0,0,0,0.06);'
+        f'display:flex;align-items:center;gap:16px;">'
+        f"{avatar_html}"
+        f"<div>"
         f'<div style="font-size:24px;font-weight:800;color:#2D2D2D;">{workspace["title"]}</div>'
         f'<div style="font-size:13px;color:#888;margin:2px 0 6px 0;">{workspace["subtitle"]}</div>'
         f"<div>{chips}</div>"
+        f"</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -845,6 +867,39 @@ def render_partner_creation() -> None:
         if st.button("この相手と会話する", key=f"manage_open_{selected_management_partner.partner_id}"):
             st.session_state["selected_partner_id"] = selected_management_partner.partner_id
             st.info("上の「相手と会話する」タブを開いてください。相手の選択は切り替わっています。")
+
+        with st.expander("プロフィール写真を登録・変更", expanded=False):
+            st.caption("写真はこのPC内（local）にだけ保存します。外部には送信しません。")
+            current_photo = get_partner_photo_path(selected_management_partner.partner_id)
+            if current_photo:
+                st.image(str(current_photo), width=120, caption="現在の写真")
+            uploaded_photo = st.file_uploader(
+                "プロフィール写真を登録する",
+                type=["jpg", "jpeg", "png"],
+                key=f"photo_{selected_management_partner.partner_id}",
+            )
+            if st.button("写真を保存する", key=f"photo_save_{selected_management_partner.partner_id}"):
+                if uploaded_photo is None:
+                    st.error("画像ファイルを選択してください")
+                else:
+                    try:
+                        save_partner_photo_from_gui(selected_management_partner.partner_id, uploaded_photo.getvalue())
+                    except ValueError as error:
+                        st.error(str(error))
+                    else:
+                        st.success("写真を保存しました")
+                        st.rerun()
+            if current_photo:
+                delete_flag_key = f"photo_delete_confirm_{selected_management_partner.partner_id}"
+                if st.button("写真を削除する", key=f"photo_delete_{selected_management_partner.partner_id}"):
+                    st.session_state[delete_flag_key] = True
+                if st.session_state.get(delete_flag_key):
+                    st.warning("この写真を削除します。元に戻せません。よろしいですか？")
+                    if st.button("はい、削除する", key=f"photo_delete_yes_{selected_management_partner.partner_id}"):
+                        delete_partner_photo_from_gui(selected_management_partner.partner_id)
+                        st.session_state[delete_flag_key] = False
+                        st.success("写真を削除しました")
+                        st.rerun()
 
         with st.expander("表示名・アプリ名・管理メモを修正", expanded=False):
             st.caption("表示名やメモだけを更新します。内部保存IDや会話履歴、送信済み記録は変更しません。")
