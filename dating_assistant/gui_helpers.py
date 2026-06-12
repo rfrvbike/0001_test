@@ -1814,6 +1814,18 @@ def append_conversation_turns_to_partner(partner_id: str, turns: list[dict[str, 
     return save_updated_partner(partner)
 
 
+def delete_conversation_turn_from_gui(partner_id: str, turn_index: int) -> PartnerRecord:
+    """turn_index は format_conversation_history の index フィールド（1始まり）に対応する。"""
+    partner = load_partner(partner_id)
+    idx = turn_index - 1
+    if not (0 <= idx < len(partner.conversation)):
+        raise ValueError(f"会話履歴のインデックスが範囲外です: {turn_index}")
+    partner.conversation.pop(idx)
+    add_activity_event(partner, "turn_deleted", f"会話履歴 {turn_index} 件目を削除")
+    partner.analysis.partner_temperature = estimate_partner_temperature(partner.conversation)
+    return save_updated_partner(partner)
+
+
 def _parse_optional_int(value: Any) -> int | None:
     if value is None:
         return None

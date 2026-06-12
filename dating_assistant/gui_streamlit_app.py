@@ -19,6 +19,7 @@ from src.claude_generator import generate_reply_candidates_for_gui, is_api_key_c
 
 from gui_helpers import (
     append_conversation_turns_to_partner,
+    delete_conversation_turn_from_gui,
     build_partner_summary,
     build_partner_creation_preview,
     build_partner_choice_label,
@@ -153,26 +154,31 @@ def render_conversation_history_section(partner) -> None:
     if not rows:
         st.info("まだ会話履歴はありません。会話履歴が少なくても候補は作れます。")
         return
-    chat_parts = []
     for row in rows[-20:]:
         is_user = row["speaker"] == "user"
-        align = "flex-end" if is_user else "flex-start"
         bg = "#DCF8C6" if is_user else "#FFFFFF"
+        align = "right" if is_user else "left"
         name = "自分" if is_user else "相手"
         text = row["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
-        chat_parts.append(
-            f'<div style="display:flex;justify-content:{align};margin-bottom:8px;">'
-            f'<div style="max-width:75%;background:{bg};border-radius:12px;padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.15);">'
-            f'<div style="font-size:11px;color:#888;margin-bottom:2px;">{name}</div>'
-            f'<div style="font-size:14px;line-height:1.5;">{text}</div>'
-            f"</div></div>"
-        )
-    st.markdown(
-        '<div style="height:400px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;padding:12px;background:#ECE5DD;">'
-        + "".join(chat_parts)
-        + "</div>",
-        unsafe_allow_html=True,
-    )
+        msg_col, del_col = st.columns([8, 1])
+        with msg_col:
+            st.markdown(
+                f'<div style="display:flex;justify-content:{"flex-end" if is_user else "flex-start"};margin-bottom:4px;">'
+                f'<div style="max-width:90%;background:{bg};border-radius:12px;padding:8px 12px;'
+                f'box-shadow:0 1px 2px rgba(0,0,0,0.12);">'
+                f'<div style="font-size:11px;color:#888;text-align:{align};margin-bottom:2px;">{name}</div>'
+                f'<div style="font-size:14px;line-height:1.5;text-align:{align};">{text}</div>'
+                f"</div></div>",
+                unsafe_allow_html=True,
+            )
+        with del_col:
+            if st.button("✕", key=f"del_turn_{partner.partner_id}_{row['index']}", help="このメッセージを削除"):
+                try:
+                    delete_conversation_turn_from_gui(partner.partner_id, row["index"])
+                    st.success("削除しました")
+                    st.rerun()
+                except ValueError as e:
+                    st.error(str(e))
 
 
 def render_inline_conversation_import(partner) -> None:
