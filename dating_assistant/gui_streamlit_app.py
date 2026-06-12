@@ -209,11 +209,15 @@ def main() -> None:
         render_partner_viewer()
 
     with tab_manage:
-        render_profile_registration()
-        st.divider()
-        render_partner_creation()
-        st.divider()
-        render_conversation_import()
+        sub_tab_profile, sub_tab_partners, sub_tab_import = st.tabs(
+            ["📝 プロフィール登録", "👥 登録済みの相手", "💬 会話履歴追加"]
+        )
+        with sub_tab_profile:
+            render_profile_registration()
+        with sub_tab_partners:
+            render_partner_creation()
+        with sub_tab_import:
+            render_conversation_import()
 
     with tab_settings:
         render_help()
@@ -724,7 +728,7 @@ def _render_profile_ocr_intake() -> None:
     )
     _render_bullet_items("安全メモ", build_profile_ocr_privacy_notes())
     ocr_status = get_profile_ocr_environment_status()
-    with st.container(border=True):
+    with st.expander("🔧 OCR環境の設定（上級者向け）", expanded=False):
         st.markdown("**OCR環境**")
         _render_summary_rows(
             [
