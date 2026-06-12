@@ -64,33 +64,158 @@ from gui_helpers import (
 )
 
 
+_CUSTOM_CSS = """
+<style>
+/* ===== 全体: フォント・背景・テキスト色 ===== */
+html, body, [data-testid="stAppViewContainer"] {
+    background-color: #FAFAFA;
+    color: #2D2D2D;
+    font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+}
+[data-testid="stAppViewContainer"] .block-container {
+    max-width: 1100px;
+    padding-top: 1.2rem;
+    padding-bottom: 3rem;
+}
+p, li, label, [data-testid="stMarkdownContainer"] p {
+    font-size: 16px;
+    line-height: 1.7;
+}
+h1 {
+    color: #E85D8A;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+h2, h3 {
+    color: #2D2D2D;
+    font-weight: 700;
+}
+
+/* ===== タブ ===== */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 6px;
+    border-bottom: 2px solid #F8A5C2;
+}
+.stTabs [data-baseweb="tab"] {
+    font-size: 16px;
+    font-weight: 700;
+    padding: 10px 22px;
+    border-radius: 12px 12px 0 0;
+    background-color: #FFFFFF;
+    color: #2D2D2D;
+}
+.stTabs [aria-selected="true"] {
+    background-color: #E85D8A !important;
+    color: #FFFFFF !important;
+}
+
+/* ===== ボタン共通: ホバーエフェクト ===== */
+.stButton > button, .stFormSubmitButton > button, .stDownloadButton > button {
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 15px;
+    border: 1.5px solid #F8A5C2;
+    color: #E85D8A;
+    background-color: #FFFFFF;
+    transition: all 0.15s ease-in-out;
+}
+.stButton > button:hover, .stFormSubmitButton > button:hover, .stDownloadButton > button:hover {
+    border-color: #E85D8A;
+    background-color: #FDEFF4;
+    box-shadow: 0 3px 10px rgba(232, 93, 138, 0.25);
+    transform: translateY(-1px);
+}
+
+/* ===== メインアクション（primary）: 大きくメインカラー ===== */
+.stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primaryFormSubmit"] {
+    background: linear-gradient(135deg, #E85D8A 0%, #FF6B9D 100%);
+    color: #FFFFFF;
+    border: none;
+    padding: 0.65rem 1.6rem;
+    font-size: 16px;
+}
+.stButton > button[kind="primary"]:hover, .stFormSubmitButton > button[kind="primaryFormSubmit"]:hover {
+    background: linear-gradient(135deg, #FF6B9D 0%, #E85D8A 100%);
+    color: #FFFFFF;
+    box-shadow: 0 4px 14px rgba(232, 93, 138, 0.45);
+}
+
+/* ===== カード（border付きコンテナ）: シャドウ ===== */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 14px;
+    background-color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ===== expander ===== */
+[data-testid="stExpander"] details {
+    border-radius: 10px;
+    border: 1px solid #F0E4E9;
+    background-color: #FFFFFF;
+}
+[data-testid="stExpander"] summary {
+    font-weight: 600;
+}
+
+/* ===== 会話履歴の✕削除ボタン: 普段は薄く・ホバーで濃く ===== */
+div[class*="st-key-delwrap_"] button {
+    border: none;
+    background: transparent;
+    color: #BBBBBB;
+    font-size: 13px;
+    padding: 2px 8px;
+    min-height: 28px;
+    opacity: 0.45;
+    box-shadow: none;
+}
+div[class*="st-key-delwrap_"] button:hover {
+    opacity: 1;
+    color: #E85D8A;
+    background-color: #FDEFF4;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ===== 返信候補カード: A/B/Cの背景色 ===== */
+div[class*="st-key-cand_card_0"] {
+    background-color: #FDF0F5;
+}
+div[class*="st-key-cand_card_1"] {
+    background-color: #EFF5FD;
+}
+div[class*="st-key-cand_card_2"] {
+    background-color: #EFFAF2;
+}
+</style>
+"""
+
+
 def main() -> None:
-    st.set_page_config(page_title="dating_assistant", layout="wide")
+    st.set_page_config(page_title="dating_assistant", page_icon="💬", layout="wide")
+    st.markdown(_CUSTOM_CSS, unsafe_allow_html=True)
     st.title("dating_assistant")
     st.caption("ローカルGUI")
     st.info(
         "このツールは、マッチングアプリ上で送るメッセージ候補を作るための補助画面です。"
-        "まず「プロフィール登録」で相手情報を登録し、保存後に「相手と会話する」で候補を作ります。"
+        "まず「👤 相手を管理する」タブのプロフィール登録で相手情報を登録し、保存後に「💬 会話する」で候補を作ります。"
         "自動送信は行いません。実際の送信はマッチングアプリ上でユーザー本人が手動で行います。"
     )
 
-    tab_viewer, tab_profile, tab_partner_create, tab_import, tab_help = st.tabs(
-        ["相手と会話する", "プロフィール登録", "登録済み相手の管理", "会話履歴追加", "設定・ヘルプ"]
+    tab_talk, tab_manage, tab_settings = st.tabs(
+        ["💬 会話する", "👤 相手を管理する", "⚙️ 設定"]
     )
 
-    with tab_viewer:
+    with tab_talk:
         render_partner_viewer()
 
-    with tab_profile:
+    with tab_manage:
         render_profile_registration()
-
-    with tab_partner_create:
+        st.divider()
         render_partner_creation()
-
-    with tab_import:
+        st.divider()
         render_conversation_import()
 
-    with tab_help:
+    with tab_settings:
         render_help()
 
 
@@ -102,6 +227,15 @@ def render_partner_viewer() -> None:
     partners = load_partner_choices(include_archived=include_archived)
     _render_skipped_partner_warning()
     if not partners:
+        st.markdown(
+            '<div style="background:linear-gradient(135deg,#FDEFF4 0%,#FFF5F9 100%);'
+            'border:1.5px solid #F8A5C2;border-radius:16px;padding:28px 24px;'
+            'text-align:center;margin:12px 0;">'
+            '<div style="font-size:22px;font-weight:800;color:#E85D8A;margin-bottom:8px;">まずは相手を登録しましょう！</div>'
+            '<div style="font-size:16px;color:#2D2D2D;">「👤 相手を管理する」タブから相手のプロフィールを登録してください。</div>'
+            "</div>",
+            unsafe_allow_html=True,
+        )
         st.info(
             "まだ会話対象が登録されていません。"
             "まず「プロフィール登録」で相手のプロフィール情報を貼り付けて保存してください。"
@@ -127,23 +261,38 @@ def render_partner_viewer() -> None:
     st.session_state["selected_partner_id"] = partner.partner_id
     workspace = build_partner_workspace_overview(partner)
 
-    st.markdown(f"### {workspace['title']}")
-    st.caption(workspace["subtitle"])
-    cols = st.columns(4)
-    cols[0].metric("今やること", workspace["next_action"])
-    cols[1].metric("会話ステージ", workspace["conversation_stage"])
-    cols[2].metric("温度感", workspace["temperature"])
-    cols[3].metric("未確認候補", workspace["pending_count"])
+    chips = "".join(
+        f'<span style="display:inline-block;background:#FDEFF4;color:#E85D8A;'
+        f'border-radius:999px;padding:4px 14px;margin:4px 6px 0 0;font-size:13px;font-weight:600;">{label}: {value}</span>'
+        for label, value in [
+            ("今やること", workspace["next_action"]),
+            ("会話ステージ", workspace["conversation_stage"]),
+            ("温度感", workspace["temperature"]),
+            ("未確認候補", workspace["pending_count"]),
+        ]
+    )
+    st.markdown(
+        f'<div style="background:#FFFFFF;border:1px solid #F0E4E9;border-radius:14px;'
+        f'padding:16px 20px;margin:8px 0 16px 0;box-shadow:0 2px 8px rgba(0,0,0,0.06);">'
+        f'<div style="font-size:24px;font-weight:800;color:#2D2D2D;">{workspace["title"]}</div>'
+        f'<div style="font-size:13px;color:#888;margin:2px 0 6px 0;">{workspace["subtitle"]}</div>'
+        f"<div>{chips}</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
-    left, right = st.columns([1, 1.25])
+    left, right = st.columns([4, 6])
     with left:
-        st.markdown("### 相手のプロフィール")
-        _render_profile_display_card(build_partner_profile_card(partner))
+        st.markdown("### 📋 相手のプロフィール")
+        with st.expander("プロフィール詳細を見る", expanded=False):
+            _render_profile_display_card(build_partner_profile_card(partner))
 
     with right:
-        st.markdown("### 会話履歴")
+        st.markdown("### 💬 会話履歴")
         render_conversation_history_section(partner)
-        render_inline_conversation_import(partner)
+
+    st.divider()
+    render_inline_conversation_import(partner)
 
     st.divider()
     render_generation_controls(partner)
@@ -156,29 +305,39 @@ def render_conversation_history_section(partner) -> None:
         return
     for row in rows[-20:]:
         is_user = row["speaker"] == "user"
-        bg = "#DCF8C6" if is_user else "#FFFFFF"
-        align = "right" if is_user else "left"
         name = "自分" if is_user else "相手"
+        align = "right" if is_user else "left"
+        bubble_style = (
+            "background:#FCE0EC;border:1px solid #F8A5C2;border-radius:16px 16px 4px 16px;"
+            if is_user
+            else "background:#FFFFFF;border:1px solid #DDDDDD;border-radius:16px 16px 16px 4px;"
+        )
         text = row["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
-        msg_col, del_col = st.columns([8, 1])
+        timestamp = str(row["timestamp"] or "")[:16].replace("T", " ")
+        timestamp_html = (
+            f'<div style="font-size:10px;color:#AAAAAA;margin-top:3px;text-align:{align};">{timestamp}</div>'
+            if timestamp else ""
+        )
+        msg_col, del_col = st.columns([9, 1])
         with msg_col:
             st.markdown(
-                f'<div style="display:flex;justify-content:{"flex-end" if is_user else "flex-start"};margin-bottom:4px;">'
-                f'<div style="max-width:90%;background:{bg};border-radius:12px;padding:8px 12px;'
-                f'box-shadow:0 1px 2px rgba(0,0,0,0.12);">'
-                f'<div style="font-size:11px;color:#888;text-align:{align};margin-bottom:2px;">{name}</div>'
-                f'<div style="font-size:14px;line-height:1.5;text-align:{align};">{text}</div>'
+                f'<div style="display:flex;justify-content:{"flex-end" if is_user else "flex-start"};margin-bottom:6px;">'
+                f'<div style="max-width:85%;{bubble_style}padding:10px 14px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">'
+                f'<div style="font-size:11px;color:#999;text-align:{align};margin-bottom:2px;">{name}</div>'
+                f'<div style="font-size:15px;line-height:1.6;color:#2D2D2D;text-align:{align};">{text}</div>'
+                f"{timestamp_html}"
                 f"</div></div>",
                 unsafe_allow_html=True,
             )
         with del_col:
-            if st.button("✕", key=f"del_turn_{partner.partner_id}_{row['index']}", help="このメッセージを削除"):
-                try:
-                    delete_conversation_turn_from_gui(partner.partner_id, row["index"])
-                    st.success("削除しました")
-                    st.rerun()
-                except ValueError as e:
-                    st.error(str(e))
+            with st.container(key=f"delwrap_{partner.partner_id}_{row['index']}"):
+                if st.button("✕", key=f"del_turn_{partner.partner_id}_{row['index']}", help="このメッセージを削除"):
+                    try:
+                        delete_conversation_turn_from_gui(partner.partner_id, row["index"])
+                        st.success("削除しました")
+                        st.rerun()
+                    except ValueError as e:
+                        st.error(str(e))
 
 
 def render_inline_conversation_import(partner) -> None:
@@ -235,7 +394,7 @@ def render_generation_controls(partner) -> None:
             key=f"generation_place_{partner.partner_id}",
         )
     st.caption("候補はlocalに保存されるだけです。実際に送る文は、ユーザー本人がマッチングアプリ上で手動送信してください。")
-    if st.button("返信候補を生成する", key=f"generate_button_{partner.partner_id}"):
+    if st.button("返信候補を生成する", type="primary", key=f"generate_button_{partner.partner_id}"):
         if not is_api_key_configured():
             st.error(
                 "APIキーが設定されていません。"
@@ -257,26 +416,36 @@ def render_generation_controls(partner) -> None:
         st.success("返信候補を3つ作りました。気に入った文をコピーして、マッチングアプリで手動送信してください。")
 
     variants = st.session_state.get(f"last_generated_{partner.partner_id}", [])
-    for variant in variants:
-        text_key = f"generated_{partner.partner_id}_{variant['suggestion_id']}"
-        with st.container(border=True):
-            st.markdown(f"**{variant['title']}**")
-            st.text_area(
-                "候補本文",
-                variant["text"],
-                height=200,
-                key=text_key,
-            )
-            if st.button("✓ この文章を送った", key=f"sent_{partner.partner_id}_{variant['suggestion_id']}"):
-                sent_text = st.session_state.get(text_key, variant["text"])
-                new_turn = {"speaker": "user", "text": sent_text.strip()}
-                reload_partner = load_partner_for_view(partner.partner_id)
-                if detect_duplicate_turn_sequence(reload_partner, [new_turn]):
-                    st.warning("同じ内容がすでに登録されています")
-                else:
-                    append_conversation_turns_to_partner(partner.partner_id, [new_turn])
-                    st.success("送信済みとして登録しました")
-                    st.rerun()
+    if variants:
+        chip_colors = ["#E85D8A", "#4A90D9", "#3CA86B"]
+        columns = st.columns(len(variants))
+        for index, (column, variant) in enumerate(zip(columns, variants)):
+            text_key = f"generated_{partner.partner_id}_{variant['suggestion_id']}"
+            chip_color = chip_colors[index % len(chip_colors)]
+            with column:
+                with st.container(border=True, key=f"cand_card_{index}_{partner.partner_id}"):
+                    st.markdown(
+                        f'<span style="display:inline-block;background:{chip_color};color:#FFFFFF;'
+                        f'border-radius:999px;padding:3px 14px;font-size:13px;font-weight:700;">'
+                        f"{variant['title']}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    st.text_area(
+                        "候補本文",
+                        variant["text"],
+                        height=200,
+                        key=text_key,
+                    )
+                    if st.button("✓ この文章を送った", key=f"sent_{partner.partner_id}_{variant['suggestion_id']}"):
+                        sent_text = st.session_state.get(text_key, variant["text"])
+                        new_turn = {"speaker": "user", "text": sent_text.strip()}
+                        reload_partner = load_partner_for_view(partner.partner_id)
+                        if detect_duplicate_turn_sequence(reload_partner, [new_turn]):
+                            st.warning("同じ内容がすでに登録されています")
+                        else:
+                            append_conversation_turns_to_partner(partner.partner_id, [new_turn])
+                            st.success("送信済みとして登録しました")
+                            st.rerun()
 
 
 def render_profile_registration() -> None:
