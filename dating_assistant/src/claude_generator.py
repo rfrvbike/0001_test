@@ -107,6 +107,90 @@ def _parse_candidates(response_text: str) -> list[str]:
     return candidates[:3] if candidates else [response_text.strip()]
 
 
+def _parse_like_messages(response_text: str) -> list[str]:
+    parts = re.split(r"パターン[１-３1-3]\s*[:：]", response_text)
+    messages = [p.strip() for p in parts[1:] if p.strip()]
+    return messages[:3] if messages else [response_text.strip()]
+
+
+def generate_like_message(
+    partner_id: str,
+    tone: str = "自然・普通",
+) -> list[str]:
+    api_key = _get_api_key()
+    if not api_key:
+        raise ValueError(
+            "APIキーが設定されていません。"
+            ".envファイルにANTHROPIC_API_KEYを設定してください。"
+        )
+
+    try:
+        import anthropic
+    except ImportError:
+        raise ValueError(
+            "anthropicライブラリがインストールされていません。"
+            "pip install anthropic を実行してください。"
+        )
+
+    partner = load_partner(partner_id)
+    partner_profile = partner.profile.profile_text or "プロフィール情報なし"
+
+    system_prompt = (
+        "あなたはマッチングアプリのいいね文言を考えるアシスタントです。\n\n"
+        "【相手のプロフィール】\n"
+        f"{partner_profile}\n\n"
+        "【文言のトーン】\n"
+        f"{tone}\n\n"
+        "以下の条件でいいね文言を3パターン考えてください。\n\n"
+        "条件:\n"
+        "- 40〜100文字程度\n"
+        "- 相手のプロフィールの具体的な内容に触れる\n"
+        "- テンプレート感がない自然な文章\n"
+        "- 質問で終わると返信率が上がる\n"
+        "- 褒めすぎない・重たくない\n"
+        "- マークダウン記号は使わない\n"
+        "- 絵文字は1〜2個まで\n\n"
+        "避けること:\n"
+        "- 「プロフィール見て気になりました」等のテンプレート表現\n"
+        "- 外見への言及\n"
+        "- 重たい・長すぎる文章\n\n"
+        "以下の形式で返してください。\n\n"
+        "パターン1:\n"
+        "（文言）\n\n"
+        "パターン2:\n"
+        "（文言）\n\n"
+        "パターン3:\n"
+        "（文言）\n"
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": "いいね文言を3パターン生成してください。"}],
+            system=system_prompt,
+        )
+        response_text = message.content[0].text
+    except Exception as e:
+        error_msg = str(e)
+        if "authentication" in error_msg.lower() or "api_key" in error_msg.lower():
+            raise ValueError(
+                "APIキーが正しくありません。.envファイルのANTHROPIC_API_KEYを確認してください。"
+            )
+        if "rate_limit" in error_msg.lower():
+            raise ValueError(
+                "APIのレート制限に達しました。しばらく待ってから再試行してください。"
+            )
+        if "overload" in error_msg.lower():
+            raise ValueError(
+                "APIサーバーが一時的に混雑しています。しばらく待ってから再試行してください。"
+            )
+        raise ValueError(f"API呼び出しに失敗しました: {error_msg}")
+
+    return _parse_like_messages(response_text)
+
+
 def generate_reply_candidates_for_gui(
     partner_id: str,
     objectives: list[str] | None = None,

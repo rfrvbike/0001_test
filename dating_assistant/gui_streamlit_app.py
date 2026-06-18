@@ -16,7 +16,11 @@ if str(APP_DIR) not in sys.path:
 
 import streamlit as st
 
-from src.claude_generator import generate_reply_candidates_for_gui, is_api_key_configured
+from src.claude_generator import (
+    generate_like_message,
+    generate_reply_candidates_for_gui,
+    is_api_key_configured,
+)
 
 from gui_helpers import (
     append_conversation_turns_to_partner,
@@ -320,8 +324,71 @@ def render_partner_viewer() -> None:
     st.divider()
     render_inline_conversation_import(partner)
 
+    if not partner.conversation:
+        st.divider()
+        render_like_message_controls(partner)
+
     st.divider()
     render_generation_controls(partner)
+
+
+def render_like_message_controls(partner) -> None:
+    st.subheader("💝 いいね文言を生成する")
+    st.caption(
+        "まだ会話していない相手へのいいね文言を生成します。"
+        "相手のプロフィールをもとに、自然で返信率の高い文言を3パターン作ります。"
+    )
+    tone = st.radio(
+        "文言のトーン",
+        options=["自然・普通", "少し明るく・ユーモアあり", "丁寧・真面目"],
+        index=0,
+        key=f"like_message_tone_{partner.partner_id}",
+    )
+    if st.button("いいね文言を生成する", type="primary", key=f"like_message_button_{partner.partner_id}"):
+        if not is_api_key_configured():
+            st.error(
+                "APIキーが設定されていません。"
+                "設定・ヘルプタブでAPIキーの設定方法を確認してください。"
+            )
+            return
+        try:
+            with st.spinner("文言を考えています..."):
+                messages = generate_like_message(partner.partner_id, tone=tone)
+        except ValueError as error:
+            st.error(f"生成中にエラーが発生しました。{error}")
+            return
+        st.session_state[f"last_like_messages_{partner.partner_id}"] = messages
+        st.success("いいね文言を3パターン作りました。気に入った文をコピーして使ってください。")
+
+    messages = st.session_state.get(f"last_like_messages_{partner.partner_id}", [])
+    if messages:
+        chip_colors = ["#E85D8A", "#4A90D9", "#3CA86B"]
+        columns = st.columns(len(messages))
+        for index, (column, message_text) in enumerate(zip(columns, messages)):
+            text_key = f"like_message_{partner.partner_id}_{index}"
+            chip_color = chip_colors[index % len(chip_colors)]
+            with column:
+                with st.container(border=True, key=f"like_card_{index}_{partner.partner_id}"):
+                    st.markdown(
+                        f'<span style="display:inline-block;background:{chip_color};color:#FFFFFF;'
+                        f'border-radius:999px;padding:3px 14px;font-size:13px;font-weight:700;">'
+                        f"パターン{index + 1}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    edited_text = st.text_area(
+                        "いいね文言",
+                        message_text,
+                        height=100,
+                        key=text_key,
+                    )
+                    char_count = len(edited_text)
+                    over_limit = char_count > 140
+                    color = "#E85D8A" if over_limit else "#888888"
+                    st.markdown(
+                        f'<div style="font-size:12px;color:{color};text-align:right;">'
+                        f"{char_count}文字（140文字以内推奨）</div>",
+                        unsafe_allow_html=True,
+                    )
 
 
 def render_conversation_history_section(partner) -> None:
