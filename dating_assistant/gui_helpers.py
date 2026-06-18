@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import datetime
 from io import BytesIO
+import json
 import re
 import shutil
 from pathlib import Path
@@ -13,7 +14,7 @@ from src.app_core import generate
 from src.conversation_planner import estimate_partner_temperature
 from src.loaders import load_user_profile
 from src.models import ConversationTurn, GenerationRequest, PartnerNote, PartnerRecord, SentRecord, TargetProfile
-from src.partner_store import get_skipped_partner_files, list_partners, load_partner
+from src.partner_store import get_partner_dir, get_skipped_partner_files, list_partners, load_partner
 from src.partner_manager import add_partner_note, archive_partner, create_partner_from_target_profile, save_updated_partner, unarchive_partner
 from src.real_profile_manager import (
     create_real_profile,
@@ -212,8 +213,15 @@ def build_partner_label(partner: PartnerRecord) -> str:
 def build_partner_choice_label(partner: PartnerRecord) -> str:
     display_name = partner.display_name or PROFILE_DISPLAY_NAME_UNSET
     app_name = partner.app_name or "アプリ未設定"
-    action = build_partner_next_action_label(partner)
-    return f"{display_name} / {app_name} / {action}"
+    memo_tag = load_memo_tag(partner.partner_id)
+    if memo_tag:
+        label = f"{display_name}（{memo_tag}）/ {app_name}"
+    else:
+        action = build_partner_next_action_label(partner)
+        label = f"{display_name} / {app_name} / {action}"
+    if partner.status == "archived":
+        label = f"{label}（アーカイブ）"
+    return label
 
 
 def build_partner_management_filter_options(include_archived: bool = False) -> dict[str, list[str]]:
@@ -1855,6 +1863,89 @@ def delete_partner_photo_from_gui(partner_id: str) -> bool:
         path.unlink()
         return True
     return False
+
+
+_MEMO_TAG_PATH = Path(__file__).resolve().parent / "data" / "local" / "partner_memo_tags.json"
+
+
+def load_all_memo_tags() -> dict[str, str]:
+    if not _MEMO_TAG_PATH.exists():
+        return {}
+    try:
+        data = json.loads(_MEMO_TAG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(key): str(value) for key, value in data.items() if str(value).strip()}
+
+
+def load_memo_tag(partner_id: str) -> str:
+    return load_all_memo_tags().get(partner_id, "")
+
+
+def _write_memo_tags(tags: dict[str, str]) -> None:
+    _MEMO_TAG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _MEMO_TAG_PATH.write_text(
+        json.dumps(tags, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def save_memo_tag_from_gui(partner_id: str, memo_tag: str) -> dict[str, Any]:
+    # 不正なpartner_idや存在しない相手は弾く（load_partnerがValueError/FileNotFoundを投げる）
+    load_partner(partner_id)
+    tags = load_all_memo_tags()
+    memo_tag = memo_tag.strip()
+    if memo_tag:
+        tags[partner_id] = memo_tag
+    else:
+        tags.pop(partner_id, None)
+    _write_memo_tags(tags)
+    return {"partner_id": partner_id, "memo_tag": memo_tag}
+
+
+def delete_partner_completely_from_gui(partner_id: str, confirmed: bool = False) -> dict[str, Any]:
+    if not confirmed:
+        raise ValueError("「削除することを理解しました」にチェックを入れてください。")
+    # load_partnerでpartner_idの形式と存在を検証する（不正なら例外）
+    partner = load_partner(partner_id)
+    linked_labels = _partner_source_profile_labels(partner)
+    deleted: dict[str, Any] = {
+        "partner_file": False,
+        "real_profiles": [],
+        "photo": False,
+        "memo_tag": False,
+    }
+
+    partner_file = get_partner_dir() / f"{partner_id}.yaml"
+    if partner_file.exists():
+        partner_file.unlink()
+        deleted["partner_file"] = True
+
+    # 削除後に残っている相手がまだ参照しているreal_profileは消さない
+    still_referenced: set[str] = set()
+    for other in list_partners():
+        still_referenced |= _partner_source_profile_labels(other)
+    real_dir = get_real_profile_dir()
+    for label in linked_labels:
+        if not label or label in still_referenced:
+            continue
+        real_path = real_dir / f"{label}.yaml"
+        if real_path.exists():
+            real_path.unlink()
+            deleted["real_profiles"].append(label)
+
+    if delete_partner_photo_from_gui(partner_id):
+        deleted["photo"] = True
+
+    tags = load_all_memo_tags()
+    if partner_id in tags:
+        tags.pop(partner_id, None)
+        _write_memo_tags(tags)
+        deleted["memo_tag"] = True
+
+    return {"partner_id": partner_id, "deleted": deleted, "message": "削除しました"}
 
 
 def _parse_optional_int(value: Any) -> int | None:

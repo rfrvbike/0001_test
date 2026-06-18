@@ -28,6 +28,9 @@ from gui_helpers import (
     get_partner_photo_path,
     save_partner_photo_from_gui,
     delete_partner_photo_from_gui,
+    load_memo_tag,
+    save_memo_tag_from_gui,
+    delete_partner_completely_from_gui,
     build_partner_summary,
     build_partner_creation_preview,
     build_partner_choice_label,
@@ -1012,6 +1015,49 @@ def render_partner_creation() -> None:
                     st.error(str(error))
                 else:
                     st.success(result["message"])
+                    st.rerun()
+
+        memo_tag_saved_flag = f"memo_tag_saved_{selected_management_partner.partner_id}"
+        if st.session_state.pop(memo_tag_saved_flag, False):
+            st.success("識別メモを保存しました")
+        with st.expander("識別メモ（同名の相手を区別するメモ）", expanded=False):
+            st.caption("同じ名前の相手が複数いるとき、プルダウンで見分けるための短いメモです。")
+            new_memo_tag = st.text_input(
+                "識別メモ（同名の相手を区別するメモ）",
+                value=load_memo_tag(selected_management_partner.partner_id),
+                placeholder="例: 旅行好き・東京、看護師・背高い など",
+                key=f"memo_tag_input_{selected_management_partner.partner_id}",
+            )
+            if st.button("メモを保存する", key=f"memo_tag_save_{selected_management_partner.partner_id}"):
+                save_memo_tag_from_gui(selected_management_partner.partner_id, new_memo_tag)
+                st.session_state[memo_tag_saved_flag] = True
+                st.rerun()
+
+        with st.expander("⚠️ この相手を完全に削除する", expanded=False):
+            st.warning(
+                "削除すると、プロフィール・会話履歴・写真がすべて消えます。この操作は取り消せません。"
+            )
+            confirm_delete = st.checkbox(
+                "削除することを理解しました",
+                key=f"manage_delete_confirm_{selected_management_partner.partner_id}",
+            )
+            if st.button(
+                "完全に削除する",
+                type="primary",
+                disabled=not confirm_delete,
+                key=f"manage_delete_{selected_management_partner.partner_id}",
+            ):
+                try:
+                    delete_partner_completely_from_gui(
+                        selected_management_partner.partner_id,
+                        confirmed=confirm_delete,
+                    )
+                except ValueError as error:
+                    st.error(str(error))
+                else:
+                    if st.session_state.get("selected_partner_id") == selected_management_partner.partner_id:
+                        st.session_state["selected_partner_id"] = ""
+                    st.success("削除しました")
                     st.rerun()
 
         with st.expander("この相手を非表示・再表示", expanded=False):
