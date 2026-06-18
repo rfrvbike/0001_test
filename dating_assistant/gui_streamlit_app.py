@@ -234,6 +234,80 @@ def main() -> None:
         render_help()
 
 
+def _escape_card_html(text: str) -> str:
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _render_partner_card_body(partner) -> None:
+    photo_path = get_partner_photo_path(partner.partner_id)
+    if photo_path:
+        encoded_photo = base64.b64encode(photo_path.read_bytes()).decode("ascii")
+        avatar_html = (
+            f'<img src="data:image/jpeg;base64,{encoded_photo}" '
+            'style="width:60px;height:60px;border-radius:50%;object-fit:cover;'
+            'border:2px solid #F8A5C2;flex-shrink:0;">'
+        )
+    else:
+        avatar_html = (
+            '<div style="width:60px;height:60px;border-radius:50%;background:#FDEFF4;'
+            'border:2px solid #F8A5C2;display:flex;align-items:center;justify-content:center;'
+            'font-size:28px;flex-shrink:0;">😊</div>'
+        )
+    name = _escape_card_html(partner.display_name or "表示名未設定")
+    memo_tag = _escape_card_html(load_memo_tag(partner.partner_id))
+    memo_html = (
+        f'<div style="font-size:12px;color:#999;">{memo_tag}</div>' if memo_tag else ""
+    )
+    timestamps = [turn.timestamp for turn in partner.conversation if turn.timestamp]
+    last_conv = max(timestamps)[:16].replace("T", " ") if timestamps else "会話なし"
+    stage = _escape_card_html(build_partner_workspace_overview(partner)["conversation_stage"])
+    unreplied = (
+        '<span style="font-size:12px;margin-left:6px;">🔴</span>'
+        if partner.message_state.awaiting_user_action
+        else ""
+    )
+    st.markdown(
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+        f"{avatar_html}"
+        "<div>"
+        f'<div style="font-size:16px;font-weight:800;color:#2D2D2D;">{name}{unreplied}</div>'
+        f"{memo_html}"
+        f'<div style="font-size:11px;color:#AAA;">最終会話: {last_conv}</div>'
+        "</div></div>"
+        '<span style="display:inline-block;background:#FDEFF4;color:#E85D8A;'
+        'border-radius:999px;padding:3px 12px;font-size:12px;font-weight:600;">'
+        f"{stage}</span>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_partner_selection_cards(partners, selected_partner_id, label_by_id, select_key) -> None:
+    # 選択中カードをピンク系ボーダーで強調（コンテナのkeyクラスを利用）
+    st.markdown(
+        f"<style>.st-key-pcard_{selected_partner_id}"
+        "{border:2px solid #E85D8A !important;border-radius:14px;"
+        "box-shadow:0 2px 10px rgba(232,93,138,0.25);}</style>",
+        unsafe_allow_html=True,
+    )
+    for row_start in range(0, len(partners), 3):
+        row_partners = partners[row_start:row_start + 3]
+        columns = st.columns(3)
+        for column, partner_choice in zip(columns, row_partners):
+            with column:
+                with st.container(border=True, key=f"pcard_{partner_choice.partner_id}"):
+                    _render_partner_card_body(partner_choice)
+                    is_selected = partner_choice.partner_id == selected_partner_id
+                    if st.button(
+                        "✓ 選択中" if is_selected else "この相手を選ぶ",
+                        key=f"pcard_btn_{partner_choice.partner_id}",
+                        type="primary" if is_selected else "secondary",
+                        use_container_width=True,
+                    ):
+                        st.session_state["selected_partner_id"] = partner_choice.partner_id
+                        st.session_state[select_key] = label_by_id[partner_choice.partner_id]
+                        st.rerun()
+
+
 def render_partner_viewer() -> None:
     st.subheader("相手と会話する")
     st.caption("相手を選び、プロフィールと会話履歴を見ながら、次に送る文を作る画面です。実際の送信はマッチングアプリ上で手動で行います。")
@@ -268,12 +342,32 @@ def render_partner_viewer() -> None:
                 counter += 1
             label = f"{base} ({counter})"
         labels[label] = partner_choice.partner_id
-    selected_partner_id = str(st.session_state.get("selected_partner_id", "") or "")
-    label_values = list(labels.values())
-    selected_index = label_values.index(selected_partner_id) if selected_partner_id in label_values else 0
-    selected_label = st.selectbox("相手を選ぶ", options=list(labels.keys()), index=selected_index)
-    partner = load_partner_for_view(labels[selected_label])
-    st.session_state["selected_partner_id"] = partner.partner_id
+    label_by_id = {partner_id: label for label, partner_id in labels.items()}
+    partner_ids = list(label_by_id.keys())
+
+    # 選択状態はカードとプルダウンで共有する
+    select_key = "talk_partner_select"
+    stored_label = st.session_state.get(select_key)
+    if stored_label in labels:
+        current_id = labels[stored_label]
+    else:
+        current_id = str(st.session_state.get("selected_partner_id", "") or "")
+        if current_id not in partner_ids:
+            current_id = partner_ids[0]
+        st.session_state[select_key] = label_by_id[current_id]
+    st.session_state["selected_partner_id"] = current_id
+
+    # 主UI: カード一覧（横3列・モバイルは1列）
+    st.markdown("#### 相手を選ぶ")
+    _render_partner_selection_cards(partners, current_id, label_by_id, select_key)
+
+    # 補助: プルダウンでも選べる（カードと同じ選択状態を共有）
+    with st.expander("プルダウンでも選べます", expanded=False):
+        selected_label = st.selectbox("相手を選ぶ", options=list(labels.keys()), key=select_key)
+    selected_partner_id = labels[selected_label]
+    st.session_state["selected_partner_id"] = selected_partner_id
+
+    partner = load_partner_for_view(selected_partner_id)
     workspace = build_partner_workspace_overview(partner)
 
     chips = "".join(
