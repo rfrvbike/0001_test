@@ -281,6 +281,40 @@ def _render_partner_card_body(partner) -> None:
     )
 
 
+def _select_partner_cb(select_key, label, partner_id) -> None:
+    # コールバック内ならselectboxのwidget keyを安全に更新できる（再実行前に走るため）
+    st.session_state[select_key] = label
+    st.session_state["selected_partner_id"] = partner_id
+
+
+def _last_conversation_ts(partner) -> str:
+    timestamps = [turn.timestamp for turn in partner.conversation if turn.timestamp]
+    return max(timestamps) if timestamps else ""
+
+
+def _filter_and_sort_partners(partners, search_text, filter_mode, sort_mode):
+    search = (search_text or "").strip().lower()
+    result = []
+    for partner in partners:
+        if search:
+            name = (partner.display_name or "").lower()
+            memo = load_memo_tag(partner.partner_id).lower()
+            if search not in name and search not in memo:
+                continue
+        if filter_mode == "未返信" and not partner.message_state.awaiting_user_action:
+            continue
+        if filter_mode == "返信待ち" and not partner.message_state.awaiting_partner_reply:
+            continue
+        result.append(partner)
+    if sort_mode == "名前順":
+        result.sort(key=lambda partner: (partner.display_name or ""))
+    elif sort_mode == "登録日が新しい順":
+        result.sort(key=lambda partner: (partner.created_at or ""), reverse=True)
+    else:  # 最終会話日が新しい順（デフォルト）
+        result.sort(key=_last_conversation_ts, reverse=True)
+    return result
+
+
 def _render_partner_selection_cards(partners, selected_partner_id, label_by_id, select_key) -> None:
     # 選択中カードをピンク系ボーダーで強調（コンテナのkeyクラスを利用）
     st.markdown(
@@ -293,19 +327,36 @@ def _render_partner_selection_cards(partners, selected_partner_id, label_by_id, 
         row_partners = partners[row_start:row_start + 3]
         columns = st.columns(3)
         for column, partner_choice in zip(columns, row_partners):
+            partner_id = partner_choice.partner_id
             with column:
-                with st.container(border=True, key=f"pcard_{partner_choice.partner_id}"):
-                    _render_partner_card_body(partner_choice)
-                    is_selected = partner_choice.partner_id == selected_partner_id
-                    if st.button(
+                with st.container(border=True, key=f"pcard_{partner_id}"):
+                    body_col, trash_col = st.columns([5, 1])
+                    with body_col:
+                        _render_partner_card_body(partner_choice)
+                    with trash_col:
+                        if st.button("🗑️", key=f"card_trash_{partner_id}", help="この相手を削除する"):
+                            st.session_state[f"confirm_card_delete_{partner_id}"] = True
+                            st.rerun()
+                    is_selected = partner_id == selected_partner_id
+                    st.button(
                         "✓ 選択中" if is_selected else "この相手を選ぶ",
-                        key=f"pcard_btn_{partner_choice.partner_id}",
+                        key=f"pcard_btn_{partner_id}",
                         type="primary" if is_selected else "secondary",
                         use_container_width=True,
-                    ):
-                        st.session_state["selected_partner_id"] = partner_choice.partner_id
-                        st.session_state[select_key] = label_by_id[partner_choice.partner_id]
-                        st.rerun()
+                        on_click=_select_partner_cb,
+                        args=(select_key, label_by_id[partner_id], partner_id),
+                    )
+                    if st.session_state.get(f"confirm_card_delete_{partner_id}"):
+                        st.warning("本当に削除しますか？この操作は取り消せません。")
+                        del_yes, del_no = st.columns(2)
+                        if del_yes.button("削除する", key=f"card_del_yes_{partner_id}", type="primary", use_container_width=True):
+                            delete_partner_completely_from_gui(partner_id, confirmed=True)
+                            st.session_state.pop(f"confirm_card_delete_{partner_id}", None)
+                            st.session_state["selected_partner_id"] = ""
+                            st.rerun()
+                        if del_no.button("キャンセル", key=f"card_del_no_{partner_id}", use_container_width=True):
+                            st.session_state.pop(f"confirm_card_delete_{partner_id}", None)
+                            st.rerun()
 
 
 def render_partner_viewer() -> None:
@@ -345,27 +396,67 @@ def render_partner_viewer() -> None:
     label_by_id = {partner_id: label for label, partner_id in labels.items()}
     partner_ids = list(label_by_id.keys())
 
-    # 選択状態はカードとプルダウンで共有する
+    # 選択状態はカードとプルダウンで共有する。
+    # プルダウンはテスト互換のため最初のselectboxとして残し、検索・並び替えより前に置く。
     select_key = "talk_partner_select"
-    stored_label = st.session_state.get(select_key)
-    if stored_label in labels:
-        current_id = labels[stored_label]
-    else:
-        current_id = str(st.session_state.get("selected_partner_id", "") or "")
-        if current_id not in partner_ids:
-            current_id = partner_ids[0]
-        st.session_state[select_key] = label_by_id[current_id]
-    st.session_state["selected_partner_id"] = current_id
+    if st.session_state.get(select_key) not in labels:
+        fallback_id = str(st.session_state.get("selected_partner_id", "") or "")
+        if fallback_id not in partner_ids:
+            fallback_id = partner_ids[0]
+        st.session_state[select_key] = label_by_id[fallback_id]
 
-    # 主UI: カード一覧（横3列・モバイルは1列）
-    st.markdown("#### 相手を選ぶ")
-    _render_partner_selection_cards(partners, current_id, label_by_id, select_key)
-
-    # 補助: プルダウンでも選べる（カードと同じ選択状態を共有）
     with st.expander("プルダウンでも選べます", expanded=False):
         selected_label = st.selectbox("相手を選ぶ", options=list(labels.keys()), key=select_key)
     selected_partner_id = labels[selected_label]
     st.session_state["selected_partner_id"] = selected_partner_id
+
+    # 主UI: カード一覧（横3列・モバイルは1列）。上に検索・絞り込み・並び替えを置く。
+    st.markdown("#### 相手を選ぶ")
+    search_text = st.text_input(
+        "検索",
+        placeholder="名前・識別メモで検索",
+        key="card_search_text",
+        label_visibility="collapsed",
+    )
+    filter_mode = st.session_state.get("card_filter_mode", "すべて")
+    filter_cols = st.columns(3)
+    if filter_cols[0].button(
+        "すべて", key="card_filter_all",
+        type="primary" if filter_mode == "すべて" else "secondary",
+        use_container_width=True,
+    ):
+        st.session_state["card_filter_mode"] = "すべて"
+        st.rerun()
+    if filter_cols[1].button(
+        "🔴 未返信", key="card_filter_unreplied",
+        type="primary" if filter_mode == "未返信" else "secondary",
+        use_container_width=True,
+    ):
+        st.session_state["card_filter_mode"] = "未返信"
+        st.rerun()
+    if filter_cols[2].button(
+        "💬 返信待ち", key="card_filter_waiting",
+        type="primary" if filter_mode == "返信待ち" else "secondary",
+        use_container_width=True,
+    ):
+        st.session_state["card_filter_mode"] = "返信待ち"
+        st.rerun()
+    sort_mode = st.selectbox(
+        "並び替え",
+        options=["最終会話日が新しい順", "名前順", "登録日が新しい順"],
+        key="card_sort_mode",
+    )
+
+    display_partners = _filter_and_sort_partners(
+        partners,
+        search_text,
+        st.session_state.get("card_filter_mode", "すべて"),
+        sort_mode,
+    )
+    if display_partners:
+        _render_partner_selection_cards(display_partners, selected_partner_id, label_by_id, select_key)
+    else:
+        st.info("条件に一致する相手がいません。検索条件や絞り込みを変えてください。")
 
     partner = load_partner_for_view(selected_partner_id)
     workspace = build_partner_workspace_overview(partner)
@@ -1023,7 +1114,11 @@ def render_partner_creation() -> None:
     _render_skipped_partner_warning()
     if management_partners:
         st.markdown("### 登録済み相手の整理")
-        management_labels = {build_partner_choice_label(partner): partner.partner_id for partner in management_partners}
+        # 同名の相手でもプルダウンに全員表示されるよう、partner_idを含めたユニークなラベルにする
+        management_labels: dict[str, str] = {}
+        for partner in management_partners:
+            label = f"{build_partner_choice_label(partner)} ［{partner.partner_id}］"
+            management_labels[label] = partner.partner_id
         selected_management_label = st.selectbox("整理する相手を選ぶ", options=list(management_labels.keys()))
         selected_management_partner = load_partner_for_view(management_labels[selected_management_label])
 
