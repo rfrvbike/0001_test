@@ -521,6 +521,9 @@ def render_partner_viewer() -> None:
     render_call_topic_controls(partner)
 
     st.divider()
+    render_call_review_controls(partner)
+
+    st.divider()
     render_generation_controls(partner)
 
 
@@ -649,6 +652,135 @@ def render_call_topic_controls(partner) -> None:
             if st.button("クリア", key="clear_call_topics"):
                 st.session_state["call_topics_result"] = ""
                 st.rerun()
+
+
+def transcribe_call_recording(audio_file, openai_api_key: str) -> str:
+    try:
+        import openai
+    except ImportError:
+        raise ValueError(
+            "openaiライブラリがインストールされていません。pip install openai を実行してください。"
+        )
+    try:
+        client = openai.OpenAI(api_key=openai_api_key)
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=(audio_file.name, audio_file.getvalue()),
+            language="ja",
+        )
+        return transcript.text
+    except Exception as error:
+        error_msg = str(error)
+        lowered = error_msg.lower()
+        if "authentication" in lowered or "api_key" in lowered or "api key" in lowered or "invalid_api_key" in lowered:
+            raise ValueError("OpenAI APIキーが正しくありません。入力したキーを確認してください。")
+        if "rate_limit" in lowered:
+            raise ValueError("OpenAI APIのレート制限に達しました。しばらく待ってから再試行してください。")
+        raise ValueError(f"文字起こしに失敗しました: {error_msg}")
+
+
+def generate_call_review(partner, transcript_text: str) -> str:
+    api_key = _get_api_key()
+    if not api_key:
+        raise ValueError(
+            "APIキーが設定されていません。設定・ヘルプタブでAPIキーの設定方法を確認してください。"
+        )
+    try:
+        import anthropic
+    except ImportError:
+        raise ValueError(
+            "anthropicライブラリがインストールされていません。pip install anthropic を実行してください。"
+        )
+
+    profile_text = _build_call_topic_profile_block(partner)
+    conversation_text = _build_call_topic_conversation_text(partner)
+    prompt = (
+        "あなたはマッチングアプリの会話コーチです。\n"
+        "以下の電話通話の文字起こしを分析して、振り返りとアドバイスをしてください。\n\n"
+        "## 相手のプロフィール\n"
+        f"{profile_text}\n\n"
+        "## これまでのテキスト会話履歴（最新10件）\n"
+        f"{conversation_text}\n\n"
+        "## 電話通話の文字起こし\n"
+        f"{transcript_text}\n\n"
+        "## 分析してほしいこと\n\n"
+        "### ✅ 良かった点\n"
+        "（会話の中でうまくいった部分・相手の反応が良かった発言など）\n\n"
+        "### 💡 改善できた点\n"
+        "（こう言い換えた方が良かった具体的な例を挙げて指摘してください）\n\n"
+        "### 💬 相手の気持ち・状態の読み取り\n"
+        "（文字起こしから読み取れる相手の感情・興味・距離感）\n\n"
+        "### 📅 次のアクション提案\n"
+        "（次の電話やデートに向けて何をすべきか具体的に提案してください）\n\n"
+        "具体的な発言を引用しながら、建設的にアドバイスしてください。\n"
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=3000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return message.content[0].text
+    except Exception as error:
+        error_msg = str(error)
+        if "authentication" in error_msg.lower() or "api_key" in error_msg.lower():
+            raise ValueError("APIキーが正しくありません。.envファイルのANTHROPIC_API_KEYを確認してください。")
+        if "rate_limit" in error_msg.lower():
+            raise ValueError("APIのレート制限に達しました。しばらく待ってから再試行してください。")
+        if "overload" in error_msg.lower():
+            raise ValueError("APIサーバーが一時的に混雑しています。しばらく待ってから再試行してください。")
+        raise ValueError(f"API呼び出しに失敗しました: {error_msg}")
+
+
+def render_call_review_controls(partner) -> None:
+    # 相手が切り替わったら前の相手の結果・文字起こしをクリアする
+    if st.session_state.get("call_review_partner_id") != partner.partner_id:
+        st.session_state["call_review_partner_id"] = partner.partner_id
+        st.session_state["call_review_result"] = ""
+        st.session_state["call_review_transcript"] = ""
+
+    with st.expander("🎙️ 電話の振り返り・コーチング", expanded=False):
+        st.caption("通話録音をアップロードすると、会話の振り返りとアドバイスを生成します。")
+        openai_api_key = st.text_input(
+            "OpenAI APIキー",
+            type="password",
+            key="openai_api_key_input",
+            placeholder="sk-...",
+        )
+        audio_file = st.file_uploader(
+            "通話録音をアップロード",
+            type=["mp3", "wav", "m4a", "mp4", "webm"],
+            key="call_recording_upload",
+        )
+
+        if audio_file is not None:
+            if not openai_api_key:
+                st.warning("OpenAI APIキーを入力してください。")
+            elif st.button("🔍 振り返りを生成する", key="generate_call_review"):
+                if not is_api_key_configured():
+                    st.error(
+                        "APIキーが設定されていません。設定・ヘルプタブでAPIキーの設定方法を確認してください。"
+                    )
+                else:
+                    try:
+                        with st.spinner("音声を文字起こし中..."):
+                            transcript_text = transcribe_call_recording(audio_file, openai_api_key)
+                        st.session_state["call_review_transcript"] = transcript_text
+                        with st.spinner("通話を分析中..."):
+                            st.session_state["call_review_result"] = generate_call_review(partner, transcript_text)
+                    except ValueError as error:
+                        st.error(f"生成中にエラーが発生しました。{error}")
+
+        if st.session_state.get("call_review_result"):
+            st.markdown(st.session_state["call_review_result"])
+            if st.button("クリア", key="clear_call_review"):
+                st.session_state["call_review_result"] = ""
+                st.session_state["call_review_transcript"] = ""
+                st.rerun()
+            with st.expander("📝 文字起こし全文を見る", expanded=False):
+                st.write(st.session_state.get("call_review_transcript", ""))
 
 
 def render_like_message_controls(partner) -> None:
