@@ -17,6 +17,7 @@ if str(APP_DIR) not in sys.path:
 import streamlit as st
 
 from src.claude_generator import (
+    _get_api_key,
     generate_like_message,
     generate_reply_candidates_for_gui,
     is_api_key_configured,
@@ -517,7 +518,137 @@ def render_partner_viewer() -> None:
         render_like_message_controls(partner)
 
     st.divider()
+    render_call_topic_controls(partner)
+
+    st.divider()
     render_generation_controls(partner)
+
+
+def _build_call_topic_profile_block(partner) -> str:
+    profile = partner.profile
+    content_lines = []
+    if profile.profile_text and profile.profile_text.strip():
+        content_lines.append(f"自己紹介: {profile.profile_text.strip()}")
+    if profile.hobbies:
+        content_lines.append("趣味: " + "、".join(profile.hobbies))
+    if profile.photos_memo:
+        content_lines.append("写真メモ: " + "、".join(profile.photos_memo))
+    if profile.location_hint:
+        content_lines.append(f"エリア: {profile.location_hint}")
+    if profile.age is not None:
+        content_lines.append(f"年齢: {profile.age}")
+    header = f"表示名: {partner.display_name or '未設定'}"
+    body = "\n".join(content_lines) if content_lines else "プロフィール未登録"
+    return f"{header}\n{body}"
+
+
+def _build_call_topic_conversation_text(partner) -> str:
+    recent = partner.conversation[-20:]
+    lines = []
+    for turn in recent:
+        speaker = "自分" if turn.speaker == "user" else "相手"
+        lines.append(f"{speaker}: {turn.text}")
+    return "\n".join(lines) if lines else "（会話履歴なし）"
+
+
+def generate_call_topics(partner) -> str:
+    api_key = _get_api_key()
+    if not api_key:
+        raise ValueError(
+            "APIキーが設定されていません。設定・ヘルプタブでAPIキーの設定方法を確認してください。"
+        )
+    try:
+        import anthropic
+    except ImportError:
+        raise ValueError(
+            "anthropicライブラリがインストールされていません。pip install anthropic を実行してください。"
+        )
+
+    profile_text = _build_call_topic_profile_block(partner)
+    conversation_text = _build_call_topic_conversation_text(partner)
+    conversation_count = len(partner.conversation)
+
+    if conversation_count >= 20:
+        prompt = (
+            "あなたはマッチングアプリの会話コーチです。\n"
+            "以下のプロフィールと会話履歴をもとに、電話で話すと盛り上がりそうな話題を提案してください。\n\n"
+            "## 相手のプロフィール\n"
+            f"{profile_text}\n\n"
+            "## これまでの会話履歴（最新20件）\n"
+            f"{conversation_text}\n\n"
+            "## 指示\n"
+            "以下の4カテゴリに分けて、それぞれ3〜5個の話題を提案してください。\n"
+            "箇条書きで、具体的に書いてください。\n\n"
+            "### 🌟 盛り上がりやすい話題\n"
+            "（プロフィールや会話から読み取れる共通の興味・趣味など）\n\n"
+            "### 💬 もっと深く聞きたいこと\n"
+            "（会話の中で気になったこと・掘り下げると良さそうなこと）\n\n"
+            "### 📅 次のステップにつながる話題\n"
+            "（デートや次の約束につながりそうな話題）\n\n"
+            "### 💕 仲が深まったからこそ話せる話題\n"
+            "（会話が十分に積み重なった相手向け。過去の恋愛・元彼の話・恋愛観・ちょっとドキドキする話題など、距離感を縮めるもの）\n\n"
+            "話題ごとに、一言「なぜこの話題が良いか」も添えてください。\n"
+        )
+    else:
+        prompt = (
+            "あなたはマッチングアプリの会話コーチです。\n"
+            "以下のプロフィールと会話履歴をもとに、電話で話すと盛り上がりそうな話題を提案してください。\n\n"
+            "## 相手のプロフィール\n"
+            f"{profile_text}\n\n"
+            "## これまでの会話履歴（最新20件）\n"
+            f"{conversation_text}\n\n"
+            "## 指示\n"
+            "以下の3カテゴリに分けて、それぞれ3〜5個の話題を提案してください。\n"
+            "箇条書きで、具体的に書いてください。\n\n"
+            "### 🌟 盛り上がりやすい話題\n"
+            "（プロフィールや会話から読み取れる共通の興味・趣味など）\n\n"
+            "### 💬 もっと深く聞きたいこと\n"
+            "（会話の中で気になったこと・掘り下げると良さそうなこと）\n\n"
+            "### 📅 次のステップにつながる話題\n"
+            "（デートや次の約束につながりそうな話題）\n\n"
+            "話題ごとに、一言「なぜこの話題が良いか」も添えてください。\n"
+        )
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return message.content[0].text
+    except Exception as error:
+        error_msg = str(error)
+        if "authentication" in error_msg.lower() or "api_key" in error_msg.lower():
+            raise ValueError("APIキーが正しくありません。.envファイルのANTHROPIC_API_KEYを確認してください。")
+        if "rate_limit" in error_msg.lower():
+            raise ValueError("APIのレート制限に達しました。しばらく待ってから再試行してください。")
+        if "overload" in error_msg.lower():
+            raise ValueError("APIサーバーが一時的に混雑しています。しばらく待ってから再試行してください。")
+        raise ValueError(f"API呼び出しに失敗しました: {error_msg}")
+
+
+def render_call_topic_controls(partner) -> None:
+    with st.expander("📞 電話の話題提案", expanded=False):
+        st.caption("プロフィールと会話履歴をもとに、電話で話すべき話題を提案します。")
+
+        if st.button("💡 話題を提案してもらう", key="generate_call_topics"):
+            if not is_api_key_configured():
+                st.error(
+                    "APIキーが設定されていません。設定・ヘルプタブでAPIキーの設定方法を確認してください。"
+                )
+            else:
+                try:
+                    with st.spinner("電話で話すと良さそうな話題を考えています..."):
+                        st.session_state["call_topics_result"] = generate_call_topics(partner)
+                except ValueError as error:
+                    st.error(f"生成中にエラーが発生しました。{error}")
+
+        if st.session_state.get("call_topics_result"):
+            st.markdown(st.session_state["call_topics_result"])
+            if st.button("クリア", key="clear_call_topics"):
+                st.session_state["call_topics_result"] = ""
+                st.rerun()
 
 
 def render_like_message_controls(partner) -> None:
