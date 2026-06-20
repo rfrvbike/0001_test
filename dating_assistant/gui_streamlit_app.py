@@ -1172,7 +1172,7 @@ def render_partner_creation() -> None:
         with st.expander("プロフィール詳細", expanded=False):
             _render_profile_display_card(build_partner_profile_card(selected_management_partner))
 
-        with st.expander("表示名・アプリ名・管理メモを修正", expanded=False):
+        with st.expander("表示名・アプリ名・管理メモを修正", expanded=True):
             st.caption("表示名やメモだけを更新します。内部保存IDや会話履歴、送信済み記録は変更しません。")
             new_display_name = st.text_input(
                 "表示名",
@@ -1274,6 +1274,39 @@ def render_partner_creation() -> None:
                         st.rerun()
 
     st.markdown("### 保存済みプロフィール")
+    # 選択中の相手があれば、表示名をその場で素早く編集できるショートカット
+    if management_partners:
+        current_display = selected_management_partner.display_name or ""
+        st.markdown("**📝 表示名を編集**")
+        col_name, col_btn = st.columns([3, 1])
+        with col_name:
+            new_name_quick = st.text_input(
+                "表示名",
+                value=current_display,
+                placeholder="会話で教えてもらった名前など",
+                key="quick_display_name_edit",
+            )
+        with col_btn:
+            st.write("")  # ラベル分の余白
+            if st.button("保存", key="quick_display_name_save"):
+                if new_name_quick.strip() and new_name_quick != current_display:
+                    try:
+                        update_partner_management_info_from_gui(
+                            selected_management_partner.partner_id,
+                            new_name_quick,
+                            selected_management_partner.app_name or "",
+                            note="",
+                            confirmed=True,
+                        )
+                    except ValueError as error:
+                        st.error(str(error))
+                    else:
+                        st.success("表示名を更新しました")
+                        st.rerun()
+                else:
+                    st.info("表示名が変更されていません")
+        st.divider()
+
     search_query = st.text_input("保存済みプロフィール検索", placeholder="表示名 / 趣味 / 年齢などで絞り込み")
     profiles = filter_real_profiles_for_gui(search_query)
     if not profiles:
