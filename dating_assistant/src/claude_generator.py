@@ -46,6 +46,7 @@ def _build_system_prompt(
     tone: str,
     objectives: list[str],
     supplement_notes: list[str] | None = None,
+    style_samples: list[str] | None = None,
 ) -> str:
     partner_name = partner.display_name or "相手"
     profile_text = partner.profile.profile_text or "プロフィール情報なし"
@@ -84,6 +85,28 @@ def _build_system_prompt(
         + "\n\n"
     ) if active_notes else ""
 
+    # A) 会話履歴から自分（ユーザー）の発言だけを自動抽出（直近20件中から最大5件）
+    own_messages = [
+        turn.text.strip()
+        for turn in partner.conversation[-20:]
+        if turn.speaker == "user" and turn.text.strip()
+    ][-5:]
+    own_messages_section = (
+        "## 自分の過去の発言（文体・言い回しの参考）\n"
+        "（以下は自分が実際に送ったメッセージです。同じような文体・テンポ・言い回しで返信を作ってください）\n"
+        + "\n".join(f"- {message}" for message in own_messages)
+        + "\n\n"
+    ) if own_messages else ""
+
+    # B) 手動登録した文体サンプル
+    active_styles = [sample.strip() for sample in (style_samples or []) if sample and sample.strip()]
+    style_samples_section = (
+        "## 自分らしい表現・言い回しのサンプル\n"
+        "（以下のような言い回し・テンポ・雰囲気を参考にして返信を作ってください）\n"
+        + "\n".join(f"- {sample}" for sample in active_styles)
+        + "\n\n"
+    ) if active_styles else ""
+
     return (
         "あなたはマッチングアプリでメッセージを送るユーザーの返信を考えるアシスタントです。\n\n"
         "【重要な前提】\n"
@@ -92,6 +115,8 @@ def _build_system_prompt(
         f"- 相手（マッチングした人）の名前: {partner_name}\n"
         f"- 相手のプロフィール情報: {profile_text}\n\n"
         f"{supplement_section}"
+        f"{own_messages_section}"
+        f"{style_samples_section}"
         f"【会話履歴（上が古く、下が最新）】\n{conversation_history}\n\n"
         f"{last_message_section}"
         f"【返信スタイル】\n{reply_style}\n\n"
@@ -223,6 +248,7 @@ def generate_reply_candidates_for_gui(
     tone: str = "自然",
     place_hint: str = "",
     supplement_notes: list[str] | None = None,
+    style_samples: list[str] | None = None,
 ) -> dict[str, Any]:
     api_key = _get_api_key()
     if not api_key:
@@ -245,7 +271,13 @@ def generate_reply_candidates_for_gui(
     if place_hint:
         all_objectives.append(f"場所: {place_hint}")
 
-    system_prompt = _build_system_prompt(partner, tone, all_objectives, supplement_notes=supplement_notes)
+    system_prompt = _build_system_prompt(
+        partner,
+        tone,
+        all_objectives,
+        supplement_notes=supplement_notes,
+        style_samples=style_samples,
+    )
 
     try:
         client = anthropic.Anthropic(api_key=api_key)

@@ -932,6 +932,24 @@ def _save_supplement_notes(notes: list) -> None:
     path.write_text(json.dumps(notes, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _load_style_samples() -> list:
+    path = APP_DIR / "data" / "local" / "style_samples.json"
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        if isinstance(data, list):
+            return [str(item) for item in data]
+    return []
+
+
+def _save_style_samples(samples: list) -> None:
+    path = APP_DIR / "data" / "local" / "style_samples.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(samples, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def render_generation_controls(partner) -> None:
     st.subheader("次に送る文を作る")
     objectives = st.multiselect(
@@ -998,6 +1016,41 @@ def render_generation_controls(partner) -> None:
                 _save_supplement_notes(supplement_notes_list)
                 st.rerun()
 
+    style_samples_list = _load_style_samples()
+    with st.expander("✍️ 文体サンプルを登録する", expanded=False):
+        st.caption("自分らしい言い回しや表現を登録しておくと、生成文章に反映されます。")
+        if style_samples_list:
+            st.caption("チェックしたサンプルが生成に反映されます。")
+            selected_styles = []
+            for index, sample in enumerate(style_samples_list):
+                chk_col, del_col = st.columns([9, 1])
+                if chk_col.checkbox(sample, key=f"style_chk_{index}"):
+                    selected_styles.append(sample)
+                if del_col.button("🗑️", key=f"style_del_{index}", help="この文体サンプルを削除"):
+                    style_samples_list.pop(index)
+                    _save_style_samples(style_samples_list)
+                    st.rerun()
+            st.session_state["selected_style_samples"] = selected_styles
+        else:
+            st.caption("まだ文体サンプルはありません。下から追加できます。")
+            st.session_state["selected_style_samples"] = []
+        st.divider()
+        new_style = st.text_input(
+            "文体サンプルを新規追加",
+            placeholder="例：いいですね！ぜひ行きたいです😊",
+            key="new_style_sample",
+        )
+        if st.button("追加", key="add_style_sample"):
+            text = new_style.strip()
+            if not text:
+                st.warning("追加する内容を入力してください")
+            elif text in style_samples_list:
+                st.info("すでに登録されています")
+            else:
+                style_samples_list.append(text)
+                _save_style_samples(style_samples_list)
+                st.rerun()
+
     if st.button("返信候補を生成する", type="primary", key=f"generate_button_{partner.partner_id}"):
         if not is_api_key_configured():
             st.error(
@@ -1009,6 +1062,7 @@ def render_generation_controls(partner) -> None:
         if one_time_note.strip():
             active_notes.append(one_time_note.strip())
         active_notes += st.session_state.get("selected_supplements", [])
+        selected_style_samples = st.session_state.get("selected_style_samples", [])
         try:
             with st.spinner("Claude AIが返信を考えています..."):
                 generated = generate_reply_candidates_for_gui(
@@ -1017,6 +1071,7 @@ def render_generation_controls(partner) -> None:
                     tone=tone,
                     place_hint=place_hint,
                     supplement_notes=active_notes,
+                    style_samples=selected_style_samples,
                 )
         except ValueError as error:
             st.error(f"生成中にエラーが発生しました。{error}")
