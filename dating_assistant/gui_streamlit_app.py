@@ -1845,6 +1845,68 @@ def _extract_backup_zip(zip_bytes: bytes) -> tuple[bool, str]:
     return True, f"{len(valid)}件のファイルを復元しました。"
 
 
+def analyze_bulk_profile(bulk_text: str) -> dict:
+    api_key = _get_api_key()
+    if not api_key:
+        raise ValueError(
+            "APIキーが設定されていません。設定・ヘルプタブでAPIキーの設定方法を確認してください。"
+        )
+    try:
+        import anthropic
+    except ImportError:
+        raise ValueError(
+            "anthropicライブラリがインストールされていません。pip install anthropic を実行してください。"
+        )
+
+    prompt = (
+        "あなたは個人プロフィール整理アシスタントです。\n"
+        "以下のテキストから個人情報（氏名・住所・電話番号・口座情報など）を除いた上で、\n"
+        "各項目に振り分けてJSONで返してください。\n\n"
+        "入力テキスト:\n"
+        f"{bulk_text}\n\n"
+        "以下のJSON形式のみで返してください。他の文章は一切不要です:\n"
+        "{\n"
+        '  "occupation": "職業・仕事の種類（大まかでOK）",\n'
+        '  "work_schedule": "仕事のスケジュール（休日・終業時間など）",\n'
+        '  "hobbies": "趣味・好きなこと",\n'
+        '  "not_good_at": "苦手・知らないこと・できないこと",\n'
+        '  "lifestyle": "生活スタイル・性格・価値観",\n'
+        '  "date_preferences": "デートの好み・行きたい場所"\n'
+        "}\n\n"
+        "各項目が読み取れない場合は空文字列にしてください。\n"
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        response_text = message.content[0].text
+    except Exception as error:
+        error_msg = str(error)
+        if "authentication" in error_msg.lower() or "api_key" in error_msg.lower():
+            raise ValueError("APIキーが正しくありません。.envファイルのANTHROPIC_API_KEYを確認してください。")
+        if "rate_limit" in error_msg.lower():
+            raise ValueError("APIのレート制限に達しました。しばらく待ってから再試行してください。")
+        if "overload" in error_msg.lower():
+            raise ValueError("APIサーバーが一時的に混雑しています。しばらく待ってから再試行してください。")
+        raise ValueError(f"API呼び出しに失敗しました: {error_msg}")
+
+    start = response_text.find("{")
+    end = response_text.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise ValueError("解析結果をJSONとして読み取れませんでした。")
+    try:
+        data = json.loads(response_text[start:end + 1])
+    except Exception:
+        raise ValueError("解析結果をJSONとして読み取れませんでした。")
+    if not isinstance(data, dict):
+        raise ValueError("解析結果の形式が正しくありません。")
+    return data
+
+
 def render_help() -> None:
     st.subheader("設定・ヘルプ")
     st.caption("このツールの使い方、安全な利用方法、local保存の考え方を確認できます。")
@@ -1878,34 +1940,99 @@ def render_help() -> None:
             key="user_profile_intro",
         )
 
+        st.markdown("#### 📋 自分の情報を一括登録（AIが自動解析）")
+        st.caption("趣味・思考・仕事の大まかな内容・スケジュールなどを自由に貼り付けてください。個人情報（氏名・住所・電話番号）は入力しないでください。")
+        bulk_text = st.text_area(
+            "自分の情報を自由に貼り付け",
+            placeholder=(
+                "例：\n"
+                "週末は土日祝日が休みです。平日は20〜21時頃に仕事が終わります。\n"
+                "趣味はジム、旅行、韓国ドラマ鑑賞、発酵食品作りなど。\n"
+                "お酒は飲めません。美術館はあまり詳しくないです。\n"
+                "仕事は公共系プロジェクトの管理職をしています。\n"
+                "デートは美味しいご飯やアクティブなことが好きです。"
+            ),
+            height=200,
+            key="bulk_profile_input",
+        )
+        if st.button("🤖 AIで解析して入力欄に反映", key="analyze_bulk_profile"):
+            if not bulk_text.strip():
+                st.warning("解析するテキストを入力してください")
+            elif not is_api_key_configured():
+                st.error(
+                    "APIキーが設定されていません。設定・ヘルプタブでAPIキーの設定方法を確認してください。"
+                )
+            else:
+                try:
+                    with st.spinner("AIが解析中..."):
+                        analyzed = analyze_bulk_profile(bulk_text)
+                except ValueError as error:
+                    st.error(f"解析中にエラーが発生しました。{error}")
+                else:
+                    field_to_widget = {
+                        "occupation": "user_occupation",
+                        "work_schedule": "user_work_schedule",
+                        "hobbies": "user_hobbies",
+                        "not_good_at": "user_not_good_at",
+                        "lifestyle": "user_lifestyle",
+                        "date_preferences": "user_date_preferences",
+                    }
+                    for field, widget_key in field_to_widget.items():
+                        st.session_state[widget_key] = str(analyzed.get(field, "") or "").strip()
+                    st.session_state["bulk_profile_analyzed"] = True
+                    st.rerun()
+
+        if st.session_state.pop("bulk_profile_analyzed", False):
+            st.success("解析完了！内容を確認して「保存する」を押してください。")
+
         st.markdown("#### 🙋 自分の詳細プロフィール")
         st.caption("返信生成時に自分のことを考慮した文章を作るために使います。")
+        # 一括解析の結果をsession_state経由で反映するため、初回のみ保存値でseedする
+        detail_defaults = {
+            "user_occupation": str(user_profile.get("occupation", "") or ""),
+            "user_work_schedule": str(user_profile.get("work_schedule", "") or ""),
+            "user_hobbies": str(user_profile.get("hobbies", "") or ""),
+            "user_not_good_at": str(user_profile.get("not_good_at", "") or ""),
+            "user_lifestyle": str(user_profile.get("lifestyle", "") or ""),
+            "user_date_preferences": str(user_profile.get("date_preferences", "") or ""),
+        }
+        for state_key, default_value in detail_defaults.items():
+            if state_key not in st.session_state:
+                st.session_state[state_key] = default_value
         occupation = st.text_input(
             "職業",
-            value=str(user_profile.get("occupation", "") or ""),
             placeholder="例：公共系プロジェクトの管理職",
             key="user_occupation",
         )
+        work_schedule = st.text_area(
+            "仕事のスケジュール（休日・終業時間など）",
+            placeholder="例：土日祝が休み、平日は20〜21時頃に仕事が終わる",
+            height=80,
+            key="user_work_schedule",
+        )
         hobbies = st.text_area(
             "趣味・好きなこと",
-            value=str(user_profile.get("hobbies", "") or ""),
             placeholder="例：ジム、旅行、韓国ドラマ鑑賞、家でまったり過ごすこと",
             height=80,
             key="user_hobbies",
         )
         not_good_at = st.text_area(
             "苦手・知らないこと・できないこと",
-            value=str(user_profile.get("not_good_at", "") or ""),
             placeholder="例：お酒が飲めない、美術館には詳しくない、車を持っていない",
             height=80,
             key="user_not_good_at",
         )
         lifestyle = st.text_area(
             "生活スタイル・性格",
-            value=str(user_profile.get("lifestyle", "") or ""),
             placeholder="例：長身、親しみやすいと言われる、週末はジムか家でのんびり",
             height=80,
             key="user_lifestyle",
+        )
+        date_preferences = st.text_area(
+            "デートの好み・行きたい場所",
+            placeholder="例：美味しいご飯、アクティブなお出かけ、カフェ巡り",
+            height=80,
+            key="user_date_preferences",
         )
         if st.button("プロフィールを保存する", key="user_profile_save"):
             _save_user_profile_data({
@@ -1913,9 +2040,11 @@ def render_help() -> None:
                 "age": int(current_age) if current_age else None,
                 "self_intro": current_intro.strip(),
                 "occupation": occupation.strip(),
+                "work_schedule": work_schedule.strip(),
                 "hobbies": hobbies.strip(),
                 "not_good_at": not_good_at.strip(),
                 "lifestyle": lifestyle.strip(),
+                "date_preferences": date_preferences.strip(),
             })
             st.success("プロフィールを保存しました")
             st.rerun()

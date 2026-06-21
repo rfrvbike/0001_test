@@ -87,9 +87,11 @@ def _build_system_prompt(
     user_profile_fields = [
         ("名前", str(user_profile_data.get("name", "") or "").strip()),
         ("職業", str(user_profile_data.get("occupation", "") or "").strip()),
+        ("仕事のスケジュール", str(user_profile_data.get("work_schedule", "") or "").strip()),
         ("趣味・好きなこと", str(user_profile_data.get("hobbies", "") or "").strip()),
         ("苦手・知らないこと", str(user_profile_data.get("not_good_at", "") or "").strip()),
         ("生活スタイル・性格", str(user_profile_data.get("lifestyle", "") or "").strip()),
+        ("デートの好み", str(user_profile_data.get("date_preferences", "") or "").strip()),
     ]
     user_profile_lines = [f"- {label}: {value}" for label, value in user_profile_fields if value]
     user_profile_section = (
