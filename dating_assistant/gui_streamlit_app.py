@@ -914,6 +914,24 @@ def render_inline_conversation_import(partner) -> None:
 
 
 
+def _load_supplement_notes() -> list:
+    path = APP_DIR / "data" / "local" / "reply_supplement_notes.json"
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        if isinstance(data, list):
+            return [str(item) for item in data]
+    return []
+
+
+def _save_supplement_notes(notes: list) -> None:
+    path = APP_DIR / "data" / "local" / "reply_supplement_notes.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(notes, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def render_generation_controls(partner) -> None:
     st.subheader("次に送る文を作る")
     objectives = st.multiselect(
@@ -938,6 +956,48 @@ def render_generation_controls(partner) -> None:
             key=f"generation_place_{partner.partner_id}",
         )
     st.caption("候補はlocalに保存されるだけです。実際に送る文は、ユーザー本人がマッチングアプリ上で手動送信してください。")
+
+    st.markdown("**📝 補足メモ（生成に反映されます）**")
+    one_time_note = st.text_area(
+        "その場の補足",
+        placeholder="例：お酒は飲めません／車は持っていません",
+        height=80,
+        key="one_time_supplement_note",
+    )
+    supplement_notes_list = _load_supplement_notes()
+    with st.expander("📋 定型補足を管理する", expanded=False):
+        if supplement_notes_list:
+            st.caption("チェックした補足が生成に反映されます。")
+            selected = []
+            for index, note in enumerate(supplement_notes_list):
+                chk_col, del_col = st.columns([9, 1])
+                if chk_col.checkbox(note, key=f"supplement_chk_{index}"):
+                    selected.append(note)
+                if del_col.button("🗑️", key=f"supplement_del_{index}", help="この定型補足を削除"):
+                    supplement_notes_list.pop(index)
+                    _save_supplement_notes(supplement_notes_list)
+                    st.rerun()
+            st.session_state["selected_supplements"] = selected
+        else:
+            st.caption("まだ定型補足はありません。下から追加できます。")
+            st.session_state["selected_supplements"] = []
+        st.divider()
+        new_supplement = st.text_input(
+            "定型補足を新規追加",
+            placeholder="例：猫アレルギーがあります",
+            key="new_supplement_note",
+        )
+        if st.button("追加", key="add_supplement_note"):
+            text = new_supplement.strip()
+            if not text:
+                st.warning("追加する内容を入力してください")
+            elif text in supplement_notes_list:
+                st.info("すでに登録されています")
+            else:
+                supplement_notes_list.append(text)
+                _save_supplement_notes(supplement_notes_list)
+                st.rerun()
+
     if st.button("返信候補を生成する", type="primary", key=f"generate_button_{partner.partner_id}"):
         if not is_api_key_configured():
             st.error(
@@ -945,6 +1005,10 @@ def render_generation_controls(partner) -> None:
                 "設定・ヘルプタブでAPIキーの設定方法を確認してください。"
             )
             return
+        active_notes = []
+        if one_time_note.strip():
+            active_notes.append(one_time_note.strip())
+        active_notes += st.session_state.get("selected_supplements", [])
         try:
             with st.spinner("Claude AIが返信を考えています..."):
                 generated = generate_reply_candidates_for_gui(
@@ -952,6 +1016,7 @@ def render_generation_controls(partner) -> None:
                     objectives=objectives,
                     tone=tone,
                     place_hint=place_hint,
+                    supplement_notes=active_notes,
                 )
         except ValueError as error:
             st.error(f"生成中にエラーが発生しました。{error}")

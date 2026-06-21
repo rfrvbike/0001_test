@@ -41,7 +41,12 @@ def _load_user_name() -> str:
         return ""
 
 
-def _build_system_prompt(partner: PartnerRecord, tone: str, objectives: list[str]) -> str:
+def _build_system_prompt(
+    partner: PartnerRecord,
+    tone: str,
+    objectives: list[str],
+    supplement_notes: list[str] | None = None,
+) -> str:
     partner_name = partner.display_name or "相手"
     profile_text = partner.profile.profile_text or "プロフィール情報なし"
     user_name = _load_user_name()
@@ -72,6 +77,13 @@ def _build_system_prompt(partner: PartnerRecord, tone: str, objectives: list[str
 
     user_name_line = f"- ユーザーの名前: {user_name}\n" if user_name else ""
 
+    active_notes = [note.strip() for note in (supplement_notes or []) if note and note.strip()]
+    supplement_section = (
+        "## 重要な補足情報（必ずこの内容を守って文章を生成してください）\n"
+        + "\n".join(f"- {note}" for note in active_notes)
+        + "\n\n"
+    ) if active_notes else ""
+
     return (
         "あなたはマッチングアプリでメッセージを送るユーザーの返信を考えるアシスタントです。\n\n"
         "【重要な前提】\n"
@@ -79,6 +91,7 @@ def _build_system_prompt(partner: PartnerRecord, tone: str, objectives: list[str
         f"{user_name_line}"
         f"- 相手（マッチングした人）の名前: {partner_name}\n"
         f"- 相手のプロフィール情報: {profile_text}\n\n"
+        f"{supplement_section}"
         f"【会話履歴（上が古く、下が最新）】\n{conversation_history}\n\n"
         f"{last_message_section}"
         f"【返信スタイル】\n{reply_style}\n\n"
@@ -196,6 +209,7 @@ def generate_reply_candidates_for_gui(
     objectives: list[str] | None = None,
     tone: str = "自然",
     place_hint: str = "",
+    supplement_notes: list[str] | None = None,
 ) -> dict[str, Any]:
     api_key = _get_api_key()
     if not api_key:
@@ -218,7 +232,7 @@ def generate_reply_candidates_for_gui(
     if place_hint:
         all_objectives.append(f"場所: {place_hint}")
 
-    system_prompt = _build_system_prompt(partner, tone, all_objectives)
+    system_prompt = _build_system_prompt(partner, tone, all_objectives, supplement_notes=supplement_notes)
 
     try:
         client = anthropic.Anthropic(api_key=api_key)
