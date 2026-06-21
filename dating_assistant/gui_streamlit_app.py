@@ -1877,11 +1877,45 @@ def render_help() -> None:
             height=80,
             key="user_profile_intro",
         )
+
+        st.markdown("#### 🙋 自分の詳細プロフィール")
+        st.caption("返信生成時に自分のことを考慮した文章を作るために使います。")
+        occupation = st.text_input(
+            "職業",
+            value=str(user_profile.get("occupation", "") or ""),
+            placeholder="例：公共系プロジェクトの管理職",
+            key="user_occupation",
+        )
+        hobbies = st.text_area(
+            "趣味・好きなこと",
+            value=str(user_profile.get("hobbies", "") or ""),
+            placeholder="例：ジム、旅行、韓国ドラマ鑑賞、家でまったり過ごすこと",
+            height=80,
+            key="user_hobbies",
+        )
+        not_good_at = st.text_area(
+            "苦手・知らないこと・できないこと",
+            value=str(user_profile.get("not_good_at", "") or ""),
+            placeholder="例：お酒が飲めない、美術館には詳しくない、車を持っていない",
+            height=80,
+            key="user_not_good_at",
+        )
+        lifestyle = st.text_area(
+            "生活スタイル・性格",
+            value=str(user_profile.get("lifestyle", "") or ""),
+            placeholder="例：長身、親しみやすいと言われる、週末はジムか家でのんびり",
+            height=80,
+            key="user_lifestyle",
+        )
         if st.button("プロフィールを保存する", key="user_profile_save"):
             _save_user_profile_data({
                 "name": current_name.strip(),
                 "age": int(current_age) if current_age else None,
                 "self_intro": current_intro.strip(),
+                "occupation": occupation.strip(),
+                "hobbies": hobbies.strip(),
+                "not_good_at": not_good_at.strip(),
+                "lifestyle": lifestyle.strip(),
             })
             st.success("プロフィールを保存しました")
             st.rerun()

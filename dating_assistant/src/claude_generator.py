@@ -31,14 +31,18 @@ def is_api_key_configured() -> bool:
     return bool(_get_api_key())
 
 
-def _load_user_name() -> str:
+def _load_user_profile_data() -> dict:
     if not _USER_PROFILE_PATH.exists():
-        return ""
+        return {}
     try:
         data = json.loads(_USER_PROFILE_PATH.read_text(encoding="utf-8"))
-        return str(data.get("name", "") or "")
+        return data if isinstance(data, dict) else {}
     except Exception:
-        return ""
+        return {}
+
+
+def _load_user_name() -> str:
+    return str(_load_user_profile_data().get("name", "") or "")
 
 
 def _build_system_prompt(
@@ -78,6 +82,25 @@ def _build_system_prompt(
 
     user_name_line = f"- ユーザーの名前: {user_name}\n" if user_name else ""
 
+    # 自分（ユーザー）の詳細プロフィールをプロンプト冒頭に組み込む
+    user_profile_data = _load_user_profile_data()
+    user_profile_fields = [
+        ("名前", str(user_profile_data.get("name", "") or "").strip()),
+        ("職業", str(user_profile_data.get("occupation", "") or "").strip()),
+        ("趣味・好きなこと", str(user_profile_data.get("hobbies", "") or "").strip()),
+        ("苦手・知らないこと", str(user_profile_data.get("not_good_at", "") or "").strip()),
+        ("生活スタイル・性格", str(user_profile_data.get("lifestyle", "") or "").strip()),
+    ]
+    user_profile_lines = [f"- {label}: {value}" for label, value in user_profile_fields if value]
+    user_profile_section = (
+        "## 自分（ユーザー）のプロフィール\n"
+        "（返信文は必ずこの情報を踏まえて生成すること。自分が知らないこと・できないことは絶対に返信に含めない）\n\n"
+        + "\n".join(user_profile_lines)
+        + "\n\n"
+        "特に「苦手・知らないこと」に書かれた内容は、返信文に含めてはいけない。\n"
+        "例：お酒が飲めない場合、お酒の話題を振ったり、お酒が好きと書いてはいけない。\n\n"
+    ) if user_profile_lines else ""
+
     active_notes = [note.strip() for note in (supplement_notes or []) if note and note.strip()]
     supplement_section = (
         "## 重要な補足情報（必ずこの内容を守って文章を生成してください）\n"
@@ -109,6 +132,7 @@ def _build_system_prompt(
 
     return (
         "あなたはマッチングアプリでメッセージを送るユーザーの返信を考えるアシスタントです。\n\n"
+        f"{user_profile_section}"
         "【重要な前提】\n"
         "- ユーザー（あなたが返信を考える人）: 会話履歴で「ユーザー:」と書かれた発言をしている人\n"
         f"{user_name_line}"
