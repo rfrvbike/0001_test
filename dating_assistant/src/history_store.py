@@ -4,11 +4,11 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+from .atomic_io import atomic_write_text
 from .models import ConversationTurn
 
 
 def save_history(path: str | Path, turns: list[ConversationTurn]) -> None:
     target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps([asdict(turn) for turn in turns], ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_text(target, json.dumps([asdict(turn) for turn in turns], ensure_ascii=False, indent=2))
 

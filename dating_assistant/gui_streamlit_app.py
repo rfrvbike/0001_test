@@ -16,6 +16,7 @@ if str(APP_DIR) not in sys.path:
 
 import streamlit as st
 
+from src.atomic_io import atomic_write_text
 from src.claude_generator import (
     _get_api_key,
     generate_like_message,
@@ -928,8 +929,7 @@ def _load_supplement_notes() -> list:
 
 def _save_supplement_notes(notes: list) -> None:
     path = APP_DIR / "data" / "local" / "reply_supplement_notes.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(notes, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_text(path, json.dumps(notes, ensure_ascii=False, indent=2))
 
 
 def _load_style_samples() -> list:
@@ -946,8 +946,7 @@ def _load_style_samples() -> list:
 
 def _save_style_samples(samples: list) -> None:
     path = APP_DIR / "data" / "local" / "style_samples.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(samples, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_text(path, json.dumps(samples, ensure_ascii=False, indent=2))
 
 
 def render_generation_controls(partner) -> None:
@@ -1810,10 +1809,7 @@ def _load_user_profile_data() -> dict:
 
 
 def _save_user_profile_data(data: dict) -> None:
-    _USER_PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _USER_PROFILE_PATH.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    atomic_write_text(_USER_PROFILE_PATH, json.dumps(data, ensure_ascii=False, indent=2))
 
 
 def _create_local_backup_zip() -> bytes:

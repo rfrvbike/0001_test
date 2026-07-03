@@ -11,6 +11,7 @@ from typing import Any
 
 from src.activity_log import add_activity_event
 from src.app_core import generate
+from src.atomic_io import atomic_write_text
 from src.conversation_planner import estimate_partner_temperature
 from src.loaders import load_user_profile
 from src.models import ConversationTurn, GenerationRequest, PartnerNote, PartnerRecord, SentRecord, TargetProfile
@@ -1885,11 +1886,7 @@ def load_memo_tag(partner_id: str) -> str:
 
 
 def _write_memo_tags(tags: dict[str, str]) -> None:
-    _MEMO_TAG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _MEMO_TAG_PATH.write_text(
-        json.dumps(tags, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    atomic_write_text(_MEMO_TAG_PATH, json.dumps(tags, ensure_ascii=False, indent=2) + "\n")
 
 
 def save_memo_tag_from_gui(partner_id: str, memo_tag: str) -> dict[str, Any]:

@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from .atomic_io import atomic_write_text
 from .loaders import load_yaml
 from .models import (
     ActivityEvent,
@@ -57,7 +58,7 @@ def save_partner(partner: PartnerRecord, allow_overwrite: bool = False) -> Path:
     data = asdict(partner)
     for turn in data["conversation"]:
         turn["created_at"] = turn.pop("timestamp")
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    atomic_write_text(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     return path
 
 

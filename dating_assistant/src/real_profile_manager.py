@@ -4,6 +4,7 @@ import os
 import re
 from pathlib import Path
 
+from .atomic_io import atomic_write_text
 from .loaders import dump_yaml, load_target_profile
 from .models import TargetProfile
 
@@ -66,7 +67,7 @@ def create_real_profile(
         relationship_goal=relationship_goal,
         free_notes=free_notes,
     )
-    path.write_text(_format_yaml(profile), encoding="utf-8")
+    atomic_write_text(path, _format_yaml(profile))
     warnings = detect_privacy_warnings(
         [profile_text, *(hobbies or []), *(photos_memo or []), location_hint or "", relationship_goal or "", free_notes or ""]
     )
