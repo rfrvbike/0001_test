@@ -122,6 +122,44 @@ class AppTestPartnerSwitchTests(unittest.TestCase):
                 # AさんのワークスペースタイトルはBさん切り替え後に表示されないこと
                 self.assertFalse(any(v == "### Aさん" for v in markdowns))
 
+    def test_conversation_import_lists_same_named_partners_separately(self):
+        """会話履歴追加タブで同名の相手が全員selectboxに出ること（別人の履歴混入を防ぐ）。
+
+        修正前は dict内包表記でラベルが衝突し、同名の相手が1人しか出ず
+        別人の履歴に追記されうる。partner_id付与でユニーク化した後は2人とも出る。
+        """
+        from streamlit.testing.v1 import AppTest
+
+        app_file = APP_DIR / "gui_streamlit_app.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            real_dir = Path(tmp) / "real_profiles"
+            partner_dir = Path(tmp) / "partners"
+            with unittest.mock.patch.dict(
+                os.environ,
+                {
+                    "DATING_ASSISTANT_REAL_PROFILE_DIR": str(real_dir),
+                    "DATING_ASSISTANT_PARTNER_DIR": str(partner_dir),
+                },
+                clear=False,
+            ):
+                # 同名・同アプリ・同ステータスでラベルが衝突する2人（識別メモなし）
+                save_partner(_make_partner("partner_810", "同名太郎", "候補テキストA"))
+                save_partner(_make_partner("partner_811", "同名太郎", "候補テキストB"))
+
+                at = AppTest.from_file(str(app_file), default_timeout=20)
+                at.run()
+                self.assertEqual(len(at.exception), 0)
+
+                import_selectboxes = [
+                    sb for sb in at.selectbox if sb.key == "conv_import_partner"
+                ]
+                self.assertEqual(len(import_selectboxes), 1)
+                options = [str(opt) for opt in import_selectboxes[0].options]
+                # 同名でも2人とも表示され、partner_idで区別できること
+                self.assertEqual(len(options), 2)
+                self.assertTrue(any("partner_810" in opt for opt in options))
+                self.assertTrue(any("partner_811" in opt for opt in options))
+
     def test_repeated_partner_switches_do_not_cause_exceptions(self):
         """複数回の相手切り替えでも例外・エラーが発生しないことを確認する。"""
         from streamlit.testing.v1 import AppTest

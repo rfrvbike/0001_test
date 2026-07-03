@@ -1760,7 +1760,12 @@ def render_conversation_import() -> None:
         st.info("会話履歴を追加する相手がまだありません。まずは「プロフィール登録」から相手情報を登録してください。")
         return
 
-    labels = {build_partner_choice_label(partner): partner.partner_id for partner in partners}
+    # 同名の相手でもプルダウンに全員表示されるよう、partner_idを含めたユニークなラベルにする。
+    # dict内包表記だと同名でラベルが衝突し後勝ちで1人しか出ず、別人の履歴に追記される事故を防ぐ。
+    labels: dict[str, str] = {}
+    for partner in partners:
+        label = f"{build_partner_choice_label(partner)} ［{partner.partner_id}］"
+        labels[label] = partner.partner_id
     selected_label = st.selectbox("会話を追加する相手", options=list(labels.keys()), key="conv_import_partner")
     partner = load_partner_for_view(labels[selected_label])
 
