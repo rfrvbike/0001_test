@@ -37,6 +37,12 @@ class ReplyPromptDifferentiationTest(unittest.TestCase):
         # 3候補が重複しないという必須制約が明示されていること
         self.assertIn("話題も戦略も互いに重複させないこと", prompt)
 
+    def test_opening_lines_must_differ(self):
+        # 書き出し（冒頭の一文）も候補ごとに変える制約が明示されていること
+        prompt = _build_system_prompt(_make_partner(), tone="自然", objectives=[])
+
+        self.assertIn("書き出し（冒頭の一文）の表現も互いに変える", prompt)
+
     def test_history_beyond_ten_items_is_included(self):
         # B(a): 直近10件制限の撤廃。11件以上前の発言もプロンプトに含まれること
         conversation = [
