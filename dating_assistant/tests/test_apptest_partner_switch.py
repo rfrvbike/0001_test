@@ -160,6 +160,44 @@ class AppTestPartnerSwitchTests(unittest.TestCase):
                 self.assertTrue(any("partner_810" in opt for opt in options))
                 self.assertTrue(any("partner_811" in opt for opt in options))
 
+    def test_call_topic_result_clears_on_partner_switch(self):
+        """電話の話題提案結果が相手切替でクリアされ、別人の結果が残らないこと。"""
+        from streamlit.testing.v1 import AppTest
+
+        app_file = APP_DIR / "gui_streamlit_app.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            real_dir = Path(tmp) / "real_profiles"
+            partner_dir = Path(tmp) / "partners"
+            with unittest.mock.patch.dict(
+                os.environ,
+                {
+                    "DATING_ASSISTANT_REAL_PROFILE_DIR": str(real_dir),
+                    "DATING_ASSISTANT_PARTNER_DIR": str(partner_dir),
+                },
+                clear=False,
+            ):
+                save_partner(_make_partner("partner_001", "Aさん", "Aさん専用メッセージ候補"))
+                save_partner(_make_partner("partner_002", "Bさん", "Bさん専用メッセージ候補"))
+
+                at = AppTest.from_file(str(app_file), default_timeout=20)
+                at.run()
+                self.assertEqual(len(at.exception), 0)
+
+                # 現在表示中の相手に話題提案結果があるとする
+                current_id = at.session_state["call_topics_partner_id"]
+                at.session_state["call_topics_result"] = "現在の相手向けの話題提案"
+
+                # 同じ相手のまま再描画してもクリアされないこと
+                at.run()
+                self.assertEqual(at.session_state["call_topics_result"], "現在の相手向けの話題提案")
+
+                # 別の相手に切り替えるとクリアされること
+                other_name = "Bさん" if current_id == "partner_001" else "Aさん"
+                other_option = next(opt for opt in at.selectbox[0].options if other_name in str(opt))
+                at.selectbox[0].set_value(other_option).run()
+                self.assertEqual(len(at.exception), 0)
+                self.assertEqual(at.session_state["call_topics_result"], "")
+
     def test_repeated_partner_switches_do_not_cause_exceptions(self):
         """複数回の相手切り替えでも例外・エラーが発生しないことを確認する。"""
         from streamlit.testing.v1 import AppTest

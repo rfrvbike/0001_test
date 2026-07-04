@@ -633,6 +633,12 @@ def generate_call_topics(partner) -> str:
 
 
 def render_call_topic_controls(partner) -> None:
+    # 相手が切り替わったら前の相手の話題提案結果をクリアする（別人の結果が残らないように）。
+    # 通話振り返り側（render_call_review_controls）と同じパターン。
+    if st.session_state.get("call_topics_partner_id") != partner.partner_id:
+        st.session_state["call_topics_partner_id"] = partner.partner_id
+        st.session_state["call_topics_result"] = ""
+
     with st.expander("📞 電話の話題提案", expanded=False):
         st.caption("プロフィールと会話履歴をもとに、電話で話すべき話題を提案します。")
 
