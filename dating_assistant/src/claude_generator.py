@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -456,3 +457,146 @@ def generate_reply_candidates_for_gui(
         "candidate_count": len(raw_candidates),
         "expected_count": 3,
     }
+
+
+# 会話スクショ読み取りで話者ラベルを内部形式(user/partner)へ正規化するための対応表。
+# Visionの返す表記揺れを吸収する。未知・欠落はpartnerにフォールバックし、
+# 人間が確認画面のトグルで直せるようにする(左右取り違えが最頻ミスのため)。
+_SPEAKER_ALIASES = {
+    "user": "user",
+    "self": "user",
+    "me": "user",
+    "自分": "user",
+    "私": "user",
+    "僕": "user",
+    "partner": "partner",
+    "other": "partner",
+    "相手": "partner",
+    "相手方": "partner",
+}
+
+
+def _normalize_speaker(value: Any) -> str:
+    # 英語表記は小文字化して吸収。日本語はlower()で変化しないためそのまま一致する。
+    key = str(value).strip().lower()
+    return _SPEAKER_ALIASES.get(key, "partner")
+
+
+def _parse_conversation_turns_json(response_text: str) -> list[dict[str, str]]:
+    """Visionの応答テキストから会話turnのJSON配列を堅牢に取り出す。
+
+    コードフェンス(```json ... ```)を剥がし、最初の '[' から最後の ']' までを
+    抽出してjson.loadsする。speakerはuser/partnerへ正規化、textは前後空白を除去。
+    空textの行は除外し、有効な行が1件も無ければValueErrorを送出する。
+    """
+    text = str(response_text or "").strip()
+    if text.startswith("```"):
+        # 先頭の ```json / ``` と末尾の ``` を除去する。
+        text = re.sub(r"^```[a-zA-Z0-9_]*\s*", "", text)
+        text = re.sub(r"\s*```$", "", text).strip()
+
+    start = text.find("[")
+    end = text.rfind("]")
+    if start == -1 or end == -1 or end < start:
+        raise ValueError("スクショの読み取り結果をJSONとして解釈できませんでした。もう一度お試しください。")
+    try:
+        data = json.loads(text[start:end + 1])
+    except Exception:
+        raise ValueError("スクショの読み取り結果をJSONとして解釈できませんでした。もう一度お試しください。")
+    if not isinstance(data, list):
+        raise ValueError("スクショの読み取り結果の形式が正しくありません。")
+
+    turns: list[dict[str, str]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        message = str(item.get("text", "")).strip()
+        if not message:
+            continue
+        turns.append({"speaker": _normalize_speaker(item.get("speaker")), "text": message})
+
+    if not turns:
+        raise ValueError("スクショから会話を1件も読み取れませんでした。画像を確認してもう一度お試しください。")
+    return turns
+
+
+def read_conversation_from_images(images: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """会話スクショ画像(複数)をClaude Vision APIで読み取り、会話turnの下書きを返す。
+
+    images: [{"media_type": "image/png", "data": <bytes>}, ...] を時系列順に渡す。
+    返り値: [{"speaker": "user"|"partner", "text": str}, ...]。
+    画像は保存せず、その場でbase64化してAPIに渡すだけ(読み取ったテキストのみ利用)。
+    Sonnet 5でcontent[0]がテキストになるようthinkingは無効化する。
+    """
+    api_key = _get_api_key()
+    if not api_key:
+        raise ValueError(
+            "APIキーが設定されていません。"
+            ".envファイルにANTHROPIC_API_KEYを設定してください。"
+        )
+    if not images:
+        raise ValueError("読み取る画像がありません。スクショを1枚以上アップロードしてください。")
+
+    try:
+        import anthropic
+    except ImportError:
+        raise ValueError(
+            "anthropicライブラリがインストールされていません。"
+            "pip install anthropic を実行してください。"
+        )
+
+    content: list[dict[str, Any]] = []
+    for image in images:
+        raw = image.get("data")
+        if not raw:
+            continue
+        media_type = str(image.get("media_type") or "image/png")
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": base64.b64encode(raw).decode("ascii"),
+            },
+        })
+    if not content:
+        raise ValueError("読み取る画像がありません。スクショを1枚以上アップロードしてください。")
+
+    instruction = (
+        "これはマッチングアプリの会話スクリーンショットです。"
+        "複数枚ある場合は渡された順番が時系列順(古い→新しい)です。\n"
+        "各吹き出しの左右の位置で話者を判定してください。"
+        "画面の左側に表示された吹き出しは相手(partner)、右側に表示された吹き出しは自分(user)です。\n"
+        "上から時系列順に、話者とテキストのペアをJSON配列だけで返してください。"
+        "各要素は {\"speaker\": \"partner\" または \"user\", \"text\": \"発言内容\"} の形式です。\n"
+        "日付の区切りやシステム表示(既読・時刻など)は含めないでください。"
+        "前置きや説明、コードフェンスは付けず、JSON配列そのものだけを出力してください。"
+    )
+    content.append({"type": "text", "text": instruction})
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=4096,
+            thinking={"type": "disabled"},
+            messages=[{"role": "user", "content": content}],
+        )
+        response_text = message.content[0].text
+    except Exception as e:
+        error_msg = str(e)
+        if "authentication" in error_msg.lower() or "api_key" in error_msg.lower():
+            raise ValueError(
+                "APIキーが正しくありません。.envファイルのANTHROPIC_API_KEYを確認してください。"
+            )
+        if "rate_limit" in error_msg.lower():
+            raise ValueError(
+                "APIのレート制限に達しました。しばらく待ってから再試行してください。"
+            )
+        if "overload" in error_msg.lower():
+            raise ValueError(
+                "APIサーバーが一時的に混雑しています。しばらく待ってから再試行してください。"
+            )
+        raise ValueError(f"API呼び出しに失敗しました: {error_msg}")
+
+    return _parse_conversation_turns_json(response_text)

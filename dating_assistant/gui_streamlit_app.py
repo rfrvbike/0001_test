@@ -24,6 +24,7 @@ from src.claude_generator import (
     generate_like_message,
     generate_reply_candidates_for_gui,
     is_api_key_configured,
+    read_conversation_from_images,
 )
 
 from gui_helpers import (
@@ -1764,6 +1765,120 @@ def render_partner_creation() -> None:
         st.info("次は「相手と会話する」画面で、会話履歴、相手別メモ、生成前チェック、3候補生成へ進めます。")
 
 
+def _uploaded_image_to_payload(uploaded) -> dict:
+    # file_uploaderのUploadedFileから、読み取り関数が受け取る
+    # {"media_type", "data"(bytes)} 形式へ変換する。media_typeが取れない場合は
+    # 拡張子から推定し、それも不明ならpngを既定にする。画像自体は保存しない。
+    media_type = str(getattr(uploaded, "type", "") or "").strip()
+    if not media_type.startswith("image/"):
+        name = str(getattr(uploaded, "name", "") or "").lower()
+        media_type = "image/jpeg" if name.endswith((".jpg", ".jpeg")) else "image/png"
+    return {"media_type": media_type, "data": uploaded.getvalue()}
+
+
+def _next_screenshot_row_id(partner_id: str) -> int:
+    # 読み取り直しのたびに使い捨てのwidget keyが衝突しないよう、相手ごとに
+    # 単調増加のrow_idを払い出す。行削除でindexがずれてもキーが安定する
+    # （#2で対応した「index基準キーが削除でズレる」問題を繰り返さないため）。
+    seq_key = f"screenshot_rowseq_{partner_id}"
+    current = int(st.session_state.get(seq_key, 0))
+    st.session_state[seq_key] = current + 1
+    return current
+
+
+def _render_screenshot_import_section(partner) -> None:
+    draft_key = f"screenshot_draft_{partner.partner_id}"
+    with st.expander("📸 スクショから読み取る（自動下書き）", expanded=False):
+        st.caption(
+            "マッチングアプリの会話スクショをアップロードすると、AIが会話履歴の下書きを作ります。"
+            "読み取り後に内容を確認・修正してから登録できます。画像そのものは保存されません。"
+        )
+        if not is_api_key_configured():
+            st.info("この機能はAI読み取りのため、.envにANTHROPIC_API_KEYの設定が必要です。")
+            return
+
+        uploaded_files = st.file_uploader(
+            "会話スクショ（複数選択可・古い順に並べてください）",
+            type=["png", "jpg", "jpeg"],
+            accept_multiple_files=True,
+            key=f"screenshot_uploader_{partner.partner_id}",
+        )
+        if st.button("スクショを読み取る", key=f"screenshot_read_{partner.partner_id}"):
+            if not uploaded_files:
+                st.error("スクショを1枚以上アップロードしてください。")
+            else:
+                images = [_uploaded_image_to_payload(f) for f in uploaded_files]
+                try:
+                    with st.spinner("AIがスクショを読み取っています…"):
+                        turns = read_conversation_from_images(images)
+                except ValueError as error:
+                    st.error(str(error))
+                else:
+                    st.session_state[draft_key] = [
+                        {
+                            "row_id": _next_screenshot_row_id(partner.partner_id),
+                            "speaker": turn["speaker"],
+                            "text": turn["text"],
+                        }
+                        for turn in turns
+                    ]
+
+        draft = st.session_state.get(draft_key)
+        if not draft:
+            return
+
+        st.divider()
+        st.markdown("**読み取り結果を確認・修正してください**")
+        st.caption("話者の左右取り違えはトグルで直せます。修正しても再読み取り（API呼び出し）は行いません。")
+
+        remaining: list[dict] = []
+        delete_row_id: int | None = None
+        for row in draft:
+            row_id = row["row_id"]
+            with st.container(border=True):
+                col_speaker, col_text, col_del = st.columns([3, 9, 1])
+                speaker_label = col_speaker.segmented_control(
+                    "話者",
+                    options=["相手", "自分"],
+                    default=("自分" if row["speaker"] == "user" else "相手"),
+                    key=f"scr_speaker_{partner.partner_id}_{row_id}",
+                    label_visibility="collapsed",
+                )
+                text_value = col_text.text_input(
+                    "内容",
+                    value=row["text"],
+                    key=f"scr_text_{partner.partner_id}_{row_id}",
+                    label_visibility="collapsed",
+                )
+                if col_del.button("✕", key=f"scr_del_{partner.partner_id}_{row_id}", help="この行を削除"):
+                    delete_row_id = row_id
+            speaker = "user" if speaker_label == "自分" else "partner"
+            remaining.append({"row_id": row_id, "speaker": speaker, "text": text_value})
+
+        if delete_row_id is not None:
+            st.session_state[draft_key] = [r for r in remaining if r["row_id"] != delete_row_id]
+            st.rerun()
+        st.session_state[draft_key] = remaining
+
+        action_register, action_discard = st.columns([2, 1])
+        if action_register.button("この内容で登録", type="primary", key=f"screenshot_register_{partner.partner_id}"):
+            turns = [
+                {"speaker": r["speaker"], "text": r["text"].strip()}
+                for r in st.session_state[draft_key]
+                if r["text"].strip()
+            ]
+            if not turns:
+                st.error("登録できる会話がありません。")
+            else:
+                append_conversation_turns_to_partner(partner.partner_id, turns)
+                st.session_state.pop(draft_key, None)
+                st.success(f"{len(turns)}件の会話を登録しました。")
+                st.rerun()
+        if action_discard.button("読み取り結果を破棄", key=f"screenshot_discard_{partner.partner_id}"):
+            st.session_state.pop(draft_key, None)
+            st.rerun()
+
+
 def render_conversation_import() -> None:
     st.subheader("会話履歴追加")
     st.caption(
@@ -1785,6 +1900,8 @@ def render_conversation_import() -> None:
         labels[label] = partner.partner_id
     selected_label = st.selectbox("会話を追加する相手", options=list(labels.keys()), key="conv_import_partner")
     partner = load_partner_for_view(labels[selected_label])
+
+    _render_screenshot_import_section(partner)
 
     st.write("マッチングアプリで会話した内容を1件ずつ登録してください。")
 
