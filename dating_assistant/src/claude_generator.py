@@ -14,6 +14,11 @@ from .suggestion_manager import add_suggestion
 _ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 _USER_PROFILE_PATH = Path(__file__).resolve().parents[1] / "data" / "local" / "user_profile.json"
 
+# 使用するClaudeモデル。Sonnet 5はadaptive thinkingが既定ONでcontent[0]が
+# 空のthinkingブロックになるため、各messages.createでthinking無効化を明示する
+# こと(content[0].text前提を維持するため)。
+CLAUDE_MODEL = "claude-sonnet-5"
+
 
 def _get_api_key() -> str | None:
     key = os.environ.get("ANTHROPIC_API_KEY")
@@ -314,8 +319,9 @@ def generate_like_message(
     try:
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=CLAUDE_MODEL,
             max_tokens=1024,
+            thinking={"type": "disabled"},
             messages=[{"role": "user", "content": "いいね文言を3パターン生成してください。"}],
             system=system_prompt,
         )
@@ -379,8 +385,9 @@ def generate_reply_candidates_for_gui(
     try:
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=CLAUDE_MODEL,
             max_tokens=1024,
+            thinking={"type": "disabled"},
             messages=[{"role": "user", "content": "返信候補を3件生成してください。"}],
             system=system_prompt,
         )

@@ -19,6 +19,7 @@ import streamlit as st
 
 from src.atomic_io import atomic_write_text
 from src.claude_generator import (
+    CLAUDE_MODEL,
     _get_api_key,
     generate_like_message,
     generate_reply_candidates_for_gui,
@@ -625,8 +626,9 @@ def generate_call_topics(partner) -> str:
     try:
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=CLAUDE_MODEL,
             max_tokens=2000,
+            thinking={"type": "disabled"},
             messages=[{"role": "user", "content": prompt}],
         )
         return message.content[0].text
@@ -734,8 +736,9 @@ def generate_call_review(partner, transcript_text: str) -> str:
     try:
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=CLAUDE_MODEL,
             max_tokens=3000,
+            thinking={"type": "disabled"},
             messages=[{"role": "user", "content": prompt}],
         )
         return message.content[0].text
@@ -1911,8 +1914,9 @@ def analyze_bulk_profile(bulk_text: str) -> dict:
     try:
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=CLAUDE_MODEL,
             max_tokens=1500,
+            thinking={"type": "disabled"},
             messages=[{"role": "user", "content": prompt}],
         )
         response_text = message.content[0].text
