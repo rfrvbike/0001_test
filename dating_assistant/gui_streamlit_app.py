@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import sys
@@ -238,6 +239,14 @@ def main() -> None:
 
 def _escape_card_html(text: str) -> str:
     return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _content_widget_key(prefix: str, text: str) -> str:
+    # チェックボックス等のwidget keyを内容基準にする。index基準だと項目削除で
+    # indexがずれ、session_stateのチェック状態が別項目に紐づいてしまうため。
+    # 追加時に重複排除済みなので内容は一意でキー衝突しない。
+    digest = hashlib.md5(text.encode("utf-8")).hexdigest()
+    return f"{prefix}_{digest}"
 
 
 def _render_partner_card_body(partner) -> None:
@@ -994,9 +1003,9 @@ def render_generation_controls(partner) -> None:
             selected = []
             for index, note in enumerate(supplement_notes_list):
                 chk_col, del_col = st.columns([9, 1])
-                if chk_col.checkbox(note, key=f"supplement_chk_{index}"):
+                if chk_col.checkbox(note, key=_content_widget_key("supplement_chk", note)):
                     selected.append(note)
-                if del_col.button("🗑️", key=f"supplement_del_{index}", help="この定型補足を削除"):
+                if del_col.button("🗑️", key=_content_widget_key("supplement_del", note), help="この定型補足を削除"):
                     supplement_notes_list.pop(index)
                     _save_supplement_notes(supplement_notes_list)
                     st.rerun()
@@ -1029,9 +1038,9 @@ def render_generation_controls(partner) -> None:
             selected_styles = []
             for index, sample in enumerate(style_samples_list):
                 chk_col, del_col = st.columns([9, 1])
-                if chk_col.checkbox(sample, key=f"style_chk_{index}"):
+                if chk_col.checkbox(sample, key=_content_widget_key("style_chk", sample)):
                     selected_styles.append(sample)
-                if del_col.button("🗑️", key=f"style_del_{index}", help="この文体サンプルを削除"):
+                if del_col.button("🗑️", key=_content_widget_key("style_del", sample), help="この文体サンプルを削除"):
                     style_samples_list.pop(index)
                     _save_style_samples(style_samples_list)
                     st.rerun()
