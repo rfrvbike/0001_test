@@ -1830,20 +1830,36 @@ def _has_existing_local_data() -> bool:
 
 def _extract_backup_zip(zip_bytes: bytes) -> tuple[bool, str]:
     buf = io.BytesIO(zip_bytes)
+    # 展開先は data/local 配下に限定する（zip-slip対策）。
+    # 「data/local/」で始まるだけの判定では data/local/../../evil.py のような相対パスや
+    # 絶対パスでアプリ外に書き込めてしまうため、解決後のパスが local_root 配下か検証する。
+    local_root = (APP_DIR / "data" / "local").resolve()
     try:
         with zipfile.ZipFile(buf, "r") as zf:
-            valid = [n for n in zf.namelist() if n.startswith("data/local/") and not n.endswith("/")]
-            if not valid:
+            candidates = [n for n in zf.namelist() if n.startswith("data/local/") and not n.endswith("/")]
+            if not candidates:
                 return False, "このzipファイルにはdating_assistantのデータが含まれていません。"
-            for name in valid:
-                target = APP_DIR / name
+            written = 0
+            skipped = 0
+            for name in candidates:
+                target = (APP_DIR / name).resolve()
+                if target != local_root and local_root not in target.parents:
+                    # data/local の外に展開されるエントリは書き込まずスキップ
+                    skipped += 1
+                    continue
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(zf.read(name))
+                written += 1
     except zipfile.BadZipFile:
         return False, "zipファイルが壊れているか、形式が正しくありません。"
     except Exception as e:
         return False, f"展開中にエラーが発生しました: {e}"
-    return True, f"{len(valid)}件のファイルを復元しました。"
+    if written == 0:
+        return False, "このzipファイルには安全に復元できるデータが含まれていません。"
+    message = f"{written}件のファイルを復元しました。"
+    if skipped:
+        message += f"（{skipped}件は展開先が不正なためスキップしました）"
+    return True, message
 
 
 def analyze_bulk_profile(bulk_text: str) -> dict:
