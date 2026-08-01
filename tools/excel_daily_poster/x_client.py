@@ -285,7 +285,14 @@ def _post_json_with_urllib(
             status_code = getattr(response, "status", None)
             response_body = response.read().decode("utf-8")
     except urllib_error.HTTPError as exc:
-        raise classify_http_status(exc.code, exc.reason) from exc
+        # exc.reason is only the status phrase ("Forbidden"). The X error detail
+        # lives in the response body, so read it too and keep both in the message.
+        try:
+            error_body = exc.read().decode("utf-8", errors="replace")
+        except Exception:  # noqa: BLE001 - the body is diagnostic only
+            error_body = "<body read failed>"
+        detail = f"{exc.reason} | body={error_body}"
+        raise classify_http_status(exc.code, detail) from exc
     except urllib_error.URLError as exc:
         raise XNetworkError(str(exc.reason)) from exc
 
